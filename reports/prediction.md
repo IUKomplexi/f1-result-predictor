@@ -3,6 +3,7 @@
 - Circuit: zandvoort · Date: 2026-08-23 00:00:00
 - Model checkpoint: `data/model/hurdle.joblib`
 - Probabilities are model scores (P top-10 / top-3 / win); ranking is the primary output.
+- Unverified: no cached results for this race; entry list from the latest completed round.
 
 ## Predicted grid (ranked by expected points)
 

@@ -186,3 +186,12 @@ def test_race_metrics_missing_winner_does_not_crash():
     m = race_metrics(df)
     assert m["winner_hit"] == 0.0
     assert 0.0 <= m["top3_overlap"] <= 1.0
+
+
+def test_load_checkpoint_rejects_mismatched_features(tmp_path):
+    import joblib
+
+    path = tmp_path / "bad.joblib"
+    joblib.dump({"models": None, "features": ["old_feature"]}, path)
+    with pytest.raises(ValueError, match="does not match"):
+        load_checkpoint(path)

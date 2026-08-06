@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from features.build import add_features, assemble
+from helpers import ok_response
 from model.train import train_final_model
 from predict import _synthetic_rows, format_report, predict_race
 
@@ -176,3 +177,72 @@ def test_format_report_includes_verification_when_verified():
     assert "# Prediction: Las Vegas (2024 Round 22)" in report
     assert "## Actual results" in report
     assert "winner_hit" in report
+
+
+def _fake_session(routes):
+    class FakeSession:
+        headers = {}
+
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, params=None, timeout=None):
+            self.calls.append(url)
+            for suffix, payload in routes.items():
+                if url.endswith(suffix):
+                    return ok_response(payload)
+            raise AssertionError(f"unexpected URL {url}")
+
+    return FakeSession
+
+
+def test_entry_list_uses_last_completed_race_grid(tmp_path):
+    from f1data import F1Client
+    from predict import _entry_list
+
+    session = _fake_session(
+        {
+            "/2026/last/results.json": {
+                "MRData": {"RaceTable": {"Races": [{"round": "11"}]}}
+            },
+            "/2026/11/results.json": {
+                "MRData": {"RaceTable": {"Races": [{"Results": [
+                    {"Driver": {"driverId": "a"}, "Constructor": {"constructorId": "t1"}},
+                    {"Driver": {"driverId": "b"}, "Constructor": {"constructorId": "t2"}},
+                ]}]}}
+            },
+        }
+    )
+    client = F1Client(cache_dir=tmp_path, session=session(), sleep_seconds=0)
+    assert _entry_list(client, 2026, pd.DataFrame()) == [("a", "t1"), ("b", "t2")]
+
+
+def test_entry_list_falls_back_to_cached_teams(tmp_path):
+    from f1data import F1Client
+    from predict import _entry_list
+
+    session = _fake_session(
+        {
+            # Season with no completed race yet: last/results.json parses to 0,
+            # so the season driver list + cached teams are used.
+            "/2026/last/results.json": {"MRData": {"RaceTable": {"Races": []}}},
+            "/2026/drivers.json": {
+                "MRData": {"DriverTable": {"Drivers": [{"driverId": "a"}]}}
+            },
+        }
+    )
+    client = F1Client(cache_dir=tmp_path, session=session(), sleep_seconds=0)
+    df = pd.DataFrame(
+        {"driver_id": ["a"], "constructor_id": ["t9"], "date": ["2025-12-01"]}
+    )
+    assert _entry_list(client, 2026, df) == [("a", "t9")]
+
+
+def test_synthetic_rows_rejects_unknown_round():
+    with pytest.raises(SystemExit, match="not in the season's calendar"):
+        _synthetic_rows(
+            calendar=[{"season": 2026, "round": 12}],
+            target_round=99,
+            entries=[("a", "t1")],
+            grid_map=None,
+        )

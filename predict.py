@@ -137,7 +137,12 @@ def _synthetic_rows(
     Sprint points are not set: they are unknown at prediction time (the
     sprint runs Saturday), so 0 is the honest pre-weekend default.
     """
-    race = next(r for r in calendar if r["round"] == target_round)
+    race = next((r for r in calendar if r["round"] == target_round), None)
+    if race is None:
+        raise SystemExit(
+            f"round {target_round} is not in the season's calendar "
+            "(cancelled round or invalid --round?)"
+        )
     rows = []
     for driver, constructor in entries:
         grid = grid_map.get(driver) if grid_map else np.nan
@@ -238,10 +243,13 @@ def format_report(
         f"- Circuit: {meta.get('circuit_id', '?')} · Date: {meta.get('date', '?')}",
         f"- Model checkpoint: `{checkpoint}`",
         f"- Probabilities are model scores (P top-10 / top-3 / win); ranking is the primary output.",
-        "",
-        "## Predicted grid (ranked by expected points)",
-        "",
     ]
+    if not verified:
+        lines.append(
+            "- Unverified: no cached results for this race; entry list from "
+            "the latest completed round."
+        )
+    lines += ["", "## Predicted grid (ranked by expected points)", ""]
     table = result[
         [
             "pred_rank", "driver_id", "constructor_id", "grid",
@@ -327,6 +335,11 @@ def main() -> int:
     synthetic = base_df[(base_df["season"] == target_season) &
                         (base_df["round"] == target_round)].empty
     if synthetic:
+        print(
+            f"Note: no cached results for {target_season} R{target_round} - "
+            "prediction uses synthetic entry rows and is unverified.",
+            file=sys.stderr,
+        )
         calendar = fetch_calendar(client, target_season)
         grid_map = read_grid_csv(args.grid) if args.grid else None
         rows = _synthetic_rows(
@@ -364,6 +377,9 @@ def main() -> int:
     console["p_scored"] = (console["p_scored"] * 100).round(1)
     console["p_top3"] = (console["p_top3"] * 100).round(1)
     console["p_win"] = (console["p_win"] * 100).round(1)
+    console = console.rename(
+        columns={"p_scored": "p_scored%", "p_top3": "p_top3%", "p_win": "p_win%"}
+    )
     print(f"Prediction: {meta.get('race_name', f'Round {target_round}')} "
           f"({target_season} R{target_round}) - {meta.get('circuit_id', '?')} "
           f"{meta.get('date', '')}".rstrip())
