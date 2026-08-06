@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Derived / cached data (regenerable from the API via scripts/fetch_all.py)
+data/raw/
+data/features.parquet
+data/model/
+
+# Tooling state
+.reasonix/
