@@ -191,6 +191,12 @@ def save_checkpoint(models: HurdleModels, path: str | Path) -> None:
 
 def load_checkpoint(path: str | Path) -> HurdleModels:
     payload = joblib.load(path)
+    stored = list(payload.get("features", []))
+    if stored != list(FEATURES):
+        raise ValueError(
+            "checkpoint feature set does not match the current feature set; "
+            "retrain with model/train.py"
+        )
     return payload["models"]
 
 

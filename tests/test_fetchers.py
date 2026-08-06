@@ -172,3 +172,15 @@ def test_is_classified():
     assert is_classified("Collision") is False
     assert is_classified("Engine") is False
     assert is_classified("") is False
+
+
+def test_session_rows_empty_races_returns_empty(tmp_path):
+    """A per-round endpoint returning an empty Races list must yield []."""
+    payload = {"MRData": {"RaceTable": {"Races": []}}}
+    session = QueueSession()
+    session.add(status=200, payload=payload)
+    client = F1Client(cache_dir=tmp_path, session=session, sleep_seconds=0)
+
+    from f1data import fetch_qualifying
+
+    assert fetch_qualifying(client, 2024, 99) == []

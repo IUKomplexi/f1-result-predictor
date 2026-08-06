@@ -171,3 +171,18 @@ def test_baselines():
     assert (champ >= 0).all()
     # Pole position maps to 25 points.
     assert grid.loc[df["grid"] == 1].iloc[0] == 25.0
+
+
+def test_race_metrics_missing_winner_does_not_crash():
+    df = pd.DataFrame(
+        {
+            "driver_id": ["d0", "d1"],
+            "position": [2, 3],  # nobody finished P1 (partial data)
+            "points": [18.0, 15.0],
+            "grid": [1, 2],
+            "pred_points": [10.0, 8.0],
+        }
+    )
+    m = race_metrics(df)
+    assert m["winner_hit"] == 0.0
+    assert 0.0 <= m["top3_overlap"] <= 1.0

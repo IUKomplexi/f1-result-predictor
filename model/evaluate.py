@@ -75,8 +75,10 @@ def race_metrics(df: pd.DataFrame) -> Dict[str, float]:
     actual_rank = _rank_by(df, "points", "position")
     pred_rank = _rank_by(df, "pred_points", "grid")
 
-    actual_winner = df.loc[df["position"].eq(1), "driver_id"].iloc[0]
-    pred_winner = df.loc[pred_rank.eq(1), "driver_id"].iloc[0]
+    actual_winner_rows = df.loc[df["position"].eq(1), "driver_id"]
+    pred_winner_rows = df.loc[pred_rank.eq(1), "driver_id"]
+    actual_winner = actual_winner_rows.iloc[0] if not actual_winner_rows.empty else None
+    pred_winner = pred_winner_rows.iloc[0] if not pred_winner_rows.empty else None
 
     top3_actual = set(df.loc[df["position"].between(1, 3), "driver_id"])
     top3_pred = set(df.loc[pred_rank.le(3), "driver_id"])
@@ -86,7 +88,11 @@ def race_metrics(df: pd.DataFrame) -> Dict[str, float]:
         corr = 0.0
 
     return {
-        "winner_hit": float(pred_winner == actual_winner),
+        "winner_hit": float(
+            pred_winner == actual_winner
+            if pred_winner is not None and actual_winner is not None
+            else 0.0
+        ),
         "top3_overlap": len(top3_actual & top3_pred) / 3.0,
         "spearman": float(corr),
         "mae": float(np.mean(np.abs(pred_points - actual_points))),

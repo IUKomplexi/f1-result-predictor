@@ -56,18 +56,21 @@ def _latest_completed_round(client: F1Client, season: int) -> int:
 
 
 def find_next_race(client: F1Client, df: pd.DataFrame, seasons: Sequence[int]) -> Tuple[int, int]:
-    """Locate the next race without results: first unfinished round of the
-    latest cached season, else the first unfinished round of the next season
-    (discovered on demand from the API).
-    """
-    for season in sorted(seasons, reverse=True):
-        completed = set(df.loc[df["season"] == season, "round"])
-        calendar = fetch_calendar(client, season)
-        round_ = _next_round_in_calendar(calendar, completed)
-        if round_ is not None:
-            return season, round_
+    """Locate the next race without results: the first unfinished round of
+    the *newest* cached season, else the first unfinished round of the next
+    season (discovered on demand from the API).
 
-    nxt = max(seasons) + 1
+    Only the newest cached season is eligible — a gap in an older season
+    (cancelled round, partial cache) is historical, not "the next race".
+    """
+    newest = max(seasons)
+    completed = set(df.loc[df["season"] == newest, "round"])
+    calendar = fetch_calendar(client, newest)
+    round_ = _next_round_in_calendar(calendar, completed)
+    if round_ is not None:
+        return newest, round_
+
+    nxt = newest + 1
     try:
         calendar = fetch_calendar(client, nxt)
     except F1APIError as exc:
@@ -97,26 +100,29 @@ def _latest_teams_from_df(df: pd.DataFrame) -> Dict[str, str]:
 
 
 def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> List[Tuple[str, str]]:
-    """(driver_id, constructor_id) for every driver entered in a season.
+    """(driver_id, constructor_id) for the upcoming race's grid.
 
-    Constructor comes from the most recent race result when available (the
-    API's latest round first, then the cached history), else is left missing.
+    When the season has a completed race, the actual grid of its most recent
+    round is used (real entrants, real teams). Otherwise the season's driver
+    list is used with each driver's most recent cached team (for a season
+    opener this is the previous season's mapping — a best-effort proxy).
     """
-    drivers = [
-        d["driverId"]
-        for d in client.get_json(f"/{season}/drivers.json")["MRData"]["DriverTable"]["Drivers"]
-    ]
-    team_of: Dict[str, str] = {}
     completed = _latest_completed_round(client, season)
     if completed:
         try:
             data = client.get_json(f"/{season}/{completed}/results.json")
             results = data["MRData"]["RaceTable"]["Races"][0]["Results"]
-            team_of = {e["Driver"]["driverId"]: e["Constructor"]["constructorId"] for e in results}
+            return [
+                (e["Driver"]["driverId"], e["Constructor"]["constructorId"])
+                for e in results
+            ]
         except (F1APIError, KeyError, IndexError):
-            team_of = {}
-    if not team_of:
-        team_of = _latest_teams_from_df(df)
+            pass
+    drivers = [
+        d["driverId"]
+        for d in client.get_json(f"/{season}/drivers.json")["MRData"]["DriverTable"]["Drivers"]
+    ]
+    team_of = _latest_teams_from_df(df)
     return [(d, team_of.get(d)) for d in drivers]
 
 
@@ -126,7 +132,11 @@ def _synthetic_rows(
     entries: Sequence[Tuple[str, str]],
     grid_map: Optional[Dict[str, int]],
 ) -> List[dict]:
-    """Result-style rows for an upcoming race, with unknown outcomes (NaN)."""
+    """Result-style rows for an upcoming race, with unknown outcomes (NaN).
+
+    Sprint points are not set: they are unknown at prediction time (the
+    sprint runs Saturday), so 0 is the honest pre-weekend default.
+    """
     race = next(r for r in calendar if r["round"] == target_round)
     rows = []
     for driver, constructor in entries:
@@ -264,6 +274,11 @@ def format_report(
             f"· spearman: {m['spearman']:.2f} · MAE (points): {m['mae']:.2f}"
         )
         lines.append("")
+        lines.append(
+            "Note: this uses the final model (trained on all seasons, including "
+            "this race). Honest out-of-sample numbers are in `reports/backtest.md`."
+        )
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -302,11 +317,15 @@ def main() -> int:
     if args.season is not None:
         if args.round is None:
             raise SystemExit("--round is required when --season is given")
-        target_season, target_round, synthetic = args.season, args.round, False
+        target_season, target_round = args.season, args.round
     else:
         target_season, target_round = find_next_race(client, base_df, seasons)
-        synthetic = True
 
+    # A round with no cached results is an upcoming race: inject synthetic
+    # entry rows so pre-race features are derived exactly as they would be
+    # before the race. Applies to auto-discovery and explicit --season/--round.
+    synthetic = base_df[(base_df["season"] == target_season) &
+                        (base_df["round"] == target_round)].empty
     if synthetic:
         calendar = fetch_calendar(client, target_season)
         grid_map = read_grid_csv(args.grid) if args.grid else None
@@ -342,6 +361,8 @@ def main() -> int:
     console = result[["pred_rank", "driver_id", "constructor_id", "expected_points",
                       "p_scored", "p_top3", "p_win"]].copy()
     console["expected_points"] = console["expected_points"].round(2)
+    console["p_scored"] = (console["p_scored"] * 100).round(1)
+    console["p_top3"] = (console["p_top3"] * 100).round(1)
     console["p_win"] = (console["p_win"] * 100).round(1)
     print(f"Prediction: {meta.get('race_name', f'Round {target_round}')} "
           f"({target_season} R{target_round}) - {meta.get('circuit_id', '?')} "

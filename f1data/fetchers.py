@@ -81,8 +81,10 @@ def _session_rows(client: F1Client, season: int, round_: int, endpoint: str,
                   results_key: str) -> List[Dict[str, Any]]:
     """Generic parser for per-round result arrays (Results/QualifyingResults/SprintResults)."""
     data = client.get_paged(f"/{season}/{round_}/{endpoint}.json")
-    race = data["MRData"]["RaceTable"]["Races"][0]
-    return _race_rows(race, results_key, season)
+    races = data["MRData"]["RaceTable"]["Races"]
+    if not races:
+        return []
+    return _race_rows(races[0], results_key, season)
 
 
 def _season_session_rows(client: F1Client, season: int, endpoint: str,
