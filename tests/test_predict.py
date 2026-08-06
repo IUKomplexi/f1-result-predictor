@@ -211,10 +211,19 @@ def test_entry_list_uses_last_completed_race_grid(tmp_path):
                     {"Driver": {"driverId": "b"}, "Constructor": {"constructorId": "t2"}},
                 ]}]}}
             },
+            "/2026/drivers.json": {
+                "MRData": {"DriverTable": {"Drivers": [
+                    {"driverId": "a"}, {"driverId": "b"}, {"driverId": "c"},
+                ]}}
+            },
         }
     )
     client = F1Client(cache_dir=tmp_path, session=session(), sleep_seconds=0)
-    assert _entry_list(client, 2026, pd.DataFrame()) == [("a", "t1"), ("b", "t2")]
+    # "c" missed the last race but holds a cached team -> still on the grid.
+    df = pd.DataFrame(
+        {"driver_id": ["c"], "constructor_id": ["t3"], "date": ["2026-06-01"]}
+    )
+    assert _entry_list(client, 2026, df) == [("a", "t1"), ("b", "t2"), ("c", "t3")]
 
 
 def test_entry_list_falls_back_to_cached_teams(tmp_path):

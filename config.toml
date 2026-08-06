@@ -18,6 +18,7 @@ end_season = 2025
 
 [model]
 checkpoint = "data/model/hurdle.joblib"
+calibrators = "data/model/calibrators.joblib"
 seed = 42
 
 [report]

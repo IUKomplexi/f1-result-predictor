@@ -30,6 +30,7 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
     "model": {
         "checkpoint": "data/model/hurdle.joblib",
+        "calibrators": "data/model/calibrators.joblib",
         "seed": 42,
     },
     "report": {

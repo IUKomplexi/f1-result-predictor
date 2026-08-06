@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import load_config  # noqa: E402
 from features.build import add_features, assemble  # noqa: E402
 from f1data import F1APIError, F1Client, fetch_calendar, fetch_season  # noqa: E402
+from model.calibrate import apply_calibration, load_calibrators  # noqa: E402
 from model.evaluate import race_metrics  # noqa: E402
 from model.train import load_checkpoint, prepare  # noqa: E402
 
@@ -102,28 +103,35 @@ def _latest_teams_from_df(df: pd.DataFrame) -> Dict[str, str]:
 def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> List[Tuple[str, str]]:
     """(driver_id, constructor_id) for the upcoming race's grid.
 
-    When the season has a completed race, the actual grid of its most recent
-    round is used (real entrants, real teams). Otherwise the season's driver
-    list is used with each driver's most recent cached team (for a season
-    opener this is the previous season's mapping — a best-effort proxy).
+    The grid of the season's most recent completed race is the base (real
+    entrants, real teams). It is unioned with season entrants that hold a
+    known team from the cached history, so a driver who missed that race
+    (injury return, one-off substitute) is not dropped. For a season with no
+    completed race yet (an opener), all season entrants are returned with
+    teams from the cached history where known.
     """
-    completed = _latest_completed_round(client, season)
-    if completed:
-        try:
-            data = client.get_json(f"/{season}/{completed}/results.json")
-            results = data["MRData"]["RaceTable"]["Races"][0]["Results"]
-            return [
-                (e["Driver"]["driverId"], e["Constructor"]["constructorId"])
-                for e in results
-            ]
-        except (F1APIError, KeyError, IndexError):
-            pass
     drivers = [
         d["driverId"]
         for d in client.get_json(f"/{season}/drivers.json")["MRData"]["DriverTable"]["Drivers"]
     ]
+    completed = _latest_completed_round(client, season)
+    if not completed:
+        team_of = _latest_teams_from_df(df)
+        return [(d, team_of.get(d)) for d in drivers]
+
     team_of = _latest_teams_from_df(df)
-    return [(d, team_of.get(d)) for d in drivers]
+    grid: List[Tuple[str, str]] = []
+    try:
+        data = client.get_json(f"/{season}/{completed}/results.json")
+        results = data["MRData"]["RaceTable"]["Races"][0]["Results"]
+        grid = [(e["Driver"]["driverId"], e["Constructor"]["constructorId"]) for e in results]
+        team_of.update(dict(grid))  # last race wins for drivers who switched
+    except (F1APIError, KeyError, IndexError):
+        grid = []
+
+    grid_ids = {d for d, _ in grid}
+    extras = [(d, team_of[d]) for d in drivers if d not in grid_ids and d in team_of]
+    return grid + extras
 
 
 def _synthetic_rows(
@@ -179,12 +187,14 @@ def predict_race(
     model,
     season: int,
     round_: int,
+    calibrators: Optional[Dict[str, Any]] = None,
 ) -> pd.DataFrame:
     """Score every row of ``(season, round_)`` and rank by expected points.
 
     Returns driver/constructor/grid, expected points, P(scored)/P(top-3)/P(win)
     and ``pred_rank``; actual points/position are included when the race has
-    results (``actual_points`` is NaN for upcoming races).
+    results (``actual_points`` is NaN for upcoming races). When ``calibrators``
+    are given, the probability columns are isotonic-calibrated.
     """
     X, _ = prepare(df)
     target = df[(df["season"] == season) & (df["round"] == round_)]
@@ -194,6 +204,8 @@ def predict_race(
     X_target = X.loc[target.index]
     expected = model.predict_expected_points(X_target)
     probs = model.predict_probs(X_target)
+    if calibrators:
+        probs = apply_calibration(probs, calibrators)
 
     out = pd.DataFrame(
         {
@@ -235,6 +247,7 @@ def format_report(
     meta: dict,
     verified: bool,
     checkpoint: str,
+    calibrated: bool = False,
 ) -> str:
     lines = [
         f"# Prediction: {meta.get('race_name', f'Round {round_}')} "
@@ -242,8 +255,17 @@ def format_report(
         "",
         f"- Circuit: {meta.get('circuit_id', '?')} · Date: {meta.get('date', '?')}",
         f"- Model checkpoint: `{checkpoint}`",
-        f"- Probabilities are model scores (P top-10 / top-3 / win); ranking is the primary output.",
     ]
+    if calibrated:
+        lines.append(
+            "- Probabilities are isotonic-calibrated model scores "
+            "(P top-10 / top-3 / win); ranking is the primary output."
+        )
+    else:
+        lines.append(
+            "- Probabilities are raw model scores (P top-10 / top-3 / win); "
+            "ranking is the primary output."
+        )
     if not verified:
         lines.append(
             "- Unverified: no cached results for this race; entry list from "
@@ -358,14 +380,16 @@ def main() -> int:
 
     model_path = args.model or cfg["model"]["checkpoint"]
     model = load_checkpoint(model_path)
-    result = predict_race(df, model, target_season, target_round)
+    calibrators = load_calibrators(cfg["model"]["calibrators"])
+    result = predict_race(df, model, target_season, target_round, calibrators)
 
     target_rows = df[(df["season"] == target_season) & (df["round"] == target_round)]
     meta = {k: (target_rows[k].iloc[0] if k in target_rows else None)
             for k in ("race_name", "circuit_id", "date")}
 
     report = format_report(result, target_season, target_round, meta,
-                           verified=not synthetic, checkpoint=model_path)
+                           verified=not synthetic, checkpoint=model_path,
+                           calibrated=calibrators is not None)
     out = Path(args.out or cfg["report"]["prediction"])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")
