@@ -176,6 +176,15 @@ def train_final_model(df: pd.DataFrame) -> HurdleModels:
 def save_checkpoint(models: HurdleModels, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    # When train.py is executed as a script, classes are defined in
+    # ``__main__``; a pickled reference to ``__main__.HurdleModels`` cannot be
+    # resolved by other processes (e.g. predict.py). Alias the running module
+    # under the canonical name and repoint the classes so the checkpoint
+    # loads anywhere.
+    if __name__ == "__main__":
+        sys.modules["model.train"] = sys.modules["__main__"]
+    for cls in (HurdleModels, _ConstantProb, _ConstantPoints):
+        cls.__module__ = "model.train"
     joblib.dump({"models": models, "features": FEATURES}, path)
     logger.info("Saved checkpoint to %s", path)
 

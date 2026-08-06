@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "f1-result-predictor"
+version = "0.1.0"
+description = "Predict F1 race points per driver from pre-race features using a zero-inflated hurdle model (Jolpica API data)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.31",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "scikit-learn>=1.3",
+    "scipy>=1.10",
+    "joblib>=1.3",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["f1data", "features", "model"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

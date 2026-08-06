@@ -1,0 +1,25 @@
+# f1-result-predictor configuration.
+# Every value here is optional: the built-in defaults in config.py already
+# match this file. CLI flags override config values.
+
+[api]
+base_url = "https://api.jolpi.ca/ergast/f1"
+# The Jolpica API terms of use require a descriptive User-Agent.
+user_agent = "f1-result-predictor/0.1.0 (https://github.com/example/f1-result-predictor; contact: dev@example.com)"
+sleep_seconds = 0.25
+timeout = 30.0
+max_retries = 3
+
+[data]
+cache_dir = "data/raw"
+dataset = "data/features.parquet"
+start_season = 2010
+end_season = 2025
+
+[model]
+checkpoint = "data/model/hurdle.joblib"
+seed = 42
+
+[report]
+backtest = "reports/backtest.md"
+prediction = "reports/prediction.md"
