@@ -122,7 +122,13 @@ def reliability_table(y_true, y_prob, bins: int = 10) -> pd.DataFrame:
     """Binned mean prediction vs observed frequency (reliability diagram)."""
     df = pd.DataFrame({"y": np.asarray(y_true, dtype=float),
                        "p": np.asarray(y_prob, dtype=float)})
-    df["bin"] = pd.cut(df["p"], bins=bins, include_lowest=True)
+    n_unique = df["p"].nunique()
+    if n_unique < 2:
+        return pd.DataFrame(
+            {"mean_pred": [df["p"].mean()], "observed": [df["y"].mean()],
+             "n": [len(df)]}
+        ).round(3)
+    df["bin"] = pd.cut(df["p"], bins=min(bins, n_unique), include_lowest=True)
     table = df.groupby("bin", observed=True).agg(
         mean_pred=("p", "mean"), observed=("y", "mean"), n=("y", "size")
     )
@@ -141,10 +147,20 @@ def _to_md(df: pd.DataFrame) -> str:
     return "\n".join([header, sep, *body])
 
 
-def summarize(oos: pd.DataFrame, calibrators: Dict[str, IsotonicRegression]) -> str:
-    """Raw-vs-calibrated Brier scores and reliability tables, as text."""
+def summarize(oos: pd.DataFrame, calibrators: Dict[str, IsotonicRegression],
+              context: str = "", keep: Optional[set] = None) -> str:
+    """Raw-vs-calibrated Brier scores and reliability tables, as text.
+
+    ``context`` is a one-line note describing how ``calibrators`` were fit
+    relative to ``oos`` (e.g. a chronological hold-out), so the numbers are
+    never mistaken for out-of-calibration-sample evidence. ``keep`` lists the
+    targets whose calibrators are actually deployed.
+    """
     lines = [
         "# Calibration (isotonic, fit on walk-forward out-of-sample scores)",
+        "",
+        f"- Evaluation context: {context or 'in-sample (calibrators fit and evaluated on the same rows)'}",
+        f"- Deployed: {', '.join(sorted(keep)) if keep else 'none (raw probabilities kept)'}",
         "",
         "| target | brier_raw | brier_calibrated | delta |",
         "| --- | --- | --- | --- |",
@@ -187,9 +203,40 @@ def main() -> int:
     df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
 
     oos = collect_oos_scores(df)
+    # Deployment calibrators: fit on ALL out-of-sample scores (most data).
     calibrators = fit_calibrators(oos)
     save_calibrators(calibrators, args.out)
-    print(summarize(oos, calibrators))
+
+    # Honest evaluation: fit calibrators on the earlier OOS seasons only and
+    # evaluate on the later ones, so the reported Brier deltas are not
+    # in-sample for the calibration step.
+    seasons = sorted(oos["season"].unique())
+    split_at = seasons[len(seasons) * 2 // 3]
+    fit_oos = oos[oos["season"] < split_at]
+    eval_oos = oos[oos["season"] >= split_at]
+    if len(eval_oos) < 200:
+        eval_oos = oos
+        context = f"in-sample (too few hold-out rows; fit+eval on the same {len(oos)} OOS rows)"
+        eval_cal = calibrators
+    else:
+        eval_cal = fit_calibrators(fit_oos)
+        context = (
+            f"chronological hold-out: calibrators fit on OOS seasons "
+            f"{min(fit_oos['season'])}-{max(fit_oos['season'])}, evaluated on "
+            f"seasons {min(eval_oos['season'])}-{max(eval_oos['season'])}"
+        )
+
+    # Deploy a calibrator only where it improves hold-out Brier; other targets
+    # keep their raw scores.
+    keep = {
+        target
+        for target, score in TARGETS.items()
+        if brier(eval_oos[target], eval_cal[target].predict(eval_oos[score]))
+        < brier(eval_oos[target], eval_oos[score])
+    }
+    deployment = {t: calibrators[t] for t in keep}
+    save_calibrators(deployment, args.out)
+    print(summarize(eval_oos, eval_cal, context=context, keep=keep))
     print(f"\nWrote {args.out}")
     return 0
 

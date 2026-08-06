@@ -110,13 +110,21 @@ def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> List[Tuple[s
     completed race yet (an opener), all season entrants are returned with
     teams from the cached history where known.
     """
-    drivers = [
-        d["driverId"]
-        for d in client.get_json(f"/{season}/drivers.json")["MRData"]["DriverTable"]["Drivers"]
-    ]
+    try:
+        drivers = [
+            d["driverId"]
+            for d in client.get_json(f"/{season}/drivers.json")["MRData"]["DriverTable"]["Drivers"]
+        ]
+    except (F1APIError, KeyError, TypeError):
+        drivers = []  # fall back to grid-only below
     completed = _latest_completed_round(client, season)
     if not completed:
         team_of = _latest_teams_from_df(df)
+        if not drivers:
+            raise SystemExit(
+                f"could not determine the entry list for season {season} "
+                "(drivers endpoint unavailable and no completed race)"
+            )
         return [(d, team_of.get(d)) for d in drivers]
 
     team_of = _latest_teams_from_df(df)
@@ -258,8 +266,9 @@ def format_report(
     ]
     if calibrated:
         lines.append(
-            "- Probabilities are isotonic-calibrated model scores "
-            "(P top-10 / top-3 / win); ranking is the primary output."
+            "- Probability columns are isotonic-calibrated model scores where "
+            "calibration improved hold-out Brier (others stay raw); ranking is "
+            "the primary output."
         )
     else:
         lines.append(

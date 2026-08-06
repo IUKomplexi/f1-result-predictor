@@ -70,11 +70,12 @@ ever sees races strictly before the target race (unit-tested).
 The gradient-boosted classifiers' raw probabilities are overconfident (a
 common trait of gradient boosting). `model/calibrate.py` collects genuinely
 out-of-sample raw scores from the walk-forward backtest and fits isotonic
-calibrators for P(top-10) / P(top-3) / P(win). On the 2013–2025 out-of-sample
-set, calibration improved the Brier score on all three targets (scored
-0.172 → 0.164, top-3 0.080 → 0.072, win 0.035 → 0.031). Run it after every
-`model/train.py`; `predict.py` applies the calibrators automatically when
-the file exists.
+calibrators for P(top-10) / P(top-3) / P(win). A calibrator is **deployed only
+where it improves Brier on a chronological hold-out** (fit on OOS seasons
+2013–2020, evaluated on 2021–2025): top-3 (0.0767 → 0.0756) and win
+(0.0330 → 0.0315) are calibrated; P(top-10) stays raw (calibration slightly
+hurt it: 0.1606 → 0.1639). Run it after every `model/train.py`; `predict.py`
+applies the saved calibrators automatically.
 
 ## Results (honest)
 
@@ -98,8 +99,9 @@ top-3 overlap 0.67, Spearman 0.80, MAE 1.40 points.
 
 ## Limitations
 
-- Win/podium probabilities are isotonic-calibrated model scores (Brier
-  improved on out-of-sample data); the **ranking** remains the primary output.
+- Win/podium probabilities are isotonic-calibrated where that improved
+  hold-out Brier (top-3 and win); P(top-10) is raw. The **ranking** remains
+  the primary output.
 - Without qualifying results (`--grid`) the prediction for an upcoming race is
   weaker — grid is the single strongest feature.
 - Drivers with no history (rookies, new teams) get missing-feature handling

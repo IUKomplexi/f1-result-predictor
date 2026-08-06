@@ -255,3 +255,54 @@ def test_synthetic_rows_rejects_unknown_round():
             entries=[("a", "t1")],
             grid_map=None,
         )
+
+
+def test_predict_race_applies_calibrators():
+    import numpy as np
+
+    from model.calibrate import fit_calibrators
+
+    df = add_features(_synthetic_df(n_seasons=8))
+    model = train_final_model(df)
+    # A calibrator that compresses every score toward the base rate.
+    oos = pd.DataFrame(
+        {
+            "p_scored": [0.9, 0.1, 0.8, 0.2, 0.95, 0.05],
+            "p_top3": [0.9, 0.1, 0.8, 0.2, 0.95, 0.05],
+            "p_win": [0.9, 0.1, 0.8, 0.2, 0.95, 0.05],
+            "scored": [1, 0, 1, 0, 1, 0],
+            "top3": [1, 0, 1, 0, 1, 0],
+            "win": [1, 0, 1, 0, 1, 0],
+        }
+    )
+    cal = fit_calibrators(oos)
+    raw = predict_race(df, model, 2021, 2)
+    cald = predict_race(df, model, 2021, 2, cal)
+    assert not np.allclose(raw["p_win"], cald["p_win"])
+    assert ((cald["p_scored"] >= 0) & (cald["p_scored"] <= 1)).all()
+    assert ((cald["p_win"] >= 0) & (cald["p_win"] <= 1)).all()
+
+
+def test_format_report_labels_calibration_status():
+    result = pd.DataFrame(
+        {
+            "pred_rank": [1, 2],
+            "driver_id": ["d0", "d1"],
+            "constructor_id": ["t0", "t1"],
+            "grid": [1, 2],
+            "expected_points": [25.0, 18.0],
+            "p_scored": [0.9, 0.8],
+            "p_top3": [0.5, 0.4],
+            "p_win": [0.4, 0.2],
+            "actual_points": [25.0, 18.0],
+            "actual_position": [1, 2],
+        }
+    )
+    meta = {"race_name": "X", "circuit_id": "c", "date": "2026-01-01"}
+    cal_report = format_report(result, 2026, 1, meta, verified=False,
+                               checkpoint="c", calibrated=True)
+    raw_report = format_report(result, 2026, 1, meta, verified=False,
+                               checkpoint="c", calibrated=False)
+    assert "isotonic-calibrated model scores" in cal_report
+    assert "raw model scores" in raw_report
+    assert "isotonic-calibrated" not in raw_report
