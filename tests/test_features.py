@@ -309,3 +309,27 @@ def test_build_dataset_invalidates_stale_feature_cache(tmp_path, monkeypatch):
 
     df2 = fb.build_dataset(object(), [2020], cache_path=cache)
     assert "team_tenure" in df2.columns  # rebuilt, not silently loaded stale
+
+
+def test_build_dataset_invalidates_stale_season_cache(tmp_path, monkeypatch):
+    """A cache built for fewer seasons than requested must be rebuilt."""
+    from features import build as fb
+
+    mini = {
+        "calendar": [{"round": 1, "date": "2020-03-01", "circuit_id": "c1",
+                      "race_name": "R1", "is_sprint_round": False}],
+        "results": {1: [{"season": 2020, "round": 1, "position": 1, "grid": 1,
+                         "points": 25.0, "status": "Finished", "driver_id": "a",
+                         "constructor_id": "t1"}]},
+        "qualifying": {}, "sprints": {},
+    }
+    seen = []
+    monkeypatch.setattr(fb, "fetch_season",
+                        lambda client, s: (seen.append(s), mini)[1])
+    cache = tmp_path / "feat.parquet"
+
+    fb.build_dataset(object(), [2020], cache_path=cache)
+    assert seen == [2020]
+    # Rebuild request for a wider range must NOT be served from the 2020 cache.
+    fb.build_dataset(object(), [2020, 2021], cache_path=cache)
+    assert seen == [2020, 2020, 2021]  # refetched both seasons

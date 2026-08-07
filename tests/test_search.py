@@ -42,3 +42,19 @@ def test_search_ranks_configs():
     # pandas iterrows upcasts int columns to float, so check the column).
     assert results["max_iter"].dtype.kind == "i"
     assert results["learning_rate"].dtype.kind == "f"
+
+
+def test_evaluate_config_matches_run_backtest_aggregation():
+    """The search's MAE/Spearman must equal run_backtest's per-race model row.
+
+    Regression: evaluate_config used to pool whole seasons into race_metrics
+    (corrupting Spearman); it must aggregate per race like run_backtest.
+    """
+    from model.evaluate import run_backtest
+
+    df = add_features(_synthetic_df(n_seasons=8))
+    overall, _ = run_backtest(df)
+    mae, spearman = evaluate_config(df, {}, max_test_season=None)
+    # overall is rounded to 4 decimals by run_backtest.
+    assert mae == pytest.approx(overall.loc["model", "mae"], abs=5e-5)
+    assert spearman == pytest.approx(overall.loc["model", "spearman"], abs=5e-5)

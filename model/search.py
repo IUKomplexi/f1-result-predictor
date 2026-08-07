@@ -63,7 +63,11 @@ def evaluate_config(
     params: Dict[str, Any],
     max_test_season: Optional[int] = None,
 ) -> Tuple[float, float]:
-    """Mean per-race MAE and Spearman of one config on a walk-forward window."""
+    """Mean per-race MAE and Spearman of one config on a walk-forward window.
+
+    Metrics are computed per race (rankings are only meaningful within a
+    single race — pooling rounds would corrupt them), then averaged.
+    """
     mae, spearman = [], []
     for train, test, season in walk_forward_seasons(df):
         if max_test_season is not None and season > max_test_season:
@@ -72,9 +76,10 @@ def evaluate_config(
         X_test, _ = prepare(test)
         test = test.copy()
         test["pred_points"] = model.predict_expected_points(X_test)
-        m = race_metrics(test)
-        mae.append(m["mae"])
-        spearman.append(m["spearman"])
+        for _, race in test.groupby(["season", "round"]):
+            m = race_metrics(race)
+            mae.append(m["mae"])
+            spearman.append(m["spearman"])
     if not mae:
         raise ValueError("no walk-forward splits to evaluate")
     return float(np.mean(mae)), float(np.mean(spearman))
@@ -116,7 +121,11 @@ def main() -> int:
 
     print(f"Walk-forward search (test seasons <= {args.max_test_season}):")
     print(results.round(4).to_string(index=False))
-    best = results.iloc[0].drop(["mae", "spearman", "score"]).to_dict()
+    best_row = results.iloc[0].drop(["mae", "spearman", "score"]).to_dict()
+    best = {
+        k: (int(v) if k in {"max_iter", "max_depth", "min_samples_leaf"} else float(v))
+        for k, v in best_row.items()
+    }
     print("\nBest configuration (paste into model/train.py DEFAULT_PARAMS):")
     print(best)
     return 0

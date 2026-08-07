@@ -322,10 +322,15 @@ def build_dataset(
     if not refresh and cache.exists():
         try:
             cached = pd.read_parquet(cache)
-            if set(required) <= set(cached.columns):
+            cached_seasons = set(cached["season"]) if "season" in cached else set()
+            if (set(required) <= set(cached.columns)
+                    and cached_seasons >= set(seasons)):
                 logger.info("Loading cached dataset from %s", cache)
                 return cached
-            logger.warning("Cached dataset %s is missing feature columns; rebuilding", cache)
+            logger.warning(
+                "Cached dataset %s is stale (missing features or seasons); rebuilding",
+                cache,
+            )
         except Exception:
             logger.warning("Unreadable cached dataset %s; rebuilding", cache)
 
