@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+build/
+*.egg-info/
 
 # Derived / cached data (regenerable from the API via scripts/fetch_all.py)
 data/raw/
