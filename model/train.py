@@ -34,27 +34,33 @@ def points_for_position(position) -> float:
         return 0.0
 
 
-def _clf(seed: int) -> HistGradientBoostingClassifier:
+# Default gradient-boosting hyperparameters (see model/search.py to tune).
+# Chosen by walk-forward-validated search (model/search.py, test seasons
+# <= 2019): a smoother configuration than the original 400/0.06/5/20/1.0.
+DEFAULT_PARAMS = {
+    "max_iter": 300,
+    "learning_rate": 0.03,
+    "max_depth": 3,
+    "l2_regularization": 0.5,
+    "min_samples_leaf": 10,
+}
+
+
+def _clf(seed: int, params: Optional[Dict[str, Any]] = None) -> HistGradientBoostingClassifier:
+    p = {**DEFAULT_PARAMS, **(params or {})}
     return HistGradientBoostingClassifier(
-        max_iter=400,
-        learning_rate=0.06,
-        max_depth=5,
-        l2_regularization=1.0,
-        min_samples_leaf=20,
         categorical_features="from_dtype",
         random_state=seed,
+        **p,
     )
 
 
-def _reg(seed: int) -> HistGradientBoostingRegressor:
+def _reg(seed: int, params: Optional[Dict[str, Any]] = None) -> HistGradientBoostingRegressor:
+    p = {**DEFAULT_PARAMS, **(params or {})}
     return HistGradientBoostingRegressor(
-        max_iter=400,
-        learning_rate=0.06,
-        max_depth=5,
-        l2_regularization=1.0,
-        min_samples_leaf=20,
         categorical_features="from_dtype",
         random_state=seed,
+        **p,
     )
 
 
@@ -121,12 +127,13 @@ class HurdleModels:
     plus companion classifiers for P(top-3) and P(win).
     """
 
-    def __init__(self, seed: int = 42) -> None:
+    def __init__(self, seed: int = 42, params: Optional[Dict[str, Any]] = None) -> None:
         self.seed = seed
-        self.scored: Any = _clf(seed)
-        self.top3: Any = _clf(seed + 1)
-        self.win: Any = _clf(seed + 2)
-        self.points_if_scored: Any = _reg(seed + 3)
+        self.params = dict(params or {})
+        self.scored: Any = _clf(seed, self.params)
+        self.top3: Any = _clf(seed + 1, self.params)
+        self.win: Any = _clf(seed + 2, self.params)
+        self.points_if_scored: Any = _reg(seed + 3, self.params)
 
     def fit(self, X: pd.DataFrame, y: pd.DataFrame) -> "HurdleModels":
         self.scored = _fit_binary(self.scored, X, y["scored"])

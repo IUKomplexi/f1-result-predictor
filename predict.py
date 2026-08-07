@@ -398,7 +398,7 @@ def main() -> int:
 
     report = format_report(result, target_season, target_round, meta,
                            verified=not synthetic, checkpoint=model_path,
-                           calibrated=calibrators is not None)
+                           calibrated=bool(calibrators))
     out = Path(args.out or cfg["report"]["prediction"])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")

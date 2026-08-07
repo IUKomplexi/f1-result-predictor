@@ -232,3 +232,80 @@ def test_coverage_report_shape():
     assert list(report["season"]) == [2020]
     assert report.loc[0, "starts"] == 6
     assert report.loc[0, "scored_rate"] == 1.0
+
+
+def test_team_switch_tenure_and_lag_features():
+    """A driver switching teams mid-season: switch flag, pairing tenure, lag."""
+    df = pd.DataFrame(
+        [
+            # season round date circuit driver team grid qual pos points status sprint_points
+            [2020, 1, "2020-03-01", "c1", "x", "t1", 1, 1, 1, 25.0, "Finished", 0.0],
+            [2020, 2, "2020-03-08", "c2", "x", "t2", 2, 4, 2, 18.0, "Finished", 0.0],
+            [2020, 3, "2020-03-15", "c1", "x", "t2", 1, 1, 1, 25.0, "Finished", 0.0],
+        ],
+        columns=[
+            "season", "round", "date", "circuit_id", "driver_id",
+            "constructor_id", "grid", "qual_pos", "position", "points",
+            "status", "sprint_points",
+        ],
+    )
+    out = add_features(df)
+    r2 = out[out["round"] == 2].iloc[0]
+    assert r2["team_switch"] == 1.0       # moved from t1 to t2
+    assert r2["team_tenure"] == 0         # first race with t2
+    assert r2["last_race_points"] == 25.0  # points in round 1
+    assert r2["grid_qual_gap"] == -2       # qualified 4th, started 2nd
+    r3 = out[out["round"] == 3].iloc[0]
+    assert r3["team_switch"] == 0.0
+    assert r3["team_tenure"] == 1         # one prior race with t2
+    assert r3["last_race_points"] == 18.0
+    assert r3["circuit_prev_points_mean"] == pytest.approx(25.0)  # at c1, round 1
+    assert out["is_sprint_round"].eq(0.0).all()  # default when no calendar
+
+
+
+
+def test_constructor_champ_position_two_teams():
+    df = pd.DataFrame(
+        [
+            # season round date circuit driver team grid pos points status sprint_points
+            [2020, 1, "2020-03-01", "c1", "a", "t1", 1, 1, 25.0, "Finished", 0.0],
+            [2020, 1, "2020-03-01", "c1", "c", "t2", 2, 2, 18.0, "Finished", 0.0],
+            [2020, 2, "2020-03-08", "c2", "a", "t1", 2, 2, 18.0, "Finished", 0.0],
+            [2020, 2, "2020-03-08", "c2", "c", "t2", 1, 1, 25.0, "Finished", 0.0],
+        ],
+        columns=[
+            "season", "round", "date", "circuit_id", "driver_id",
+            "constructor_id", "grid", "position", "points", "status", "sprint_points",
+        ],
+    )
+    out = add_features(df)
+    # Round 2 entering: t1 has 25 pts, t2 has 18 -> t1 leads.
+    a2 = out[(out["driver_id"] == "a") & (out["round"] == 2)].iloc[0]
+    c2 = out[(out["driver_id"] == "c") & (out["round"] == 2)].iloc[0]
+    assert a2["constructor_champ_pos_entering"] == 1
+    assert c2["constructor_champ_pos_entering"] == 2
+
+
+def test_build_dataset_invalidates_stale_feature_cache(tmp_path, monkeypatch):
+    """A cached parquet missing a currently-defined feature must be rebuilt."""
+    from features import build as fb
+
+    mini = {
+        "calendar": [{"round": 1, "date": "2020-03-01", "circuit_id": "c1",
+                      "race_name": "R1", "is_sprint_round": False}],
+        "results": {1: [{"season": 2020, "round": 1, "position": 1, "grid": 1,
+                         "points": 25.0, "status": "Finished", "driver_id": "a",
+                         "constructor_id": "t1"}]},
+        "qualifying": {}, "sprints": {},
+    }
+    monkeypatch.setattr(fb, "fetch_season", lambda client, s: mini)
+    cache = tmp_path / "feat.parquet"
+
+    df1 = fb.build_dataset(object(), [2020], cache_path=cache)
+    assert "team_tenure" in df1.columns
+    # Simulate a stale cache from an older feature set.
+    df1.drop(columns=["team_tenure"]).to_parquet(cache, index=False)
+
+    df2 = fb.build_dataset(object(), [2020], cache_path=cache)
+    assert "team_tenure" in df2.columns  # rebuilt, not silently loaded stale

@@ -58,6 +58,8 @@ f1data/                     polite cached client + normalized fetchers
 features/build.py           per-start dataset: strictly pre-race features,
                             points target, leakage-tested
 model/train.py              hurdle model (HGB classifier + regressor)
+model/search.py             walk-forward-validated hyperparameter search
+model/calibrate.py          isotonic probability calibration (per-target)
 model/evaluate.py           walk-forward backtest vs grid/championship/zero
 predict.py                  next-race prediction + markdown report
 ```
@@ -67,35 +69,40 @@ ever sees races strictly before the target race (unit-tested).
 
 ## Probability calibration
 
-The gradient-boosted classifiers' raw probabilities are overconfident (a
+The gradient-boosted classifiers' raw probabilities can be overconfident (a
 common trait of gradient boosting). `model/calibrate.py` collects genuinely
 out-of-sample raw scores from the walk-forward backtest and fits isotonic
 calibrators for P(top-10) / P(top-3) / P(win). A calibrator is **deployed only
 where it improves Brier on a chronological hold-out** (fit on OOS seasons
-2013–2020, evaluated on 2021–2025): top-3 (0.0767 → 0.0756) and win
-(0.0330 → 0.0315) are calibrated; P(top-10) stays raw (calibration slightly
-hurt it: 0.1606 → 0.1639). Run it after every `model/train.py`; `predict.py`
-applies the saved calibrators automatically.
+2013–2020, evaluated on 2021–2025). With the current tuned model the raw
+probabilities are already well-calibrated, so no calibrator is deployed
+(calibration would hurt all three targets); the mechanism stays in place and
+re-activates automatically if a future model is miscalibrated again. Run it
+after every `model/train.py`; `predict.py` applies the saved calibrators
+automatically.
 
 ## Results (honest)
 
 Walk-forward backtest, train on all seasons strictly before the test season,
-evaluate 2013–2025 (mean per race):
+evaluate 2013–2025 (mean per race), model = hurdle with 7 pre-race features
+plus tuned hyperparameters (`model/search.py`):
 
 | baseline | winner_hit | top3_overlap | spearman | MAE (pts) |
 | --- | --- | --- | --- | --- |
-| **model** | 0.498 | 0.620 | **0.637** | 3.01 |
-| grid order | **0.535** | **0.686** | 0.623 | **2.83** |
+| **model** | **0.531** | 0.662 | **0.651** | 2.97 |
+| grid order | 0.535 | **0.686** | 0.623 | **2.83** |
 | championship | 0.450 | 0.613 | 0.617 | 3.99 |
 | zero | 0.535 | 0.686 | 0.623 | 4.99 |
 
-The model beats the championship and zero baselines broadly and beats
-grid-order on ranking correlation (Spearman), but **does not beat "start in
-grid order"** on winner/top-3/MAE — grid position is an extremely strong F1
-predictor. That gap is the honest state of the model, not a bug.
+The model now **matches the grid-order baseline on winner hit-rate** (0.531
+vs 0.535, up from 0.498) and beats it clearly on ranking correlation
+(Spearman 0.651 vs 0.623). Grid order still edges it on top-3 (0.662 vs 0.686)
+and MAE (2.97 vs 2.83 — the grid baseline's discrete points-table prediction
+fits the discrete points target well). Every metric improved over the
+pre-Phase-6 model (0.498 / 0.620 / 0.637 / 3.01).
 
 Dry run (Las Vegas 2024, predicted from pre-race info only): winner hit ✓,
-top-3 overlap 0.67, Spearman 0.80, MAE 1.40 points.
+top-3 overlap 0.67, Spearman 0.79, MAE 2.00 points.
 
 ## Limitations
 

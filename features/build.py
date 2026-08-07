@@ -30,20 +30,27 @@ CIRCUIT_WINDOW = 3       # prior visits at the same circuit to consider
 NUMERIC_FEATURES = [
     "grid",
     "qual_pos",
+    "grid_qual_gap",
     "season",
     "round",
+    "is_sprint_round",
     "n_prior_races",
+    "team_tenure",
+    "team_switch",
     "driver_prev_finish_mean",
     "driver_prev_points_mean",
     "driver_prev_points_sum",
+    "last_race_points",
     "driver_prev_dnf_rate",
     "driver_wins_prior",
     "team_prev_points_mean",
     "team_prev_pos_mean",
     "team_wins_prior",
     "circuit_prev_finish_mean",
+    "circuit_prev_points_mean",
     "champ_points_entering",
     "champ_pos_entering",
+    "constructor_champ_pos_entering",
     "season_driver_pts_per_race",
     "season_team_pts_per_race",
 ]
@@ -177,6 +184,10 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     out["race_points"] = out["points"] + out["sprint_points"]
     if "qual_pos" not in out.columns:
         out["qual_pos"] = out["grid"]
+    out["grid_qual_gap"] = out["grid"] - out["qual_pos"]
+    if "is_sprint_round" not in out.columns:
+        out["is_sprint_round"] = 0  # data assembled without a calendar
+    out["is_sprint_round"] = out["is_sprint_round"].astype(float)
     out["is_dnf"] = ~out["status"].map(is_classified).fillna(False)
     # finish_pos: numeric position, NaN when unknown (e.g. missing).
     out["finish_pos"] = out["position"].where(out["position"].fillna(0) > 0)
@@ -184,6 +195,10 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     # --- Driver career history (across all seasons, strictly prior) ---
     g = out.groupby("driver_id", sort=False)
     out["n_prior_races"] = g.cumcount()
+    out["team_tenure"] = out.groupby(["driver_id", "constructor_id"], sort=False).cumcount()
+    prev_team = g["constructor_id"].shift(1)
+    out["team_switch"] = ((out["constructor_id"] != prev_team) & prev_team.notna()).astype(float)
+    out["last_race_points"] = g["points"].shift(1)
     out["driver_prev_finish_mean"] = g["finish_pos"].transform(_rolling_mean)
     out["driver_prev_points_mean"] = g["points"].transform(_rolling_mean)
     out["driver_prev_points_sum"] = g["points"].transform(_rolling_sum)
@@ -227,6 +242,11 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
         team_race["season_team_pts_entering"] / team_race["season_team_n_prior"].clip(lower=1),
         np.nan,
     )
+    # Constructor championship rank entering the race (per round, best first).
+    team_race["constructor_champ_pos_entering"] = (
+        team_race.groupby(["season", "round"])["season_team_pts_entering"]
+        .rank(ascending=False, method="min")
+    )
 
     out = out.merge(
         team_race[
@@ -234,6 +254,7 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
                 "constructor_id", "season", "round",
                 "team_prev_points_mean", "team_prev_pos_mean", "team_wins_prior",
                 "season_team_pts_entering", "season_team_pts_per_race",
+                "constructor_champ_pos_entering",
             ]
         ],
         on=["constructor_id", "season", "round"],
@@ -243,6 +264,9 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     # --- Circuit history per driver ---
     g = out.groupby(["driver_id", "circuit_id"], sort=False)
     out["circuit_prev_finish_mean"] = g["finish_pos"].transform(
+        lambda s: s.shift(1).rolling(CIRCUIT_WINDOW, min_periods=1).mean()
+    )
+    out["circuit_prev_points_mean"] = g["points"].transform(
         lambda s: s.shift(1).rolling(CIRCUIT_WINDOW, min_periods=1).mean()
     )
     out["circuit_n_prior"] = g.cumcount()
@@ -291,9 +315,19 @@ def build_dataset(
     """
     seasons = list(seasons)
     cache = Path(cache_path)
+    # Feature-version validation: if the cached parquet lacks any currently
+    # defined feature column, it is stale and must be rebuilt (silently using
+    # a stale feature set would invalidate every downstream result).
+    required = NUMERIC_FEATURES + CATEGORICAL_FEATURES
     if not refresh and cache.exists():
-        logger.info("Loading cached dataset from %s", cache)
-        return pd.read_parquet(cache)
+        try:
+            cached = pd.read_parquet(cache)
+            if set(required) <= set(cached.columns):
+                logger.info("Loading cached dataset from %s", cache)
+                return cached
+            logger.warning("Cached dataset %s is missing feature columns; rebuilding", cache)
+        except Exception:
+            logger.warning("Unreadable cached dataset %s; rebuilding", cache)
 
     datas = [fetch_season(client, s) for s in seasons]
     df = add_features(assemble(datas))
