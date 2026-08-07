@@ -1,0 +1,4 @@
+# Reproducibility convenience file.
+# Equivalent to: pip install -e ".[test]"  (project + test dependencies).
+# For a plain runtime install without test tooling: pip install -e .
+-e .[test]

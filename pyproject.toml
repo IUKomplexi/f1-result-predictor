@@ -21,8 +21,16 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8"]
 
+[project.scripts]
+f1-predict = "predict:main"
+f1-train = "model.train:main"
+f1-backtest = "model.evaluate:main"
+f1-calibrate = "model.calibrate:main"
+f1-search = "model.search:main"
+
 [tool.setuptools]
 packages = ["f1data", "features", "model"]
+py-modules = ["predict", "config"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

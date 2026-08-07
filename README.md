@@ -16,32 +16,40 @@ grid ranked by expected points.
 
 ```bash
 python -m venv .venv
-.venv/Scripts/python -m pip install -e .            # Windows
+.venv/Scripts/python -m pip install -e ".[test]"     # Windows (project + test deps)
 .venv/Scripts/python scripts/fetch_all.py            # fetch + cache 2010-2025 (one-time)
 .venv/Scripts/python -m pytest -q                    # run the test suite
 ```
 
 Requires Python ≥ 3.11. The raw API responses are cached under `data/raw/`
-(one-time ~2 min fetch; everything after that runs offline).
+(one-time ~2 min fetch; everything after that runs offline). The install also
+registers console scripts (`f1-predict`, `f1-train`, `f1-backtest`,
+`f1-calibrate`, `f1-search`) — see below.
 
 ## Usage
 
-| Command | What it does |
+Every command has two equivalent forms: `python <module>.py ...` from the repo
+root, or the installed console script. Config/report paths are relative to the
+working directory, so run from the repo root (or pass absolute `--out`/
+`--dataset` paths).
+
+| Command (repo root / console script) | What it does |
 | --- | --- |
 | `python scripts/fetch_all.py [--start 2010] [--end 2025]` | fetch and cache raw API data |
-| `python model/train.py` | train the final model → `data/model/hurdle.joblib` |
-| `python model/calibrate.py` | fit isotonic probability calibrators → `data/model/calibrators.joblib` |
-| `python model/evaluate.py [--no-quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` (quantized by default; `--no-quantize` keeps continuous) |
-| `python predict.py` | predict the **next race** → `reports/prediction.md` |
+| `python model/train.py` · `f1-train` | train the final model → `data/model/hurdle.joblib` |
+| `python model/calibrate.py` · `f1-calibrate` | fit isotonic probability calibrators → `data/model/calibrators.joblib` |
+| `python model/evaluate.py [--no-quantize]` · `f1-backtest` | walk-forward backtest vs baselines → `reports/backtest.md` (quantized by default) |
+| `python predict.py` · `f1-predict` | predict the **next race** → `reports/prediction.md` |
 | `python predict.py --season 2024 --round 22` | predict any race; past races are verified vs actuals |
 | `python predict.py --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
 
 Examples:
 
 ```bash
-python predict.py                                   # Dutch GP 2026 (next race)
-python predict.py --season 2024 --round 22          # dry run: Las Vegas 2024 + verification
-python predict.py --grid qual.csv                   # with known grid for the next race
+f1-predict                                       # Dutch GP 2026 (next race)
+f1-predict --season 2024 --round 22              # dry run: Las Vegas 2024 + verification
+f1-predict --grid qual.csv                       # with known grid for the next race
+python model/search.py --n 16 --max-test-season 2019   # re-tune hyperparameters
 ```
 
 ## Configuration
@@ -122,3 +130,10 @@ top-3 overlap 0.67, Spearman 0.79, MAE 1.95 points.
 The Jolpica API asks clients to send a descriptive `User-Agent` (configured in
 `config.toml`) and to cache responses — both are handled by `F1Client`
 (polite rate limiting, retry/backoff, on-disk cache).
+
+## Development
+
+- Tests: `pytest -q` — fully offline (recorded fixtures, no network).
+- CI: `.github/workflows/ci.yml` runs the suite on Python 3.11/3.12 on every
+  push/PR.
+- Reproducibility: `pip install -r requirements.txt` (project + test deps).
