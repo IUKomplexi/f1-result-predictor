@@ -31,7 +31,7 @@ Requires Python ≥ 3.11. The raw API responses are cached under `data/raw/`
 | `python scripts/fetch_all.py [--start 2010] [--end 2025]` | fetch and cache raw API data |
 | `python model/train.py` | train the final model → `data/model/hurdle.joblib` |
 | `python model/calibrate.py` | fit isotonic probability calibrators → `data/model/calibrators.joblib` |
-| `python model/evaluate.py [--quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` (`--quantize` reproduces the shipped quantized results) |
+| `python model/evaluate.py [--no-quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` (quantized by default; `--no-quantize` keeps continuous) |
 | `python predict.py` | predict the **next race** → `reports/prediction.md` |
 | `python predict.py --season 2024 --round 22` | predict any race; past races are verified vs actuals |
 | `python predict.py --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |

@@ -103,14 +103,14 @@ def race_metrics(df: pd.DataFrame) -> Dict[str, float]:
 # Backtest
 # --------------------------------------------------------------------------
 
-def run_backtest(df: pd.DataFrame, quantize: bool = False) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
+def run_backtest(df: pd.DataFrame, quantize: bool = True) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
     """Walk-forward backtest; returns (overall table, per-season tables).
 
     The model is re-trained for every test season (train = all strictly
     earlier seasons). Metrics are computed per race and then averaged per
-    season and overall. With ``quantize=True`` the model's expected points are
-    rounded to the nearest points-table value before scoring (see
-    :func:`model.train.quantize_points`).
+    season and overall. Expected points are quantized to the points table by
+    default (the deployed output); pass ``quantize=False`` to compare the
+    raw continuous expectations.
     """
     df = df.copy()
     df["pred_model"] = np.nan
@@ -206,13 +206,13 @@ def main() -> int:
     parser.add_argument("--cache-dir", default="data/raw")
     parser.add_argument("--dataset", default="data/features.parquet")
     parser.add_argument("--out", default="reports/backtest.md")
-    parser.add_argument("--quantize", action="store_true",
-                        help="round the model's expected points to the points table")
+    parser.add_argument("--no-quantize", action="store_true",
+                        help="keep continuous expected points (deployed output is quantized)")
     args = parser.parse_args()
 
     client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
     df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    overall, by_season = run_backtest(df, quantize=args.quantize)
+    overall, by_season = run_backtest(df, quantize=not args.no_quantize)
     print(overall.to_string())
     report = format_tables(overall, by_season)
     out = Path(args.out)

@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from features.build import build_dataset  # noqa: E402
 from f1data import F1Client  # noqa: E402
 from model.evaluate import race_metrics  # noqa: E402
-from model.train import HurdleModels, prepare, walk_forward_seasons  # noqa: E402
+from model.train import HurdleModels, prepare, quantize_points, walk_forward_seasons  # noqa: E402
 
 PARAM_RANGES = {
     "max_iter": [200, 300, 400, 600],
@@ -66,7 +66,8 @@ def evaluate_config(
     """Mean per-race MAE and Spearman of one config on a walk-forward window.
 
     Metrics are computed per race (rankings are only meaningful within a
-    single race — pooling rounds would corrupt them), then averaged.
+    single race — pooling rounds would corrupt them), then averaged. Expected
+    points are quantized, matching the deployed output.
     """
     mae, spearman = [], []
     for train, test, season in walk_forward_seasons(df):
@@ -75,7 +76,7 @@ def evaluate_config(
         model = HurdleModels(seed=42, params=params).fit(*prepare(train))
         X_test, _ = prepare(test)
         test = test.copy()
-        test["pred_points"] = model.predict_expected_points(X_test)
+        test["pred_points"] = quantize_points(model.predict_expected_points(X_test))
         for _, race in test.groupby(["season", "round"]):
             m = race_metrics(race)
             mae.append(m["mae"])

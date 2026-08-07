@@ -3,6 +3,7 @@
 - Circuit: zandvoort · Date: 2026-08-23 00:00:00
 - Model checkpoint: `data/model/hurdle.joblib`
 - Probabilities are raw model scores (P top-10 / top-3 / win); ranking is the primary output.
+- Expected points are quantized to the points table; ties are broken by grid (pit-lane starts last). For an upcoming race the grid is unknown, so order within a tied bucket is entry-list order.
 - Unverified: no cached results for this race; entry list from the latest completed round.
 
 ## Predicted grid (ranked by expected points)

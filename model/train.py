@@ -41,10 +41,11 @@ def quantize_points(values) -> np.ndarray:
 
     The grid baseline wins on MAE partly because it predicts discrete table
     values while the model predicts smoothed continuous expectations. This
-    post-processing makes the comparison apples-to-apples; adopted only if it
-    improves the walk-forward metrics (see model/evaluate.py --quantize).
+    post-processing is the deployed default (see model/evaluate.py --no-quantize
+    to compare). NaN inputs map to 0.0.
     """
     values = np.asarray(values, dtype=float)
+    values = np.nan_to_num(values, nan=0.0)
     idx = np.argmin(np.abs(QUANTIZED_POINTS[None, :] - values[:, None]), axis=1)
     return QUANTIZED_POINTS[idx]
 

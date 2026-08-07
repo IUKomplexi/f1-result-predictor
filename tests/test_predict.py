@@ -306,3 +306,36 @@ def test_format_report_labels_calibration_status():
     assert "isotonic-calibrated model scores" in cal_report
     assert "raw model scores" in raw_report
     assert "isotonic-calibrated" not in raw_report
+
+
+def test_rank_expected_pit_lane_last():
+    """Ties in expected points: pit-lane (grid=0) starts rank last."""
+    from predict import _rank_expected
+
+    out = pd.DataFrame(
+        {
+            "driver_id": ["a", "b", "c"],
+            "grid": [1, 0, 3],
+            "expected_points": [10.0, 10.0, 10.0],
+        }
+    )
+    ranked = _rank_expected(out)
+    assert ranked["pred_rank"].tolist() == [1, 2, 3]
+    assert ranked["driver_id"].tolist() == ["a", "c", "b"]  # pit lane last
+
+
+def test_predict_race_ranking_agrees_with_backtest_rank_by():
+    """predict_race's ordering must match race_metrics' _rank_by on the same
+    quantized predictions (regression: grid=0 tiebreak diverged)."""
+    from model.evaluate import _rank_by
+
+    df = add_features(_synthetic_df(n_seasons=8))
+    model = train_final_model(df)
+    out = predict_race(df, model, 2021, 2)
+
+    v = out.rename(
+        columns={"actual_points": "points", "actual_position": "position"}
+    ).copy()
+    v["pred_points"] = v["expected_points"]
+    ranks = _rank_by(v, "pred_points", "grid").tolist()
+    assert ranks == list(range(1, len(out) + 1))

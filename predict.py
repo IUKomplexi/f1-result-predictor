@@ -190,6 +190,22 @@ def read_grid_csv(path: str | Path) -> Dict[str, int]:
 # Scoring
 # --------------------------------------------------------------------------
 
+def _rank_expected(out: pd.DataFrame) -> pd.DataFrame:
+    """Sort by expected points desc; ties broken by grid.
+
+    The grid tiebreak treats pit-lane starts (``grid <= 0``) as last, exactly
+    like the backtest's ``_rank_by``, so quantized-point ties rank identically
+    in `predict.py` and `model/evaluate.py`.
+    """
+    out = out.assign(
+        _grid_tb=out["grid"].replace(0, np.inf).fillna(np.inf)
+    ).sort_values(
+        ["expected_points", "_grid_tb"], ascending=[False, True]
+    ).drop(columns="_grid_tb").reset_index(drop=True)
+    out.insert(0, "pred_rank", range(1, len(out) + 1))
+    return out
+
+
 def predict_race(
     df: pd.DataFrame,
     model,
@@ -231,10 +247,7 @@ def predict_race(
             "actual_position": target["position"].to_numpy(),
         }
     )
-    out = out.sort_values(
-        ["expected_points", "grid"], ascending=[False, True], na_position="last"
-    ).reset_index(drop=True)
-    out.insert(0, "pred_rank", range(1, len(out) + 1))
+    out = _rank_expected(out)
     return out
 
 
@@ -280,6 +293,11 @@ def format_report(
             "- Probabilities are raw model scores (P top-10 / top-3 / win); "
             "ranking is the primary output."
         )
+    lines.append(
+        "- Expected points are quantized to the points table; ties are broken "
+        "by grid (pit-lane starts last). For an upcoming race the grid is "
+        "unknown, so order within a tied bucket is entry-list order."
+    )
     if not verified:
         lines.append(
             "- Unverified: no cached results for this race; entry list from "
