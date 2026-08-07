@@ -211,3 +211,17 @@ def test_run_backtest_quantize_option():
     df = add_features(_synthetic_df(n_seasons=8))
     overall_q, _ = run_backtest(df, quantize=True)
     assert overall_q.loc["model", "mae"] < overall_q.loc["zero", "mae"]
+
+
+def test_quantize_points_nan_maps_to_zero():
+    from model.train import quantize_points
+
+    np.testing.assert_allclose(quantize_points(np.array([np.nan])), [0.0])
+
+
+def test_run_backtest_no_quantize_differs():
+    df = add_features(_synthetic_df(n_seasons=8))
+    overall_c, _ = run_backtest(df, quantize=True)
+    overall_r, _ = run_backtest(df, quantize=False)
+    assert overall_c.loc["model", "mae"] != overall_r.loc["model", "mae"]
+    assert overall_r.loc["model", "mae"] < overall_r.loc["zero", "mae"]

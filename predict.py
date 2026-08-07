@@ -193,7 +193,7 @@ def read_grid_csv(path: str | Path) -> Dict[str, int]:
 def _rank_expected(out: pd.DataFrame) -> pd.DataFrame:
     """Sort by expected points desc; ties broken by grid.
 
-    The grid tiebreak treats pit-lane starts (``grid <= 0``) as last, exactly
+    The grid tiebreak treats pit-lane starts (``grid == 0``) as last, exactly
     like the backtest's ``_rank_by``, so quantized-point ties rank identically
     in `predict.py` and `model/evaluate.py`.
     """
