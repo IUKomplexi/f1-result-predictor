@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from features.build import build_dataset  # noqa: E402
 from f1data import F1Client  # noqa: E402
-from model.train import HurdleModels, points_for_position, prepare, walk_forward_seasons  # noqa: E402
+from model.train import HurdleModels, points_for_position, prepare, quantize_points, walk_forward_seasons  # noqa: E402
 
 # --------------------------------------------------------------------------
 # Baselines
@@ -103,12 +103,14 @@ def race_metrics(df: pd.DataFrame) -> Dict[str, float]:
 # Backtest
 # --------------------------------------------------------------------------
 
-def run_backtest(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
+def run_backtest(df: pd.DataFrame, quantize: bool = False) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
     """Walk-forward backtest; returns (overall table, per-season tables).
 
     The model is re-trained for every test season (train = all strictly
     earlier seasons). Metrics are computed per race and then averaged per
-    season and overall.
+    season and overall. With ``quantize=True`` the model's expected points are
+    rounded to the nearest points-table value before scoring (see
+    :func:`model.train.quantize_points`).
     """
     df = df.copy()
     df["pred_model"] = np.nan
@@ -124,7 +126,8 @@ def run_backtest(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame
         model_by_season[season] = model
         X_test, _ = prepare(test)
         test = test.copy()
-        test["pred_model"] = model.predict_expected_points(X_test)
+        pred = model.predict_expected_points(X_test)
+        test["pred_model"] = quantize_points(pred) if quantize else pred
         df.loc[test.index, "pred_model"] = test["pred_model"]
 
         # Metrics are defined per race: rank drivers within one race only.
@@ -203,11 +206,13 @@ def main() -> int:
     parser.add_argument("--cache-dir", default="data/raw")
     parser.add_argument("--dataset", default="data/features.parquet")
     parser.add_argument("--out", default="reports/backtest.md")
+    parser.add_argument("--quantize", action="store_true",
+                        help="round the model's expected points to the points table")
     args = parser.parse_args()
 
     client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
     df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    overall, by_season = run_backtest(df)
+    overall, by_season = run_backtest(df, quantize=args.quantize)
     print(overall.to_string())
     report = format_tables(overall, by_season)
     out = Path(args.out)

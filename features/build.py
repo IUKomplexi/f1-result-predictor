@@ -48,6 +48,8 @@ NUMERIC_FEATURES = [
     "team_wins_prior",
     "circuit_prev_finish_mean",
     "circuit_prev_points_mean",
+    "finish_gap_vs_teammate",
+    "qual_gap_vs_teammate",
     "champ_points_entering",
     "champ_pos_entering",
     "constructor_champ_pos_entering",
@@ -270,6 +272,28 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
         lambda s: s.shift(1).rolling(CIRCUIT_WINDOW, min_periods=1).mean()
     )
     out["circuit_n_prior"] = g.cumcount()
+
+    # --- Teammate-relative performance (strictly prior) ---
+    # A driver's benchmark is the teammate in the same car. The raw gap is
+    # computed within the same race (own value minus the teammates' mean),
+    # then rolled over *prior* races only via shift(1), so the current
+    # race's teammate result never leaks into this race's feature row.
+    def _teammate_gap(value_col: str, out_col: str) -> None:
+        grp = out.groupby(["season", "round", "constructor_id"], sort=False)[value_col]
+        others_sum = grp.transform("sum") - out[value_col]
+        others_n = grp.transform("size") - 1
+        out["_raw_teammate_gap"] = (
+            (out[value_col] - others_sum / others_n.replace(0, np.nan))
+            .where(others_n > 0)
+        )
+        gd = out.groupby("driver_id", sort=False)
+        out[out_col] = gd["_raw_teammate_gap"].transform(
+            lambda s: s.shift(1).rolling(FORM_WINDOW, min_periods=1).mean()
+        )
+        del out["_raw_teammate_gap"]
+
+    _teammate_gap("finish_pos", "finish_gap_vs_teammate")
+    _teammate_gap("qual_pos", "qual_gap_vs_teammate")
 
     # --- Championship position entering the race ---
     # Includes the current round's sprint points (known before the main race),

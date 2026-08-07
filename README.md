@@ -31,7 +31,7 @@ Requires Python ≥ 3.11. The raw API responses are cached under `data/raw/`
 | `python scripts/fetch_all.py [--start 2010] [--end 2025]` | fetch and cache raw API data |
 | `python model/train.py` | train the final model → `data/model/hurdle.joblib` |
 | `python model/calibrate.py` | fit isotonic probability calibrators → `data/model/calibrators.joblib` |
-| `python model/evaluate.py` | walk-forward backtest vs baselines → `reports/backtest.md` |
+| `python model/evaluate.py [--quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` (`--quantize` reproduces the shipped quantized results) |
 | `python predict.py` | predict the **next race** → `reports/prediction.md` |
 | `python predict.py --season 2024 --round 22` | predict any race; past races are verified vs actuals |
 | `python predict.py --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
@@ -84,25 +84,27 @@ automatically.
 ## Results (honest)
 
 Walk-forward backtest, train on all seasons strictly before the test season,
-evaluate 2013–2025 (mean per race), model = hurdle with 7 pre-race features
-plus tuned hyperparameters (`model/search.py`):
+evaluate 2013–2025 (mean per race). Model = hurdle with 9 extra pre-race
+features (teammate-relative gaps, sprint, pairing tenure, ...), tuned
+hyperparameters (`model/search.py`), and expected points **quantized to the
+points table** (adopted because it improved walk-forward MAE/top-3/Spearman):
 
 | baseline | winner_hit | top3_overlap | spearman | MAE (pts) |
 | --- | --- | --- | --- | --- |
-| **model** | **0.531** | 0.662 | **0.651** | 2.97 |
+| **model** | **0.539** | 0.667 | **0.654** | 2.93 |
 | grid order | 0.535 | **0.686** | 0.623 | **2.83** |
 | championship | 0.450 | 0.613 | 0.617 | 3.99 |
 | zero | 0.535 | 0.686 | 0.623 | 4.99 |
 
-The model now **matches the grid-order baseline on winner hit-rate** (0.531
-vs 0.535, up from 0.498) and beats it clearly on ranking correlation
-(Spearman 0.651 vs 0.623). Grid order still edges it on top-3 (0.662 vs 0.686)
-and MAE (2.97 vs 2.83 — the grid baseline's discrete points-table prediction
-fits the discrete points target well). Every metric improved over the
-pre-Phase-6 model (0.498 / 0.620 / 0.637 / 3.01).
+The model now **beats the grid-order baseline on winner hit-rate** (0.539 vs
+0.535) and on ranking correlation (Spearman 0.654 vs 0.623). Grid order still
+edges it on top-3 (0.667 vs 0.686) and MAE (2.93 vs 2.83 — the grid baseline
+predicts the exact points-table value whenever the pole sitter wins, which no
+probabilistic model can match). Every metric improved over the Phase-6 model
+(0.531 / 0.662 / 0.651 / 2.97).
 
 Dry run (Las Vegas 2024, predicted from pre-race info only): winner hit ✓,
-top-3 overlap 0.67, Spearman 0.79, MAE 2.00 points.
+top-3 overlap 0.67, Spearman 0.79, MAE 1.95 points.
 
 ## Limitations
 

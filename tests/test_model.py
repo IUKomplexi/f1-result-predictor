@@ -195,3 +195,19 @@ def test_load_checkpoint_rejects_mismatched_features(tmp_path):
     joblib.dump({"models": None, "features": ["old_feature"]}, path)
     with pytest.raises(ValueError, match="does not match"):
         load_checkpoint(path)
+
+
+def test_quantize_points_rounds_to_table_values():
+    from model.train import QUANTIZED_POINTS, quantize_points
+
+    out = quantize_points(np.array([0.1, 0.4, 2.3, 9.5, 24.0, 25.5, 25.9]))
+    expected = [0.0, 0.0, 2.0, 10.0, 25.0, 25.0, 26.0]
+    np.testing.assert_allclose(out, expected)
+    # All outputs are points-table values.
+    assert set(np.unique(out)) <= set(QUANTIZED_POINTS)
+
+
+def test_run_backtest_quantize_option():
+    df = add_features(_synthetic_df(n_seasons=8))
+    overall_q, _ = run_backtest(df, quantize=True)
+    assert overall_q.loc["model", "mae"] < overall_q.loc["zero", "mae"]

@@ -333,3 +333,37 @@ def test_build_dataset_invalidates_stale_season_cache(tmp_path, monkeypatch):
     # Rebuild request for a wider range must NOT be served from the 2020 cache.
     fb.build_dataset(object(), [2020, 2021], cache_path=cache)
     assert seen == [2020, 2020, 2021]  # refetched both seasons
+
+
+def test_teammate_gap_features():
+    """Rolling gap vs teammate: negative = ahead; strictly prior (NaN first race)."""
+    df = pd.DataFrame(
+        [
+            # season round date circuit driver team grid qual pos points status sprint_points
+            [2020, 1, "2020-03-01", "c1", "a", "t1", 1, 1, 1, 25.0, "Finished", 0.0],
+            [2020, 1, "2020-03-01", "c1", "b", "t1", 3, 4, 5, 6.0, "Finished", 0.0],
+            [2020, 1, "2020-03-01", "c1", "c", "t2", 2, 2, 2, 18.0, "Finished", 0.0],
+            [2020, 1, "2020-03-01", "c1", "d", "t2", 4, 3, 3, 15.0, "Finished", 0.0],
+            [2020, 2, "2020-03-08", "c2", "a", "t1", 1, 1, 1, 25.0, "Finished", 0.0],
+            [2020, 2, "2020-03-08", "c2", "b", "t1", 3, 5, 6, 2.0, "Finished", 0.0],
+            [2020, 2, "2020-03-08", "c2", "c", "t2", 2, 2, 2, 18.0, "Finished", 0.0],
+            [2020, 2, "2020-03-08", "c2", "d", "t2", 4, 3, 3, 15.0, "Finished", 0.0],
+        ],
+        columns=[
+            "season", "round", "date", "circuit_id", "driver_id",
+            "constructor_id", "grid", "qual_pos", "position", "points",
+            "status", "sprint_points",
+        ],
+    )
+    out = add_features(df)
+
+    a1 = out[(out["driver_id"] == "a") & (out["round"] == 1)].iloc[0]
+    assert np.isnan(a1["finish_gap_vs_teammate"])  # no prior race yet
+
+    a2 = out[(out["driver_id"] == "a") & (out["round"] == 2)].iloc[0]
+    b2 = out[(out["driver_id"] == "b") & (out["round"] == 2)].iloc[0]
+    # Round 1: a finished 1st vs b 5th -> gap -4; qualified 1st vs 4th -> -3.
+    assert a2["finish_gap_vs_teammate"] == pytest.approx(-4.0)
+    assert a2["qual_gap_vs_teammate"] == pytest.approx(-3.0)
+    assert b2["finish_gap_vs_teammate"] == pytest.approx(4.0)
+    assert b2["qual_gap_vs_teammate"] == pytest.approx(3.0)

@@ -25,6 +25,8 @@ FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 # Classic top-10 points table (fastest-lap point is part of the target data
 # and is not needed for the baselines).
 POINTS_TABLE = {1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1}
+# All values the points target can take (incl. the fastest-lap point).
+QUANTIZED_POINTS = np.array([0, 1, 2, 4, 6, 8, 10, 12, 15, 18, 25, 26], dtype=float)
 
 
 def points_for_position(position) -> float:
@@ -34,15 +36,28 @@ def points_for_position(position) -> float:
         return 0.0
 
 
+def quantize_points(values) -> np.ndarray:
+    """Round continuous expected points to the nearest points-table value.
+
+    The grid baseline wins on MAE partly because it predicts discrete table
+    values while the model predicts smoothed continuous expectations. This
+    post-processing makes the comparison apples-to-apples; adopted only if it
+    improves the walk-forward metrics (see model/evaluate.py --quantize).
+    """
+    values = np.asarray(values, dtype=float)
+    idx = np.argmin(np.abs(QUANTIZED_POINTS[None, :] - values[:, None]), axis=1)
+    return QUANTIZED_POINTS[idx]
+
+
 # Default gradient-boosting hyperparameters (see model/search.py to tune).
 # Chosen by walk-forward-validated search (model/search.py, test seasons
-# <= 2019): a smoother configuration than the original 400/0.06/5/20/1.0.
+# <= 2019) with the full feature set incl. teammate-relative features.
 DEFAULT_PARAMS = {
-    "max_iter": 300,
+    "max_iter": 400,
     "learning_rate": 0.03,
     "max_depth": 3,
-    "l2_regularization": 0.5,
-    "min_samples_leaf": 10,
+    "l2_regularization": 1.0,
+    "min_samples_leaf": 20,
 }
 
 

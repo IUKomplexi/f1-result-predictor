@@ -32,7 +32,7 @@ from features.build import add_features, assemble  # noqa: E402
 from f1data import F1APIError, F1Client, fetch_calendar, fetch_season  # noqa: E402
 from model.calibrate import apply_calibration, load_calibrators  # noqa: E402
 from model.evaluate import race_metrics  # noqa: E402
-from model.train import load_checkpoint, prepare  # noqa: E402
+from model.train import load_checkpoint, prepare, quantize_points  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -210,7 +210,10 @@ def predict_race(
         raise ValueError(f"no rows for season {season} round {round_}")
 
     X_target = X.loc[target.index]
-    expected = model.predict_expected_points(X_target)
+    # Deployed output is quantized to the points table (adopted because it
+    # improves walk-forward MAE/top-3/Spearman); ranking uses a grid tiebreak
+    # for equal quantized values, matching the backtest.
+    expected = quantize_points(model.predict_expected_points(X_target))
     probs = model.predict_probs(X_target)
     if calibrators:
         probs = apply_calibration(probs, calibrators)
@@ -228,7 +231,9 @@ def predict_race(
             "actual_position": target["position"].to_numpy(),
         }
     )
-    out = out.sort_values("expected_points", ascending=False).reset_index(drop=True)
+    out = out.sort_values(
+        ["expected_points", "grid"], ascending=[False, True], na_position="last"
+    ).reset_index(drop=True)
     out.insert(0, "pred_rank", range(1, len(out) + 1))
     return out
 
