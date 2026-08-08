@@ -153,8 +153,14 @@ The Jolpica API asks clients to send a descriptive `User-Agent` (configured in
 - `tests/test_e2e.py` runs the **full pipeline end-to-end** (fetch →
   assemble → features → train → predict → report) offline against a synthetic
   API session, so CI exercises the whole chain, not just pieces.
-- CI: `.github/workflows/ci.yml` runs the suite on Python 3.11/3.12/3.13 on
-  every push to `main` and every PR — live at
-  https://github.com/IUKomplexi/f1-result-predictor/actions (private repo).
+- Lint & types: `ruff check .` and `pyright` (installed via the `lint`
+  extra) are both at **0 errors**. `pyrightconfig.json` + `.vscode/settings.json`
+  pin basic mode and exclude `build/`/`tests/`/`data/`; pandas is untyped, so
+  the few remaining `Unknown`-union sites carry scoped, justified
+  `# type: ignore[reportX]` comments. Pylance in the editor uses the same
+  settings as the CLI.
+- CI: `.github/workflows/ci.yml` runs the test matrix on Python 3.11/3.12/3.13
+  plus a lint job (ruff + pyright) on every push to `main` and every PR — live
+  at https://github.com/IUKomplexi/f1-result-predictor/actions (private repo).
 - Reproducibility: `pip install -r requirements.txt` (project + test deps).
 - License: MIT (see `LICENSE`).
