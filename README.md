@@ -24,7 +24,8 @@ python -m venv .venv
 Requires Python ≥ 3.11. The raw API responses are cached under `data/raw/`
 (one-time ~2 min fetch; everything after that runs offline). The install also
 registers console scripts (`f1-predict`, `f1-train`, `f1-backtest`,
-`f1-calibrate`, `f1-search`) — see below.
+`f1-calibrate`, `f1-search`) — activate the venv (`.venv\Scripts\activate` on
+Windows, `source .venv/bin/activate` elsewhere) so they are on your PATH.
 
 ## Usage
 
