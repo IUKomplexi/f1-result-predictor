@@ -154,7 +154,7 @@ The Jolpica API asks clients to send a descriptive `User-Agent` (configured in
   assemble → features → train → predict → report) offline against a synthetic
   API session, so CI exercises the whole chain, not just pieces.
 - CI: `.github/workflows/ci.yml` runs the suite on Python 3.11/3.12/3.13 on
-  every push/PR — live at
+  every push to `main` and every PR — live at
   https://github.com/IUKomplexi/f1-result-predictor/actions (private repo).
 - Reproducibility: `pip install -r requirements.txt` (project + test deps).
 - License: MIT (see `LICENSE`).
