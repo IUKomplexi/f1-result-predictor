@@ -147,7 +147,14 @@ The Jolpica API asks clients to send a descriptive `User-Agent` (configured in
 
 ## Development
 
-- Tests: `pytest -q` — fully offline (recorded fixtures, no network).
-- CI: `.github/workflows/ci.yml` runs the suite on Python 3.11/3.12 on every
-  push/PR.
+- Tests: `pytest -q` — fully offline (recorded fixtures, no network). The
+  suite is enforced deprecation-free (`filterwarnings = ["error::DeprecationWarning"]`
+  in `pyproject.toml`).
+- `tests/test_e2e.py` runs the **full pipeline end-to-end** (fetch →
+  assemble → features → train → predict → report) offline against a synthetic
+  API session, so CI exercises the whole chain, not just pieces.
+- CI: `.github/workflows/ci.yml` runs the suite on Python 3.11/3.12/3.13 on
+  every push/PR — live at
+  https://github.com/IUKomplexi/f1-result-predictor/actions (private repo).
 - Reproducibility: `pip install -r requirements.txt` (project + test deps).
+- License: MIT (see `LICENSE`).
