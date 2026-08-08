@@ -1,0 +1,62 @@
+/*
+ * Design tokens — F1-themed dark palette, spacing scale, type scale.
+ * Use the semantic tokens (--bg-surface, --text-primary, ...) in components;
+ * raw palette values only here.
+ */
+:root {
+  /* Palette */
+  --f1-red: #e10600;
+  --f1-red-bright: #ff2d1a;
+  --f1-dark: #15151e;
+  --f1-graphite: #1e1e28;
+  --f1-white: #f2f2f5;
+
+  /* Surfaces */
+  --bg: #0f0f14;
+  --bg-surface: #1a1a22;
+  --bg-surface-raised: #23232e;
+  --border-default: #2e2e3a;
+
+  /* Text */
+  --text-primary: #f2f2f5;
+  --text-secondary: #a8a8b5;
+  --text-muted: #6f6f7d;
+
+  /* Accent + semantic */
+  --accent: var(--f1-red);
+  --accent-contrast: var(--f1-white);
+  --accent-hover: var(--f1-red-bright);
+  --success: #3fb26a;
+  --warning: #d9a514;
+  --danger: #d64545;
+  --info: #4a7fd6;
+
+  /* Spacing scale (0.25rem increments) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Type scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+
+  /* Fonts */
+  --font-sans:
+    system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}

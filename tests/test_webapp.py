@@ -249,7 +249,7 @@ def test_api_status(client):
     data = client.get("/api/status").get_json()
     assert set(data) == {"seasons", "model", "data", "reports", "dashboard"}
     assert set(data["reports"]) == {"has_backtest", "has_calibration"}
-    assert set(data["model"]) == {"checkpoint", "has_checkpoint", "has_calibrators"}
+    assert set(data["model"]) == {"checkpoint", "calibrators", "has_checkpoint", "has_calibrators"}
 
 
 def test_dashboard_not_built_is_503(client, monkeypatch):

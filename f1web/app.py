@@ -213,6 +213,7 @@ def create_app() -> Flask:
                 },
                 "model": {
                     "checkpoint": cfg["model"]["checkpoint"],
+                    "calibrators": cfg["model"]["calibrators"],
                     "has_checkpoint": exists(cfg["model"]["checkpoint"]),
                     "has_calibrators": exists(cfg["model"]["calibrators"]),
                 },
