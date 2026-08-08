@@ -33,7 +33,7 @@ f1-search = "model.search:main"
 f1-web = "f1web.app:main"
 
 [tool.setuptools]
-packages = ["f1data", "features", "model", "f1web"]
+packages = ["f1data", "features", "model", "f1web", "f1weather"]
 py-modules = ["predict", "config"]
 
 [tool.setuptools.package-data]

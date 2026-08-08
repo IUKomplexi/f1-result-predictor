@@ -37,6 +37,7 @@ def fetch_calendar(client: F1Client, season: int) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for race in races:
         circuit = race.get("Circuit", {})
+        location = circuit.get("Location", {})
         out.append(
             {
                 "season": _to_int(race.get("season"), season),
@@ -46,7 +47,9 @@ def fetch_calendar(client: F1Client, season: int) -> list[dict[str, Any]]:
                 "time": race.get("time"),
                 "circuit_id": circuit.get("circuitId"),
                 "circuit_name": circuit.get("circuitName"),
-                "country": circuit.get("Location", {}).get("country"),
+                "country": location.get("country"),
+                "circuit_lat": location.get("lat"),
+                "circuit_long": location.get("long"),
                 "is_sprint_round": "Sprint" in race,
             }
         )

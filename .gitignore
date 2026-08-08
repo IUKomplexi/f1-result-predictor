@@ -17,3 +17,4 @@ data/model/
 # Linter/type-checker report exports
 ruff_errors.txt
 pyright_errors.json
+data/weather/

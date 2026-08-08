@@ -24,3 +24,6 @@ seed = 42
 [report]
 backtest = "reports/backtest.md"
 prediction = "reports/prediction.md"
+
+[weather]
+cache_dir = "data/weather"

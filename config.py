@@ -37,6 +37,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "backtest": "reports/backtest.md",
         "prediction": "reports/prediction.md",
     },
+    "weather": {
+        "cache_dir": "data/weather",
+    },
 }
 
 

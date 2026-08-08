@@ -59,6 +59,21 @@ NUMERIC_FEATURES = [
 
 CATEGORICAL_FEATURES = ["driver_id", "constructor_id", "circuit_id", "points_era"]
 
+# Race-level weather columns (NaN when no weather data is available for a
+# race, e.g. before scripts/fetch_weather.py has run). Present in every
+# dataset so the model schema is stable; an all-NaN column is dropped as
+# constant by HurdleModels.fit, so a dataset without weather behaves
+# exactly like the pre-weather model.
+WEATHER_FEATURES = [
+    "temperature_max",
+    "temperature_min",
+    "precipitation_sum",
+    "wind_max",
+    "humidity_mean",
+    "cloud_cover_mean",
+    "wet",
+]
+
 META_COLUMNS = [
     "season",
     "round",
@@ -323,6 +338,14 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     out["top3"] = out["position"].eq(3) | out["position"].eq(2) | out["position"].eq(1)
     out["win"] = out["position"].eq(1)
 
+    # Weather columns: always present in the schema; NaN until weather data
+    # is merged in (build_dataset(weather=...) for training, predict.py for
+    # the target race). An all-NaN weather column is dropped as constant at
+    # fit, so datasets without weather behave exactly like the pre-weather
+    # model.
+    for col in WEATHER_FEATURES:
+        if col not in out.columns:
+            out[col] = np.nan
     return out
 
 
@@ -335,11 +358,14 @@ def build_dataset(
     seasons: Iterable[int],
     cache_path: str | Path = "data/features.parquet",
     refresh: bool = False,
+    weather: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Fetch (or load cached) features for a range of seasons.
 
     The assembled+featured dataset is cached as parquet at ``cache_path``;
-    pass ``refresh=True`` to rebuild from the API.
+    pass ``refresh=True`` to rebuild from the API. ``weather`` is an optional
+    (season, round, weather...) frame merged into the result (race-level;
+    weather columns for races not in it stay NaN).
     """
     seasons = list(seasons)
     cache = Path(cache_path)
@@ -354,21 +380,56 @@ def build_dataset(
             if (set(required) <= set(cached.columns)
                     and cached_seasons >= set(seasons)):
                 logger.info("Loading cached dataset from %s", cache)
-                return cached
-            logger.warning(
-                "Cached dataset %s is stale (missing features or seasons); rebuilding",
-                cache,
-            )
+                df = cached
+            else:
+                logger.warning(
+                    "Cached dataset %s is stale (missing features or seasons); rebuilding",
+                    cache,
+                )
+                df = _build_fresh(client, seasons, cache)
         except (OSError, ValueError, ImportError):
             logger.warning("Unreadable cached dataset %s; rebuilding", cache)
+            df = _build_fresh(client, seasons, cache)
+    else:
+        df = _build_fresh(client, seasons, cache)
+    return merge_weather(df, weather)
 
+
+def _build_fresh(client: F1Client, seasons: list[int], cache: Path) -> pd.DataFrame:
     datas = [fetch_season(client, s) for s in seasons]
     df = add_features(assemble(datas))
-    if cache_path:
+    try:
         cache.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(cache, index=False)
         logger.info("Wrote dataset (%d rows) to %s", len(df), cache)
+    except OSError:
+        logger.warning("Could not write dataset cache %s", cache)
     return df
+
+
+def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFrame:
+    """Join race-level weather onto the dataset by (season, round).
+
+    Rows for races without weather keep NaN weather columns; the weather
+    columns are always present in ``df`` (added by ``add_features``).
+    """
+    if weather is None or weather.empty:
+        return df
+    # Only merge the weather columns the frame actually carries: a frame may
+    # legitimately lack some (e.g. when the API had no values for a date),
+    # in which case the dataset keeps NaN for those columns.
+    weather_cols = [c for c in WEATHER_FEATURES if c in weather.columns]
+    out = df.merge(
+        weather[["season", "round", *weather_cols]],
+        on=["season", "round"],
+        how="left",
+        suffixes=("", "_w"),
+    )
+    for col in weather_cols:
+        if f"{col}_w" in out.columns:
+            out[col] = out[f"{col}_w"]
+            out = out.drop(columns=f"{col}_w")
+    return out
 
 
 def coverage_report(df: pd.DataFrame) -> pd.DataFrame:

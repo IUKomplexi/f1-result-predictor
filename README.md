@@ -145,8 +145,18 @@ The Jolpica API asks clients to send a descriptive `User-Agent` (configured in
 `config.toml`) and to cache responses — both are handled by `F1Client`
 (polite rate limiting, retry/backoff, on-disk cache).
 
-## Development
+## Weather (evaluated, not adopted)
 
+Race-day weather (Open-Meteo: ERA5 actuals for history, live forecast for
+the next race) was implemented and evaluated as a feature set — **it is not
+adopted**: the walk-forward gate failed (1 of 3 primary metrics improved,
+2 regressed, all within noise). The data layer (`f1weather/`,
+`scripts/fetch_weather.py`, `data/weather/`) and feature plumbing
+(`WEATHER_FEATURES`, `build_dataset(weather=...)`, `merge_weather`) remain
+available for future re-evaluation. See `reports/weather.md` for the full
+comparison and how to re-run it.
+
+## Development
 - Tests: `pytest -q` — fully offline (recorded fixtures, no network). The
   suite is enforced deprecation-free (`filterwarnings = ["error::DeprecationWarning"]`
   in `pyproject.toml`).
