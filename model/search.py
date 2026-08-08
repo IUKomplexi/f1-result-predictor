@@ -19,17 +19,22 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from features.build import build_dataset  # noqa: E402
-from f1data import F1Client  # noqa: E402
-from model.evaluate import race_metrics  # noqa: E402
-from model.train import HurdleModels, prepare, quantize_points, walk_forward_seasons  # noqa: E402
+from f1data import F1Client
+from features.build import build_dataset
+from model.evaluate import race_metrics
+from model.train import (
+    HurdleModels,
+    prepare,
+    quantize_points,
+    walk_forward_seasons,
+)
 
 PARAM_RANGES = {
     "max_iter": [200, 300, 400, 600],
@@ -40,7 +45,7 @@ PARAM_RANGES = {
 }
 
 
-def sample_configs(n: int, seed: int) -> List[Dict[str, Any]]:
+def sample_configs(n: int, seed: int) -> list[dict[str, Any]]:
     """``n`` random hyperparameter configurations (seeded, reproducible).
 
     Integer parameters are cast to int explicitly (numpy's ``choice`` may
@@ -60,9 +65,9 @@ def sample_configs(n: int, seed: int) -> List[Dict[str, Any]]:
 
 def evaluate_config(
     df: pd.DataFrame,
-    params: Dict[str, Any],
-    max_test_season: Optional[int] = None,
-) -> Tuple[float, float]:
+    params: dict[str, Any],
+    max_test_season: int | None = None,
+) -> tuple[float, float]:
     """Mean per-race MAE and Spearman of one config on a walk-forward window.
 
     Metrics are computed per race (rankings are only meaningful within a
@@ -90,7 +95,7 @@ def search(
     df: pd.DataFrame,
     n: int = 16,
     seed: int = 0,
-    max_test_season: Optional[int] = None,
+    max_test_season: int | None = None,
 ) -> pd.DataFrame:
     """Evaluate ``n`` configs and rank them (best = lowest combined score)."""
     rows = []

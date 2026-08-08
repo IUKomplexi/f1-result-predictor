@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 
 import pytest
+from helpers import FIXTURES, QueueSession, RouteSession, ok_response
 
 from f1data import (
     F1Client,
     fetch_calendar,
-    fetch_constructor_standings,
     fetch_driver_standings,
     fetch_qualifying,
     fetch_results,
@@ -17,8 +17,6 @@ from f1data import (
     fetch_sprint,
 )
 from f1data.fetchers import is_classified
-
-from helpers import FIXTURES, QueueSession, RouteSession, ok_response
 
 
 @pytest.fixture

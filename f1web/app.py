@@ -24,21 +24,20 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict
 
 from flask import Flask, Response, jsonify, render_template, request
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from f1data import F1APIError  # noqa: E402
-from predict import get_prediction  # noqa: E402
+from f1data import F1APIError
+from predict import get_prediction
 
 # Anchored to the repo root so the report resolves regardless of the server's
 # working directory.
 BACKTEST_REPORT = Path(__file__).resolve().parent.parent / "reports" / "backtest.md"
 
 
-def _payload(pred: Dict) -> Dict:
+def _payload(pred: dict) -> dict:
     """JSON-safe representation of a prediction dict."""
     rows = json.loads(pred["result"].to_json(orient="records"))
     return {
@@ -96,7 +95,7 @@ def create_app() -> Flask:
     return app
 
 
-def _request_prediction() -> Dict:
+def _request_prediction() -> dict:
     """Compute the prediction for the current request's query arguments.
 
     Invalid (non-integer) ``season``/``round`` query values raise ValueError

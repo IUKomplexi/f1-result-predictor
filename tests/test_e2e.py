@@ -15,11 +15,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from f1data import F1Client, fetch_season  # noqa: E402
-from features.build import add_features, assemble  # noqa: E402
-from helpers import _response, ok_response  # noqa: E402
-from model.train import POINTS_TABLE, save_checkpoint, train_final_model  # noqa: E402
-from predict import format_report, predict_race  # noqa: E402
+from helpers import _response, ok_response
+
+from f1data import F1Client, fetch_season
+from features.build import add_features, assemble
+from model.train import POINTS_TABLE, save_checkpoint, train_final_model
+from predict import format_report, predict_race
 
 SEASONS = [2010, 2011, 2012]
 ROUNDS = 4

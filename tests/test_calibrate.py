@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from test_model import _synthetic_df
 
 from model.calibrate import (
     TARGETS,
@@ -16,8 +17,6 @@ from model.calibrate import (
     reliability_table,
     save_calibrators,
 )
-
-from test_model import _synthetic_df
 
 
 def test_brier_and_reliability_table():

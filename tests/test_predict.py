@@ -5,13 +5,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from helpers import ok_response
+from test_model import _synthetic_df
 
 from features.build import add_features, assemble
-from helpers import ok_response
 from model.train import train_final_model
 from predict import _synthetic_rows, format_report, predict_race
-
-from test_model import _synthetic_df
 
 
 def _mini_df() -> pd.DataFrame:
@@ -122,9 +121,9 @@ def test_predict_race_unknown_round_raises():
 
 def test_find_next_race_beyond_cached_seasons(tmp_path):
     import pandas as pd
+    from helpers import ok_response
 
     from f1data import F1Client
-    from helpers import ok_response
     from predict import find_next_race
 
     class FakeSession:

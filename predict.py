@@ -19,27 +19,26 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config import load_config  # noqa: E402
-from features.build import add_features, assemble  # noqa: E402
-from f1data import F1APIError, F1Client, fetch_calendar, fetch_season  # noqa: E402
-from model.calibrate import apply_calibration, load_calibrators  # noqa: E402
-from model.evaluate import race_metrics  # noqa: E402
-from model.train import load_checkpoint, prepare, quantize_points  # noqa: E402
-
+from config import load_config
+from f1data import F1APIError, F1Client, fetch_calendar, fetch_season
+from features.build import add_features, assemble
+from model.calibrate import apply_calibration, load_calibrators
+from model.evaluate import race_metrics
+from model.train import load_checkpoint, prepare, quantize_points
 
 # --------------------------------------------------------------------------
 # Target race discovery
 # --------------------------------------------------------------------------
 
-def _next_round_in_calendar(calendar: List[dict], completed: set) -> Optional[int]:
+def _next_round_in_calendar(calendar: list[dict], completed: set) -> int | None:
     """First calendar round without cached results, or None."""
     for race in sorted(calendar, key=lambda r: r["round"]):
         if race["round"] not in completed:
@@ -56,7 +55,7 @@ def _latest_completed_round(client: F1Client, season: int) -> int:
         return 0
 
 
-def find_next_race(client: F1Client, df: pd.DataFrame, seasons: Sequence[int]) -> Tuple[int, int]:
+def find_next_race(client: F1Client, df: pd.DataFrame, seasons: Sequence[int]) -> tuple[int, int]:
     """Locate the next race without results: the first unfinished round of
     the *newest* cached season, else the first unfinished round of the next
     season (discovered on demand from the API).
@@ -94,13 +93,13 @@ def find_next_race(client: F1Client, df: pd.DataFrame, seasons: Sequence[int]) -
 # Entry list for an upcoming race
 # --------------------------------------------------------------------------
 
-def _latest_teams_from_df(df: pd.DataFrame) -> Dict[str, str]:
+def _latest_teams_from_df(df: pd.DataFrame) -> dict[str, str]:
     """driver -> constructor from each driver's most recent cached race."""
     latest = df.sort_values("date").drop_duplicates("driver_id", keep="last")
     return dict(zip(latest["driver_id"], latest["constructor_id"]))
 
 
-def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> List[Tuple[str, str]]:
+def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> list[tuple[str, str]]:
     """(driver_id, constructor_id) for the upcoming race's grid.
 
     The grid of the season's most recent completed race is the base (real
@@ -128,7 +127,7 @@ def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> List[Tuple[s
         return [(d, team_of.get(d)) for d in drivers]
 
     team_of = _latest_teams_from_df(df)
-    grid: List[Tuple[str, str]] = []
+    grid: list[tuple[str, str]] = []
     try:
         data = client.get_json(f"/{season}/{completed}/results.json")
         results = data["MRData"]["RaceTable"]["Races"][0]["Results"]
@@ -143,11 +142,11 @@ def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> List[Tuple[s
 
 
 def _synthetic_rows(
-    calendar: List[dict],
+    calendar: list[dict],
     target_round: int,
-    entries: Sequence[Tuple[str, str]],
-    grid_map: Optional[Dict[str, int]],
-) -> List[dict]:
+    entries: Sequence[tuple[str, str]],
+    grid_map: dict[str, int] | None,
+) -> list[dict]:
     """Result-style rows for an upcoming race, with unknown outcomes (NaN).
 
     Sprint points are not set: they are unknown at prediction time (the
@@ -177,7 +176,7 @@ def _synthetic_rows(
     return rows
 
 
-def read_grid_csv(path: str | Path) -> Dict[str, int]:
+def read_grid_csv(path: str | Path) -> dict[str, int]:
     """Load a qualifying grid override (CSV with ``driver_id,grid`` columns)."""
     table = pd.read_csv(path)
     for col in ("driver_id", "grid"):
@@ -211,7 +210,7 @@ def predict_race(
     model,
     season: int,
     round_: int,
-    calibrators: Optional[Dict[str, Any]] = None,
+    calibrators: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     """Score every row of ``(season, round_)`` and rank by expected points.
 
@@ -349,14 +348,14 @@ def format_report(
 # --------------------------------------------------------------------------
 
 def get_prediction(
-    season: Optional[int] = None,
-    round_: Optional[int] = None,
-    grid_csv: Optional[str] = None,
+    season: int | None = None,
+    round_: int | None = None,
+    grid_csv: str | None = None,
     refresh: bool = False,
-    cfg: Optional[Dict] = None,
-    model_path: Optional[str] = None,
+    cfg: dict | None = None,
+    model_path: str | None = None,
     quiet: bool = False,
-    client: Optional[F1Client] = None,
+    client: F1Client | None = None,
 ) -> dict:
     """Compute a prediction, returning results + metadata (no I/O side effects).
 

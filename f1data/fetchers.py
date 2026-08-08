@@ -7,7 +7,7 @@ so downstream code never sees API-specific JSON shapes.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .client import MAX_PAGE_SIZE, F1Client
 
@@ -30,11 +30,11 @@ def is_classified(status: str) -> bool:
 # Calendar
 # --------------------------------------------------------------------------
 
-def fetch_calendar(client: F1Client, season: int) -> List[Dict[str, Any]]:
+def fetch_calendar(client: F1Client, season: int) -> list[dict[str, Any]]:
     """Race calendar for a season (round, name, date, circuit, sprint flag)."""
     data = client.get_paged(f"/{season}.json")
     races = data["MRData"]["RaceTable"]["Races"]
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for race in races:
         circuit = race.get("Circuit", {})
         out.append(
@@ -57,9 +57,9 @@ def fetch_calendar(client: F1Client, season: int) -> List[Dict[str, Any]]:
 # Per-round session results
 # --------------------------------------------------------------------------
 
-def _race_rows(race: Dict[str, Any], results_key: str, season: int) -> List[Dict[str, Any]]:
+def _race_rows(race: dict[str, Any], results_key: str, season: int) -> list[dict[str, Any]]:
     """Parse one race's result array (Results/QualifyingResults/SprintResults)."""
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for entry in race.get(results_key, []):
         rows.append(
             {
@@ -78,7 +78,7 @@ def _race_rows(race: Dict[str, Any], results_key: str, season: int) -> List[Dict
 
 
 def _session_rows(client: F1Client, season: int, round_: int, endpoint: str,
-                  results_key: str) -> List[Dict[str, Any]]:
+                  results_key: str) -> list[dict[str, Any]]:
     """Generic parser for per-round result arrays (Results/QualifyingResults/SprintResults)."""
     data = client.get_paged(f"/{season}/{round_}/{endpoint}.json")
     races = data["MRData"]["RaceTable"]["Races"]
@@ -88,14 +88,14 @@ def _session_rows(client: F1Client, season: int, round_: int, endpoint: str,
 
 
 def _season_session_rows(client: F1Client, season: int, endpoint: str,
-                         results_key: str) -> Dict[int, List[Dict[str, Any]]]:
+                         results_key: str) -> dict[int, list[dict[str, Any]]]:
     """Fetch one endpoint for the whole season and group rows by round.
 
     Jolpica paginates season-level results by *result entries* (``total``
     counts entries, and a single race can span two pages), so we page over
     entries and concatenate each round's rows.
     """
-    by_round: Dict[int, List[Dict[str, Any]]] = {}
+    by_round: dict[int, list[dict[str, Any]]] = {}
     offset = 0
     while True:
         data = client.get_json(
@@ -117,27 +117,27 @@ def _season_session_rows(client: F1Client, season: int, endpoint: str,
     return by_round
 
 
-def fetch_results(client: F1Client, season: int, round_: int) -> List[Dict[str, Any]]:
+def fetch_results(client: F1Client, season: int, round_: int) -> list[dict[str, Any]]:
     """Race results for one round (position, grid, points, status per driver)."""
     return _session_rows(client, season, round_, "results", "Results")
 
 
-def fetch_season_results(client: F1Client, season: int) -> Dict[int, List[Dict[str, Any]]]:
+def fetch_season_results(client: F1Client, season: int) -> dict[int, list[dict[str, Any]]]:
     """Race results for every round of a season, keyed by round."""
     return _season_session_rows(client, season, "results", "Results")
 
 
-def fetch_qualifying(client: F1Client, season: int, round_: int) -> List[Dict[str, Any]]:
+def fetch_qualifying(client: F1Client, season: int, round_: int) -> list[dict[str, Any]]:
     """Qualifying results for one round (position + driver)."""
     return _session_rows(client, season, round_, "qualifying", "QualifyingResults")
 
 
-def fetch_season_qualifying(client: F1Client, season: int) -> Dict[int, List[Dict[str, Any]]]:
+def fetch_season_qualifying(client: F1Client, season: int) -> dict[int, list[dict[str, Any]]]:
     """Qualifying results for every round of a season, keyed by round."""
     return _season_session_rows(client, season, "qualifying", "QualifyingResults")
 
 
-def fetch_sprint(client: F1Client, season: int, round_: int) -> List[Dict[str, Any]]:
+def fetch_sprint(client: F1Client, season: int, round_: int) -> list[dict[str, Any]]:
     """Sprint results for one round, or [] when the round has no sprint.
 
     Sprint points are *not* part of the main-race points target; they are
@@ -152,7 +152,7 @@ def fetch_sprint(client: F1Client, season: int, round_: int) -> List[Dict[str, A
 # --------------------------------------------------------------------------
 
 def _standings_rows(client: F1Client, season: int, round_: int | None,
-                    endpoint: str, rows_key: str) -> List[Dict[str, Any]]:
+                    endpoint: str, rows_key: str) -> list[dict[str, Any]]:
     """Parse standings at a round (default: latest available).
 
     Jolpica paginates standings by *driver/constructor entries* inside the
@@ -165,7 +165,7 @@ def _standings_rows(client: F1Client, season: int, round_: int | None,
     else:
         url = f"/{season}/{endpoint}.json"
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     offset = 0
     while True:
         data = client.get_json(url, {"limit": MAX_PAGE_SIZE, "offset": offset})
@@ -175,7 +175,7 @@ def _standings_rows(client: F1Client, season: int, round_: int | None,
         latest = lists[-1]
         entries = latest.get(rows_key, [])
         for entry in entries:
-            row: Dict[str, Any] = {
+            row: dict[str, Any] = {
                 "season": _to_int(latest.get("season"), season),
                 "round": _to_int(latest.get("round"), round_ or 0),
                 "position": _to_int(entry.get("position")),
@@ -205,13 +205,13 @@ def _standings_rows(client: F1Client, season: int, round_: int | None,
 
 
 def fetch_driver_standings(client: F1Client, season: int,
-                           round_: int | None = None) -> List[Dict[str, Any]]:
+                           round_: int | None = None) -> list[dict[str, Any]]:
     """Driver championship standings at a round (default: latest available)."""
     return _standings_rows(client, season, round_, "driverstandings", "DriverStandings")
 
 
 def fetch_constructor_standings(client: F1Client, season: int,
-                                round_: int | None = None) -> List[Dict[str, Any]]:
+                                round_: int | None = None) -> list[dict[str, Any]]:
     """Constructor championship standings at a round (default: latest available)."""
     return _standings_rows(client, season, round_, "constructorstandings", "ConstructorStandings")
 
@@ -220,7 +220,7 @@ def fetch_constructor_standings(client: F1Client, season: int,
 # Whole season
 # --------------------------------------------------------------------------
 
-def fetch_season(client: F1Client, season: int) -> Dict[str, Any]:
+def fetch_season(client: F1Client, season: int) -> dict[str, Any]:
     """Everything needed to build training features for one season.
 
     Returns ``{"calendar": [...], "results": {round: [...]},
@@ -232,7 +232,7 @@ def fetch_season(client: F1Client, season: int) -> Dict[str, Any]:
     calendar = fetch_calendar(client, season)
     results = fetch_season_results(client, season)
     qualifying = fetch_season_qualifying(client, season)
-    sprints: Dict[int, List[Dict[str, Any]]] = {}
+    sprints: dict[int, list[dict[str, Any]]] = {}
     for race in calendar:
         if race["is_sprint_round"]:
             sprints[race["round"]] = fetch_sprint(client, season, race["round"])

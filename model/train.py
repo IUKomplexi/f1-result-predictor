@@ -7,17 +7,24 @@ import logging
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from sklearn.ensemble import (
+    HistGradientBoostingClassifier,
+    HistGradientBoostingRegressor,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from features.build import CATEGORICAL_FEATURES, NUMERIC_FEATURES, build_dataset  # noqa: E402
-from f1data import F1Client  # noqa: E402
+from f1data import F1Client
+from features.build import (
+    CATEGORICAL_FEATURES,
+    NUMERIC_FEATURES,
+    build_dataset,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +70,7 @@ DEFAULT_PARAMS = {
 }
 
 
-def _clf(seed: int, params: Optional[Dict[str, Any]] = None) -> HistGradientBoostingClassifier:
+def _clf(seed: int, params: Optional[dict[str, Any]] = None) -> HistGradientBoostingClassifier:
     p = {**DEFAULT_PARAMS, **(params or {})}
     return HistGradientBoostingClassifier(
         categorical_features="from_dtype",
@@ -72,7 +79,7 @@ def _clf(seed: int, params: Optional[Dict[str, Any]] = None) -> HistGradientBoos
     )
 
 
-def _reg(seed: int, params: Optional[Dict[str, Any]] = None) -> HistGradientBoostingRegressor:
+def _reg(seed: int, params: Optional[dict[str, Any]] = None) -> HistGradientBoostingRegressor:
     p = {**DEFAULT_PARAMS, **(params or {})}
     return HistGradientBoostingRegressor(
         categorical_features="from_dtype",
@@ -81,7 +88,7 @@ def _reg(seed: int, params: Optional[Dict[str, Any]] = None) -> HistGradientBoos
     )
 
 
-def prepare(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def prepare(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split a featured dataset into (X, y).
 
     Categorical features are converted to pandas ``category`` dtype so the
@@ -144,7 +151,7 @@ class HurdleModels:
     plus companion classifiers for P(top-3) and P(win).
     """
 
-    def __init__(self, seed: int = 42, params: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, seed: int = 42, params: Optional[dict[str, Any]] = None) -> None:
         self.seed = seed
         self.params = dict(params or {})
         self.scored: Any = _clf(seed, self.params)
@@ -154,7 +161,7 @@ class HurdleModels:
         # Numeric columns that were constant in the training set are dropped
         # at fit time and remembered for prediction, so train and predict see
         # the same columns (sklearn validates feature names against the fit).
-        self.column_drop_: List[str] = []
+        self.column_drop_: list[str] = []
 
     def _drop_constant_columns(self, X: pd.DataFrame) -> pd.DataFrame:
         """Numeric columns with at most one distinct value are dropped.
@@ -169,7 +176,7 @@ class HurdleModels:
         self.column_drop_ = list(n_distinct[n_distinct <= 1].index)
         return X.drop(columns=self.column_drop_)
 
-    def fit(self, X: pd.DataFrame, y: pd.DataFrame) -> "HurdleModels":
+    def fit(self, X: pd.DataFrame, y: pd.DataFrame) -> HurdleModels:
         X = self._drop_constant_columns(X)
         self.scored = _fit_binary(self.scored, X, y["scored"])
         self.top3 = _fit_binary(self.top3, X, y["top3"])
@@ -195,7 +202,7 @@ class HurdleModels:
         exp_points = np.expm1(self.points_if_scored.predict(X))
         return p_scored * np.clip(exp_points, 0.0, None)
 
-    def predict_probs(self, X: pd.DataFrame) -> Dict[str, np.ndarray]:
+    def predict_probs(self, X: pd.DataFrame) -> dict[str, np.ndarray]:
         X = self._apply_drop(X)
         return {
             "p_scored": self.scored.predict_proba(X)[:, 1],

@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -13,9 +12,15 @@ from scipy.stats import spearmanr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from features.build import build_dataset  # noqa: E402
-from f1data import F1Client  # noqa: E402
-from model.train import HurdleModels, points_for_position, prepare, quantize_points, walk_forward_seasons  # noqa: E402
+from f1data import F1Client
+from features.build import build_dataset
+from model.train import (
+    HurdleModels,
+    points_for_position,
+    prepare,
+    quantize_points,
+    walk_forward_seasons,
+)
 
 # --------------------------------------------------------------------------
 # Baselines
@@ -62,7 +67,7 @@ def _rank_by(df: pd.DataFrame, score_col: str, tiebreak_col: str) -> pd.Series:
     return ranks.reindex(df.index)
 
 
-def race_metrics(df: pd.DataFrame) -> Dict[str, float]:
+def race_metrics(df: pd.DataFrame) -> dict[str, float]:
     """One race's metrics: winner hit, top-3 overlap, spearman, MAE."""
     actual_points = df["points"].to_numpy(dtype=float)
     pred_points = df["pred_points"].to_numpy(dtype=float)
@@ -103,7 +108,7 @@ def race_metrics(df: pd.DataFrame) -> Dict[str, float]:
 # Backtest
 # --------------------------------------------------------------------------
 
-def run_backtest(df: pd.DataFrame, quantize: bool = True) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
+def run_backtest(df: pd.DataFrame, quantize: bool = True) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """Walk-forward backtest; returns (overall table, per-season tables).
 
     The model is re-trained for every test season (train = all strictly
@@ -118,8 +123,8 @@ def run_backtest(df: pd.DataFrame, quantize: bool = True) -> Tuple[pd.DataFrame,
     df["pred_champ"] = baseline_champ_points(df)
     df["pred_zero"] = baseline_zero_points(df)
 
-    season_rows: List[Dict] = []
-    model_by_season: Dict[int, HurdleModels] = {}
+    season_rows: list[dict] = []
+    model_by_season: dict[int, HurdleModels] = {}
     for train, test, season in walk_forward_seasons(df):
         X_train, y_train = prepare(train)
         model = HurdleModels().fit(X_train, y_train)
@@ -176,7 +181,7 @@ def _to_md(df: pd.DataFrame) -> str:
     return "\n".join([header, sep, *body])
 
 
-def format_tables(overall: pd.DataFrame, by_season: Dict[str, pd.DataFrame]) -> str:
+def format_tables(overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]) -> str:
     lines = [
         "# Backtest (walk-forward)",
         "",

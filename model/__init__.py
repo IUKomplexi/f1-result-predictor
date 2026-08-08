@@ -2,8 +2,8 @@
 
 from .train import (
     FEATURES,
-    HurdleModels,
     POINTS_TABLE,
+    HurdleModels,
     load_checkpoint,
     points_for_position,
     prepare,
@@ -14,8 +14,8 @@ from .train import (
 
 __all__ = [
     "FEATURES",
-    "HurdleModels",
     "POINTS_TABLE",
+    "HurdleModels",
     "load_checkpoint",
     "points_for_position",
     "prepare",

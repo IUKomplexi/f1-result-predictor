@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable, Dict, Optional
 
 import requests
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def _response(status: int, payload=None, text: Optional[str] = None,
-              headers: Optional[Dict[str, str]] = None) -> requests.Response:
+def _response(status: int, payload=None, text: str | None = None,
+              headers: dict[str, str] | None = None) -> requests.Response:
     resp = requests.Response()
     resp.status_code = status
     if payload is not None:
@@ -41,8 +40,8 @@ class QueueSession:
         self.queue: list = []
         self.headers = requests.models.CaseInsensitiveDict()
 
-    def add(self, status: int = 200, payload=None, text: Optional[str] = None,
-            headers: Optional[Dict[str, str]] = None) -> None:
+    def add(self, status: int = 200, payload=None, text: str | None = None,
+            headers: dict[str, str] | None = None) -> None:
         self.queue.append(_response(status, payload, text, headers))
 
     def get(self, url: str, params=None, timeout=None) -> requests.Response:
@@ -55,7 +54,7 @@ class QueueSession:
 class RouteSession:
     """Serves fixture files by matching the URL suffix."""
 
-    def __init__(self, routes: Dict[str, Path]) -> None:
+    def __init__(self, routes: dict[str, Path]) -> None:
         self.routes = routes
         self.calls: list = []
         self.headers = requests.models.CaseInsensitiveDict()
@@ -68,6 +67,6 @@ class RouteSession:
         raise AssertionError(f"No fixture route for {url}")
 
     @classmethod
-    def for_fixture_names(cls, names: Dict[str, str]) -> "RouteSession":
+    def for_fixture_names(cls, names: dict[str, str]) -> RouteSession:
         routes = {suffix: FIXTURES / name for suffix, name in names.items()}
         return cls(routes)

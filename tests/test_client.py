@@ -6,10 +6,9 @@ import json
 
 import pytest
 import requests
+from helpers import FIXTURES, QueueSession
 
 from f1data import F1APIError, F1Client
-
-from helpers import FIXTURES, QueueSession
 
 
 def test_get_json_parses_and_caches(tmp_path):

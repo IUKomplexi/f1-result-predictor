@@ -24,7 +24,6 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Any, Optional
 
 import requests
 
@@ -61,7 +60,7 @@ class F1Client:
         sleep_seconds: float = 0.25,
         timeout: float = 30.0,
         max_retries: int = 3,
-        session: Optional[requests.Session] = None,
+        session: requests.Session | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
@@ -89,7 +88,7 @@ class F1Client:
             return self.cache_dir / f"{_safe_name(url)}__{digest}.json"
         return self.cache_dir / f"{_safe_name(url)}.json"
 
-    def _read_cache(self, url: str, params: dict) -> Optional[dict]:
+    def _read_cache(self, url: str, params: dict) -> dict | None:
         if self.refresh:
             return None
         path = self._cache_key(url, params)
@@ -113,12 +112,12 @@ class F1Client:
 
     # -- request -------------------------------------------------------------
 
-    def _backoff(self, attempt: int, retry_after: Optional[str]) -> float:
+    def _backoff(self, attempt: int, retry_after: str | None) -> float:
         if retry_after and retry_after.isdigit():
             return float(retry_after)
         return min(2.0 ** attempt, 10.0)
 
-    def get_json(self, url_or_path: str, params: Optional[dict] = None) -> dict:
+    def get_json(self, url_or_path: str, params: dict | None = None) -> dict:
         """GET a JSON document, using cache and retry/backoff as needed."""
         url = self._resolve(url_or_path)
         params = dict(params or {})
@@ -126,7 +125,7 @@ class F1Client:
         if cached is not None:
             return cached
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             if attempt > 0:
                 time.sleep(self._backoff(attempt - 1, None))
@@ -167,7 +166,7 @@ class F1Client:
     def get_paged(
         self,
         url_or_path: str,
-        params: Optional[dict] = None,
+        params: dict | None = None,
         page_size: int = DEFAULT_PAGE_SIZE,
     ) -> dict:
         """GET a document, following ``limit``/``offset`` pagination.

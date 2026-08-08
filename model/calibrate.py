@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -25,9 +24,9 @@ from sklearn.isotonic import IsotonicRegression
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from features.build import build_dataset  # noqa: E402
-from f1data import F1Client  # noqa: E402
-from model.train import (  # noqa: E402
+from f1data import F1Client
+from features.build import build_dataset
+from model.train import (
     HurdleModels,
     _joblib_dump,
     _joblib_load,
@@ -77,9 +76,9 @@ def collect_oos_scores(df: pd.DataFrame) -> pd.DataFrame:
 # Calibrators
 # --------------------------------------------------------------------------
 
-def fit_calibrators(oos: pd.DataFrame) -> Dict[str, IsotonicRegression]:
+def fit_calibrators(oos: pd.DataFrame) -> dict[str, IsotonicRegression]:
     """Fit an isotonic regressor per target on out-of-sample scores."""
-    calibrators: Dict[str, IsotonicRegression] = {}
+    calibrators: dict[str, IsotonicRegression] = {}
     for target, score in TARGETS.items():
         iso = IsotonicRegression(out_of_bounds="clip")
         iso.fit(oos[score].to_numpy(dtype=float), oos[target].to_numpy(dtype=float))
@@ -87,8 +86,8 @@ def fit_calibrators(oos: pd.DataFrame) -> Dict[str, IsotonicRegression]:
     return calibrators
 
 
-def apply_calibration(probs: Dict[str, np.ndarray],
-                      calibrators: Dict[str, IsotonicRegression]) -> Dict[str, np.ndarray]:
+def apply_calibration(probs: dict[str, np.ndarray],
+                      calibrators: dict[str, IsotonicRegression]) -> dict[str, np.ndarray]:
     """Map raw score arrays to calibrated probabilities (keys: p_scored/...)."""
     out = dict(probs)
     for target, score in TARGETS.items():
@@ -97,7 +96,7 @@ def apply_calibration(probs: Dict[str, np.ndarray],
     return out
 
 
-def load_calibrators(path: str | Path) -> Optional[Dict[str, IsotonicRegression]]:
+def load_calibrators(path: str | Path) -> dict[str, IsotonicRegression] | None:
     """Load calibrators, or None when the file does not exist."""
     p = Path(path)
     if not p.exists():
@@ -108,7 +107,7 @@ def load_calibrators(path: str | Path) -> Optional[Dict[str, IsotonicRegression]
     return payload["calibrators"]
 
 
-def save_calibrators(calibrators: Dict[str, IsotonicRegression], path: str | Path) -> None:
+def save_calibrators(calibrators: dict[str, IsotonicRegression], path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     _joblib_dump({"calibrators": calibrators}, path)
@@ -152,8 +151,8 @@ def _to_md(df: pd.DataFrame) -> str:
     return "\n".join([header, sep, *body])
 
 
-def summarize(oos: pd.DataFrame, calibrators: Dict[str, IsotonicRegression],
-              context: str = "", keep: Optional[set] = None) -> str:
+def summarize(oos: pd.DataFrame, calibrators: dict[str, IsotonicRegression],
+              context: str = "", keep: set | None = None) -> str:
     """Raw-vs-calibrated Brier scores and reliability tables, as text.
 
     ``context`` is a one-line note describing how ``calibrators`` were fit

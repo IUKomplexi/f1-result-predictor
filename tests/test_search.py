@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
 import pytest
+from test_model import _synthetic_df
 
 from features.build import add_features
 from model.search import evaluate_config, sample_configs, search
-
-from test_model import _synthetic_df
 
 
 def test_sample_configs_seeded_and_in_range():

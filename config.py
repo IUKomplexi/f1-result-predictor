@@ -9,9 +9,9 @@ from __future__ import annotations
 import copy
 import tomllib
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-DEFAULTS: Dict[str, Dict[str, Any]] = {
+DEFAULTS: dict[str, dict[str, Any]] = {
     "api": {
         "base_url": "https://api.jolpi.ca/ergast/f1",
         "user_agent": (
@@ -40,7 +40,7 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def load_config(path: str | Path = "config.toml") -> Dict[str, Dict[str, Any]]:
+def load_config(path: str | Path = "config.toml") -> dict[str, dict[str, Any]]:
     """Load ``config.toml`` merged over :data:`DEFAULTS` (section-wise)."""
     cfg = copy.deepcopy(DEFAULTS)
     p = Path(path)

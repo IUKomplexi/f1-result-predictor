@@ -13,8 +13,8 @@ only ever sees races strictly before the target race. The unit test
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -99,13 +99,13 @@ def assemble(season_datas: Sequence[dict]) -> pd.DataFrame:
     calendar, ``qual_pos`` from qualifying, and ``sprint_points`` from the
     sprint results (0 when the round has no sprint).
     """
-    frames: List[pd.DataFrame] = []
+    frames: list[pd.DataFrame] = []
     for data in season_datas:
         calendar = pd.DataFrame(data["calendar"])[
             ["round", "date", "circuit_id", "race_name", "is_sprint_round"]
         ]
 
-        rows: List[dict] = []
+        rows: list[dict] = []
         for round_, results in data["results"].items():
             meta = calendar[calendar["round"] == round_]
             if meta.empty:
@@ -132,7 +132,7 @@ def assemble(season_datas: Sequence[dict]) -> pd.DataFrame:
         results_df = pd.DataFrame(rows)
 
         # Sprint points (count toward championship entering the main race).
-        sprint_rows: List[dict] = []
+        sprint_rows: list[dict] = []
         for round_, sprints in data["sprints"].items():
             for r in sprints:
                 sprint_rows.append(
@@ -149,7 +149,7 @@ def assemble(season_datas: Sequence[dict]) -> pd.DataFrame:
             results_df["sprint_points"] = 0.0
 
         # Qualifying position (fall back to grid when missing).
-        qual_rows: List[dict] = []
+        qual_rows: list[dict] = []
         for round_, quals in data["qualifying"].items():
             for r in quals:
                 qual_rows.append(

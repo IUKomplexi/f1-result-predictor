@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from f1data import F1Client, fetch_season  # noqa: E402
+from f1data import F1Client, fetch_season
 
 
 def main() -> int:

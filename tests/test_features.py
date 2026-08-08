@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-import json
-
 import numpy as np
 import pandas as pd
 import pytest
+from helpers import QueueSession, ok_response
 
-from features.build import NUMERIC_FEATURES, add_features, assemble, build_dataset, coverage_report
-
-from helpers import FIXTURES, QueueSession, ok_response
+from features.build import (
+    NUMERIC_FEATURES,
+    add_features,
+    assemble,
+    build_dataset,
+    coverage_report,
+)
 
 
 def _mini_df() -> pd.DataFrame:
