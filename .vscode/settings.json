@@ -1,0 +1,11 @@
+{
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.exclude": [
+    "build",
+    "tests",
+    "data",
+    ".reasonix",
+    ".venv",
+    "**/__pycache__"
+  ]
+}

@@ -75,7 +75,7 @@ class F1Client:
     # -- URL / cache helpers -------------------------------------------------
 
     def _resolve(self, url_or_path: str) -> str:
-        if url_or_path.startswith("http://") or url_or_path.startswith("https://"):
+        if url_or_path.startswith(("http://", "https://")):
             return url_or_path
         path = url_or_path if url_or_path.startswith("/") else f"/{url_or_path}"
         return f"{self.base_url}{path}"

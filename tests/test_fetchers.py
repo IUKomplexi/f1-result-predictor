@@ -117,7 +117,9 @@ def test_fetch_season(tmp_path):
     for race in season_results["MRData"]["RaceTable"]["Races"]:
         race["Results"] = results["MRData"]["RaceTable"]["Races"][0]["Results"]
     for race in season_qual["MRData"]["RaceTable"]["Races"]:
-        race["QualifyingResults"] = qualifying["MRData"]["RaceTable"]["Races"][0]["QualifyingResults"]
+        race["QualifyingResults"] = (
+            qualifying["MRData"]["RaceTable"]["Races"][0]["QualifyingResults"]
+        )
 
     def route(url, params=None, timeout=None):
         session.calls.append((url, dict(params or {})))

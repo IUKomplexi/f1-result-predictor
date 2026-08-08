@@ -76,11 +76,12 @@ META_COLUMNS = [
 # --------------------------------------------------------------------------
 
 def _rolling_mean(s: pd.Series, window: int = FORM_WINDOW) -> pd.Series:
-    return s.shift(1).rolling(window, min_periods=1).mean()
+    # pandas rolling chains resolve to Unknown without stubs; runtime is a Series.
+    return s.shift(1).rolling(window, min_periods=1).mean()  # type: ignore[reportReturnType]
 
 
 def _rolling_sum(s: pd.Series, window: int = FORM_WINDOW) -> pd.Series:
-    return s.shift(1).rolling(window, min_periods=1).sum()
+    return s.shift(1).rolling(window, min_periods=1).sum()  # type: ignore[reportReturnType]
 
 
 def _career_wins(s: pd.Series) -> pd.Series:
@@ -108,10 +109,10 @@ def assemble(season_datas: Sequence[dict]) -> pd.DataFrame:
         rows: list[dict] = []
         for round_, results in data["results"].items():
             meta = calendar[calendar["round"] == round_]
-            if meta.empty:
+            if meta.empty:  # type: ignore[reportAttributeAccessIssue]  # boolean-mask slice is Unknown
                 logger.warning("round %s missing from calendar", round_)
                 continue
-            m = meta.iloc[0]
+            m = meta.iloc[0]  # type: ignore[reportAttributeAccessIssue]  # same Unknown slice
             for r in results:
                 rows.append(
                     {
@@ -133,7 +134,7 @@ def assemble(season_datas: Sequence[dict]) -> pd.DataFrame:
 
         # Sprint points (count toward championship entering the main race).
         sprint_rows: list[dict] = []
-        for round_, sprints in data["sprints"].items():
+        for _, sprints in data["sprints"].items():
             for r in sprints:
                 sprint_rows.append(
                     {"season": r["season"], "round": r["round"],
@@ -150,7 +151,7 @@ def assemble(season_datas: Sequence[dict]) -> pd.DataFrame:
 
         # Qualifying position (fall back to grid when missing).
         qual_rows: list[dict] = []
-        for round_, quals in data["qualifying"].items():
+        for _, quals in data["qualifying"].items():
             for r in quals:
                 qual_rows.append(
                     {"season": r["season"], "round": r["round"],
@@ -182,7 +183,10 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     out = out.sort_values(["date", "round"]).reset_index(drop=True)
 
     out["points"] = out["points"].astype(float)
-    out["sprint_points"] = out.get("sprint_points", pd.Series(0.0, index=out.index)).fillna(0.0).astype(float)
+    if "sprint_points" in out.columns:
+        out["sprint_points"] = out["sprint_points"].fillna(0.0).astype(float)
+    else:
+        out["sprint_points"] = 0.0
     out["race_points"] = out["points"] + out["sprint_points"]
     if "qual_pos" not in out.columns:
         out["qual_pos"] = out["grid"]
@@ -355,7 +359,7 @@ def build_dataset(
                 "Cached dataset %s is stale (missing features or seasons); rebuilding",
                 cache,
             )
-        except Exception:
+        except (OSError, ValueError, ImportError):
             logger.warning("Unreadable cached dataset %s; rebuilding", cache)
 
     datas = [fetch_season(client, s) for s in seasons]
@@ -372,7 +376,8 @@ def coverage_report(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for season, group in df.groupby("season"):
         n_nulls = {
-            col: int(group[col].isna().sum()) for col in NUMERIC_FEATURES
+            col: int(group[col].isna().sum())  # type: ignore[reportArgumentType]  # isna() is Unknown
+            for col in NUMERIC_FEATURES
         }
         rows.append(
             {
@@ -380,7 +385,7 @@ def coverage_report(df: pd.DataFrame) -> pd.DataFrame:
                 "starts": len(group),
                 "races": group["round"].nunique(),
                 "drivers": group["driver_id"].nunique(),
-                "scored_rate": float(group["scored"].mean()),
+                "scored_rate": float(group["scored"].mean()),  # type: ignore[reportArgumentType]  # Unknown mean(),
                 "null_features": sum(n_nulls.values()),
                 **{f"null_{c}": v for c, v in n_nulls.items() if v},
             }

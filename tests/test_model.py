@@ -94,7 +94,7 @@ def test_hurdle_model_learns_grid_signal():
     assert corr > 0.3, f"corr too low: {corr:.3f}"
     # Better grid => higher expected points on average.
     mean_by_grid = pd.Series(pred, index=df.index).groupby(df["grid"]).mean()
-    assert mean_by_grid.loc[1] > mean_by_grid.loc[drivers := max(mean_by_grid.index)]
+    assert mean_by_grid.loc[1] > mean_by_grid.loc[max(mean_by_grid.index)]
     # Probabilities are sane.
     probs = model.predict_probs(X)
     assert ((probs["p_scored"] >= 0) & (probs["p_scored"] <= 1)).all()

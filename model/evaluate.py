@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -29,12 +30,13 @@ from model.train import (
 
 def baseline_grid_points(df: pd.DataFrame) -> pd.Series:
     """Predict the points table value of the grid slot."""
-    return df["grid"].map(points_for_position)
+    # pandas .map on an untyped index is Unknown; runtime is always a Series.
+    return df["grid"].map(points_for_position)  # type: ignore[reportReturnType]
 
 
 def baseline_champ_points(df: pd.DataFrame) -> pd.Series:
     """Predict the points table value of the championship position entering."""
-    return df["champ_pos_entering"].map(points_for_position)
+    return df["champ_pos_entering"].map(points_for_position)  # type: ignore[reportReturnType]
 
 
 def baseline_zero_points(df: pd.DataFrame) -> pd.Series:
@@ -67,7 +69,7 @@ def _rank_by(df: pd.DataFrame, score_col: str, tiebreak_col: str) -> pd.Series:
     return ranks.reindex(df.index)
 
 
-def race_metrics(df: pd.DataFrame) -> dict[str, float]:
+def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
     """One race's metrics: winner hit, top-3 overlap, spearman, MAE."""
     actual_points = df["points"].to_numpy(dtype=float)
     pred_points = df["pred_points"].to_numpy(dtype=float)
@@ -88,7 +90,7 @@ def race_metrics(df: pd.DataFrame) -> dict[str, float]:
     top3_actual = set(df.loc[df["position"].between(1, 3), "driver_id"])
     top3_pred = set(df.loc[pred_rank.le(3), "driver_id"])
 
-    corr = spearmanr(pred_rank, actual_rank).statistic
+    corr = spearmanr(pred_rank, actual_rank).statistic  # type: ignore[reportAttributeAccessIssue]  # scipy stubs type the result as `_`
     if np.isnan(corr):
         corr = 0.0
 
@@ -108,7 +110,9 @@ def race_metrics(df: pd.DataFrame) -> dict[str, float]:
 # Backtest
 # --------------------------------------------------------------------------
 
-def run_backtest(df: pd.DataFrame, quantize: bool = True) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+def run_backtest(
+    df: pd.DataFrame, quantize: bool = True
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """Walk-forward backtest; returns (overall table, per-season tables).
 
     The model is re-trained for every test season (train = all strictly
@@ -136,7 +140,7 @@ def run_backtest(df: pd.DataFrame, quantize: bool = True) -> tuple[pd.DataFrame,
         df.loc[test.index, "pred_model"] = test["pred_model"]
 
         # Metrics are defined per race: rank drivers within one race only.
-        for (_, round_), race in test.groupby(["season", "round"]):
+        for (_, round_), race in test.groupby(["season", "round"]):  # type: ignore[reportGeneralTypeIssues]  # keys are Hashable; runtime is a 2-tuple
             for name, col in (
                 ("model", "pred_model"),
                 ("grid", "pred_grid"),
@@ -155,7 +159,7 @@ def run_backtest(df: pd.DataFrame, quantize: bool = True) -> tuple[pd.DataFrame,
             ["winner_hit", "top3_overlap", "spearman", "mae"]
         ]
         .mean()
-        .reindex(["model", "grid", "championship", "zero"])
+        .reindex(["model", "grid", "championship", "zero"])  # type: ignore[reportAttributeAccessIssue]  # groupby() is Unknown without pandas stubs
         .round(4)
     )
 
@@ -163,10 +167,10 @@ def run_backtest(df: pd.DataFrame, quantize: bool = True) -> tuple[pd.DataFrame,
         name: g.drop(columns=["baseline", "round"])
         .groupby("season")
         .mean()
-        .round(4)
+        .round(4)  # type: ignore[reportAttributeAccessIssue]  # same Unknown chain as reindex above
         for name, g in results.groupby("baseline")
     }
-    return overall, by_season
+    return overall, by_season  # type: ignore[reportReturnType]  # Unknown unions from the groupby chain
 
 
 def _to_md(df: pd.DataFrame) -> str:

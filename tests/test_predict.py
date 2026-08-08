@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -127,7 +129,7 @@ def test_find_next_race_beyond_cached_seasons(tmp_path):
     from predict import find_next_race
 
     class FakeSession:
-        headers = {}
+        headers: ClassVar[dict[str, str]] = {}
 
         def __init__(self):
             self.calls = []
@@ -180,7 +182,7 @@ def test_format_report_includes_verification_when_verified():
 
 def _fake_session(routes):
     class FakeSession:
-        headers = {}
+        headers: ClassVar[dict[str, str]] = {}
 
         def __init__(self):
             self.calls = []

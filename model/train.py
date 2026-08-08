@@ -6,6 +6,7 @@ import argparse
 import logging
 import sys
 import warnings
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +71,7 @@ DEFAULT_PARAMS = {
 }
 
 
-def _clf(seed: int, params: Optional[dict[str, Any]] = None) -> HistGradientBoostingClassifier:
+def _clf(seed: int, params: dict[str, Any] | None = None) -> HistGradientBoostingClassifier:
     p = {**DEFAULT_PARAMS, **(params or {})}
     return HistGradientBoostingClassifier(
         categorical_features="from_dtype",
@@ -79,7 +80,7 @@ def _clf(seed: int, params: Optional[dict[str, Any]] = None) -> HistGradientBoos
     )
 
 
-def _reg(seed: int, params: Optional[dict[str, Any]] = None) -> HistGradientBoostingRegressor:
+def _reg(seed: int, params: dict[str, Any] | None = None) -> HistGradientBoostingRegressor:
     p = {**DEFAULT_PARAMS, **(params or {})}
     return HistGradientBoostingRegressor(
         categorical_features="from_dtype",
@@ -107,7 +108,7 @@ def prepare(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         },
         index=df.index,
     )
-    return X, y
+    return X, y  # type: ignore[reportReturnType]  # df[FEATURES] is Unknown; runtime is (DataFrame, DataFrame)
 
 
 class _ConstantProb:
@@ -151,7 +152,7 @@ class HurdleModels:
     plus companion classifiers for P(top-3) and P(win).
     """
 
-    def __init__(self, seed: int = 42, params: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, seed: int = 42, params: dict[str, Any] | None = None) -> None:
         self.seed = seed
         self.params = dict(params or {})
         self.scored: Any = _clf(seed, self.params)
@@ -173,7 +174,9 @@ class HurdleModels:
         n_distinct = X.select_dtypes(include="number").apply(
             lambda s: s.dropna().nunique()
         )
-        self.column_drop_ = list(n_distinct[n_distinct <= 1].index)
+        self.column_drop_ = list(
+            n_distinct[n_distinct <= 1].index  # type: ignore[reportAttributeAccessIssue]  # apply() is Unknown
+        )
         return X.drop(columns=self.column_drop_)
 
     def fit(self, X: pd.DataFrame, y: pd.DataFrame) -> HurdleModels:
@@ -211,7 +214,9 @@ class HurdleModels:
         }
 
 
-def walk_forward_seasons(df: pd.DataFrame, min_train_seasons: int = 3):
+def walk_forward_seasons(
+    df: pd.DataFrame, min_train_seasons: int = 3
+) -> Iterator[tuple[pd.DataFrame, pd.DataFrame, int]]:
     """Yield (train_df, test_df, test_season) in chronological order.
 
     Train = every season strictly before the test season, so no test-season
@@ -220,9 +225,9 @@ def walk_forward_seasons(df: pd.DataFrame, min_train_seasons: int = 3):
     seasons = sorted(df["season"].unique())
     for test_season in seasons:
         train = df[df["season"] < test_season]
-        if train["season"].nunique() < min_train_seasons:
+        if train["season"].nunique() < min_train_seasons:  # type: ignore[reportAttributeAccessIssue]  # boolean-mask slice is Unknown
             continue
-        yield train, df[df["season"] == test_season], test_season
+        yield train, df[df["season"] == test_season], test_season  # type: ignore[reportReturnType]  # df[...] is Unknown; declared type is authoritative for callers
 
 
 def train_final_model(df: pd.DataFrame) -> HurdleModels:

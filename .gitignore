@@ -13,3 +13,7 @@ data/model/
 
 # Tooling state
 .reasonix/
+
+# Linter/type-checker report exports
+ruff_errors.txt
+pyright_errors.json

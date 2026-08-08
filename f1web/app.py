@@ -68,8 +68,10 @@ def create_app() -> Flask:
             return _error_page(str(exc), 409)
         except (ValueError, F1APIError) as exc:
             return _error_page(str(exc), 400)
-        return render_template(
-            "prediction.html", pred=pred, rows=pred["result"].to_dict("records")
+        return Response(
+            render_template(
+                "prediction.html", pred=pred, rows=pred["result"].to_dict("records")
+            )
         )
 
     @app.get("/api/prediction")
@@ -77,9 +79,9 @@ def create_app() -> Flask:
         try:
             return jsonify(_payload(_request_prediction()))
         except SystemExit as exc:
-            return jsonify({"error": str(exc)}), 409
+            return _error_json(str(exc), 409)
         except (ValueError, F1APIError) as exc:
-            return jsonify({"error": str(exc)}), 400
+            return _error_json(str(exc), 400)
 
     @app.get("/backtest")
     def backtest() -> Response:
@@ -88,8 +90,8 @@ def create_app() -> Flask:
                 "reports/backtest.md not found - run `f1-backtest` first",
                 status=404,
             )
-        return render_template(
-            "backtest.html", content=BACKTEST_REPORT.read_text(encoding="utf-8")
+        return Response(
+            render_template("backtest.html", content=BACKTEST_REPORT.read_text(encoding="utf-8"))
         )
 
     return app
@@ -111,7 +113,13 @@ def _request_prediction() -> dict:
 
 
 def _error_page(message: str, status: int) -> Response:
-    return render_template("error.html", message=message), status
+    return Response(render_template("error.html", message=message), status=status)
+
+
+def _error_json(message: str, status: int) -> Response:
+    resp = jsonify({"error": message})
+    resp.status_code = status
+    return resp
 
 
 def main() -> int:

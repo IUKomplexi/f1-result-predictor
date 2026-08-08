@@ -136,7 +136,7 @@ def reliability_table(y_true, y_prob, bins: int = 10) -> pd.DataFrame:
     table = df.groupby("bin", observed=True).agg(
         mean_pred=("p", "mean"), observed=("y", "mean"), n=("y", "size")
     )
-    return table.round(3)
+    return table.round(3)  # type: ignore[reportReturnType]  # groupby().agg() is Unknown without stubs
 
 
 def _to_md(df: pd.DataFrame) -> str:
@@ -160,10 +160,11 @@ def summarize(oos: pd.DataFrame, calibrators: dict[str, IsotonicRegression],
     never mistaken for out-of-calibration-sample evidence. ``keep`` lists the
     targets whose calibrators are actually deployed.
     """
+    context_label = context or "in-sample (calibrators fit and evaluated on the same rows)"
     lines = [
         "# Calibration (isotonic, fit on walk-forward out-of-sample scores)",
         "",
-        f"- Evaluation context: {context or 'in-sample (calibrators fit and evaluated on the same rows)'}",
+        f"- Evaluation context: {context_label}",
         f"- Deployed: {', '.join(sorted(keep)) if keep else 'none (raw probabilities kept)'}",
         "",
         "| target | brier_raw | brier_calibrated | delta |",
@@ -223,7 +224,7 @@ def main() -> int:
         context = f"in-sample (too few hold-out rows; fit+eval on the same {len(oos)} OOS rows)"
         eval_cal = calibrators
     else:
-        eval_cal = fit_calibrators(fit_oos)
+        eval_cal = fit_calibrators(fit_oos)  # type: ignore[reportArgumentType]  # boolean-mask slice is Unknown
         context = (
             f"chronological hold-out: calibrators fit on OOS seasons "
             f"{min(fit_oos['season'])}-{max(fit_oos['season'])}, evaluated on "
@@ -240,7 +241,7 @@ def main() -> int:
     }
     deployment = {t: calibrators[t] for t in keep}
     save_calibrators(deployment, args.out)
-    print(summarize(eval_oos, eval_cal, context=context, keep=keep))
+    print(summarize(eval_oos, eval_cal, context=context, keep=keep))  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
     print(f"\nWrote {args.out}")
     return 0
 

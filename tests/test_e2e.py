@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -86,7 +87,7 @@ class SyntheticSession:
     ``last`` endpoint 404s like a real API with no results cached.
     """
 
-    headers = {"User-Agent": "test"}
+    headers: ClassVar[dict[str, str]] = {"User-Agent": "test"}
 
     def _respond(self, payload: dict):
         return ok_response(payload)

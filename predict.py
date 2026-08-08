@@ -4,7 +4,8 @@ Usage::
 
     python predict.py                            # next race (latest season's next round)
     python predict.py --season 2024 --round 22   # any race; past races are verified vs actuals
-    python predict.py --grid qual.csv            # supply a grid (driver_id,grid) for an upcoming race
+    python predict.py --grid qual.csv            # supply a qualifying grid
+                                                # (driver_id,grid) for an upcoming race
 
 Requires a trained checkpoint (``python model/train.py``) and cached raw data
 (``python scripts/fetch_all.py``). Output: the ranked grid with expected
@@ -21,6 +22,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -77,7 +79,7 @@ def find_next_race(client: F1Client, df: pd.DataFrame, seasons: Sequence[int]) -
         raise SystemExit(
             f"no upcoming race: seasons {min(seasons)}-{max(seasons)} are complete "
             f"and season {nxt} is not available ({exc}). Pass --season/--round explicitly."
-        )
+        ) from None
     if not calendar:
         raise SystemExit(f"season {nxt} has an empty calendar; pass --season/--round explicitly.")
     latest = _latest_completed_round(client, nxt)
@@ -96,10 +98,10 @@ def find_next_race(client: F1Client, df: pd.DataFrame, seasons: Sequence[int]) -
 def _latest_teams_from_df(df: pd.DataFrame) -> dict[str, str]:
     """driver -> constructor from each driver's most recent cached race."""
     latest = df.sort_values("date").drop_duplicates("driver_id", keep="last")
-    return dict(zip(latest["driver_id"], latest["constructor_id"]))
+    return dict(zip(latest["driver_id"], latest["constructor_id"], strict=True))
 
 
-def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> list[tuple[str, str]]:
+def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> list[tuple[str, str | None]]:
     """(driver_id, constructor_id) for the upcoming race's grid.
 
     The grid of the season's most recent completed race is the base (real
@@ -127,12 +129,13 @@ def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> list[tuple[s
         return [(d, team_of.get(d)) for d in drivers]
 
     team_of = _latest_teams_from_df(df)
-    grid: list[tuple[str, str]] = []
+    grid: list[tuple[str, str | None]] = []
     try:
         data = client.get_json(f"/{season}/{completed}/results.json")
         results = data["MRData"]["RaceTable"]["Races"][0]["Results"]
         grid = [(e["Driver"]["driverId"], e["Constructor"]["constructorId"]) for e in results]
-        team_of.update(dict(grid))  # last race wins for drivers who switched
+        # Last race wins; None teams keep the driver's prior entry.
+        team_of.update({k: v for k, v in grid if v is not None})
     except (F1APIError, KeyError, IndexError):
         grid = []
 
@@ -144,7 +147,7 @@ def _entry_list(client: F1Client, season: int, df: pd.DataFrame) -> list[tuple[s
 def _synthetic_rows(
     calendar: list[dict],
     target_round: int,
-    entries: Sequence[tuple[str, str]],
+    entries: Sequence[tuple[str, str | None]],
     grid_map: dict[str, int] | None,
 ) -> list[dict]:
     """Result-style rows for an upcoming race, with unknown outcomes (NaN).
@@ -182,7 +185,7 @@ def read_grid_csv(path: str | Path) -> dict[str, int]:
     for col in ("driver_id", "grid"):
         if col not in table.columns:
             raise SystemExit(f"--grid file {path} must have columns 'driver_id' and 'grid'")
-    return dict(zip(table["driver_id"], table["grid"].astype(int)))
+    return dict(zip(table["driver_id"], table["grid"].astype(int), strict=True))
 
 
 # --------------------------------------------------------------------------
@@ -235,15 +238,15 @@ def predict_race(
 
     out = pd.DataFrame(
         {
-            "driver_id": target["driver_id"].to_numpy(),
-            "constructor_id": target["constructor_id"].to_numpy(),
-            "grid": target["grid"].to_numpy(),
+            "driver_id": target["driver_id"].to_numpy(),  # type: ignore[reportAttributeAccessIssue]  # target is a boolean-mask slice (Unknown)
+            "constructor_id": target["constructor_id"].to_numpy(),  # type: ignore[reportAttributeAccessIssue]
+            "grid": target["grid"].to_numpy(),  # type: ignore[reportAttributeAccessIssue]
             "expected_points": expected,
             "p_scored": probs["p_scored"],
             "p_top3": probs["p_top3"],
             "p_win": probs["p_win"],
-            "actual_points": target["points"].to_numpy(dtype=float),
-            "actual_position": target["position"].to_numpy(),
+            "actual_points": target["points"].to_numpy(dtype=float),  # type: ignore[reportAttributeAccessIssue]
+            "actual_position": target["position"].to_numpy(),  # type: ignore[reportAttributeAccessIssue]
         }
     )
     out = _rank_expected(out)
@@ -275,8 +278,7 @@ def format_report(
     calibrated: bool = False,
 ) -> str:
     lines = [
-        f"# Prediction: {meta.get('race_name', f'Round {round_}')} "
-        f"({season} Round {round_})",
+        f"# Prediction: {meta.get('race_name', f'Round {round_}')} ({season} Round {round_})",
         "",
         f"- Circuit: {meta.get('circuit_id', '?')} · Date: {meta.get('date', '?')}",
         f"- Model checkpoint: `{checkpoint}`",
@@ -313,7 +315,7 @@ def format_report(
     table["p_scored"] = (table["p_scored"] * 100).round(1).astype(str) + "%"
     table["p_top3"] = (table["p_top3"] * 100).round(1).astype(str) + "%"
     table["p_win"] = (table["p_win"] * 100).round(1).astype(str) + "%"
-    lines.append(_to_md(table))
+    lines.append(_to_md(table))  # type: ignore[reportArgumentType]  # table is a column slice (Unknown)
     lines.append("")
 
     if verified:
@@ -326,7 +328,7 @@ def format_report(
         actual["actual_points"] = actual["actual_points"].astype(float)
         lines.append("## Actual results")
         lines.append("")
-        lines.append(_to_md(actual))
+        lines.append(_to_md(actual))  # type: ignore[reportArgumentType]  # column slice (Unknown)
         lines.append("")
         lines.append("## Verification vs actuals")
         lines.append("")
@@ -429,7 +431,7 @@ def get_prediction(
     result = predict_race(df, model, target_season, target_round, calibrators)
 
     target_rows = df[(df["season"] == target_season) & (df["round"] == target_round)]
-    meta = {k: (target_rows[k].iloc[0] if k in target_rows else None)
+    meta = {k: (target_rows[k].iloc[0] if k in target_rows else None)  # type: ignore[reportAttributeAccessIssue]  # target_rows is a boolean-mask slice (Unknown)
             for k in ("race_name", "circuit_id", "date")}
     return {
         "result": result,
@@ -448,7 +450,9 @@ def main() -> int:
     parser.add_argument("--season", type=int, help="target season (default: next race)")
     parser.add_argument("--round", type=int, help="target round (required with --season)")
     parser.add_argument("--grid", help="CSV with 'driver_id,grid' for an upcoming race")
-    parser.add_argument("--model", help="model checkpoint path (default: config [model] checkpoint)")
+    parser.add_argument(
+        "--model", help="model checkpoint path (default: config [model] checkpoint)"
+    )
     parser.add_argument("--out", help="report path (default: reports/prediction.md)")
     parser.add_argument("--refresh", action="store_true", help="ignore the raw-data cache")
     args = parser.parse_args()

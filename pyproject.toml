@@ -22,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8", "flask>=3.0"]  # flask: tests/test_webapp.py imports f1web
 web = ["flask>=3.0"]
+lint = ["ruff>=0.8", "pyright>=1.1.390"]
 
 [project.scripts]
 f1-predict = "predict:main"
@@ -44,3 +45,9 @@ testpaths = ["tests"]
 # deprecation debt (the joblib/numpy 2.5 warning is suppressed at the
 # checkpoint I/O sites in model/train.py).
 filterwarnings = ["error::DeprecationWarning"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "RUF", "PIE", "ISC", "BLE"]
