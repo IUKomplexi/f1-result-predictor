@@ -22,6 +22,7 @@ from model.train import (
     train_final_model,
     walk_forward_seasons,
 )
+from predict import predict_race
 
 
 def _synthetic_df(n_seasons: int = 8, rounds: int = 4, drivers: int = 10) -> pd.DataFrame:
@@ -225,3 +226,26 @@ def test_run_backtest_no_quantize_differs():
     overall_r, _ = run_backtest(df, quantize=False)
     assert overall_c.loc["model", "mae"] != overall_r.loc["model", "mae"]
     assert overall_r.loc["model", "mae"] < overall_r.loc["zero", "mae"]
+
+
+def test_model_drops_constant_numeric_columns():
+    """Constant numeric columns are dropped at fit (HGB binning crashes on them).
+
+    Regression: training on a pre-sprint season range (e.g. 2010-2015) makes
+    ``is_sprint_round``/``team_switch`` constant, which used to crash
+    HistGradientBoosting with a sliding_window_view error. The drop is
+    recorded on the model so prediction drops the same columns.
+    """
+    df = add_features(_synthetic_df(n_seasons=4))
+    df["is_sprint_round"] = 0.0  # force a constant numeric column
+
+    model = train_final_model(df)  # used to crash during binning
+    assert model is not None
+    assert "is_sprint_round" in model.column_drop_
+    assert "grid" not in model.column_drop_
+
+    # The same model predicts on an untouched frame (column present again).
+    last = df["season"].max()
+    last_round = df.loc[df["season"] == last, "round"].max()
+    result = predict_race(df, model, last, last_round)
+    assert result["expected_points"].notna().all()

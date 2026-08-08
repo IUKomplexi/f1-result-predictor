@@ -151,8 +151,26 @@ class HurdleModels:
         self.top3: Any = _clf(seed + 1, self.params)
         self.win: Any = _clf(seed + 2, self.params)
         self.points_if_scored: Any = _reg(seed + 3, self.params)
+        # Numeric columns that were constant in the training set are dropped
+        # at fit time and remembered for prediction, so train and predict see
+        # the same columns (sklearn validates feature names against the fit).
+        self.column_drop_: List[str] = []
+
+    def _drop_constant_columns(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Numeric columns with at most one distinct value are dropped.
+
+        They carry no signal, and ``HistGradientBoosting``'s binning crashes
+        on them (it needs at least two distinct values) — which a pre-sprint
+        season range (constant ``is_sprint_round``) would otherwise trigger.
+        """
+        n_distinct = X.select_dtypes(include="number").apply(
+            lambda s: s.dropna().nunique()
+        )
+        self.column_drop_ = list(n_distinct[n_distinct <= 1].index)
+        return X.drop(columns=self.column_drop_)
 
     def fit(self, X: pd.DataFrame, y: pd.DataFrame) -> "HurdleModels":
+        X = self._drop_constant_columns(X)
         self.scored = _fit_binary(self.scored, X, y["scored"])
         self.top3 = _fit_binary(self.top3, X, y["top3"])
         self.win = _fit_binary(self.win, X, y["win"])
@@ -163,13 +181,22 @@ class HurdleModels:
             self.points_if_scored.fit(X[mask], np.log1p(y["points"].to_numpy()[mask]))
         return self
 
+    def _apply_drop(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Apply the fit-time column drop to a prediction-time frame."""
+        # getattr: checkpoints trained before the drop feature have no
+        # column_drop_ attribute; treat them as dropping nothing.
+        drop = [c for c in getattr(self, "column_drop_", []) if c in X.columns]
+        return X.drop(columns=drop) if drop else X
+
     def predict_expected_points(self, X: pd.DataFrame) -> np.ndarray:
         """E[points] = P(scored) * E[points | scored]."""
+        X = self._apply_drop(X)
         p_scored = self.scored.predict_proba(X)[:, 1]
         exp_points = np.expm1(self.points_if_scored.predict(X))
         return p_scored * np.clip(exp_points, 0.0, None)
 
     def predict_probs(self, X: pd.DataFrame) -> Dict[str, np.ndarray]:
+        X = self._apply_drop(X)
         return {
             "p_scored": self.scored.predict_proba(X)[:, 1],
             "p_top3": self.top3.predict_proba(X)[:, 1],

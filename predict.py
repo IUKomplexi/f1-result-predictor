@@ -356,11 +356,13 @@ def get_prediction(
     cfg: Optional[Dict] = None,
     model_path: Optional[str] = None,
     quiet: bool = False,
+    client: Optional[F1Client] = None,
 ) -> dict:
     """Compute a prediction, returning results + metadata (no I/O side effects).
 
     ``season``/``round_`` target a specific race; both None selects the next
     race. ``grid_csv`` supplies a qualifying grid for an upcoming race.
+    ``client`` injects an F1Client (tests); the default is built from ``cfg``.
     Returns a dict with: ``result`` (DataFrame from :func:`predict_race`),
     ``meta`` (race_name/circuit_id/date), ``season``, ``round``,
     ``synthetic``, ``verified``, ``calibrated``, ``checkpoint``.
@@ -369,15 +371,16 @@ def get_prediction(
     if round_ is not None and season is None:
         raise ValueError("season is required when round is given")
     seasons = list(range(cfg["data"]["start_season"], cfg["data"]["end_season"] + 1))
-    client = F1Client(
-        base_url=cfg["api"]["base_url"],
-        user_agent=cfg["api"]["user_agent"],
-        cache_dir=cfg["data"]["cache_dir"],
-        refresh=refresh,
-        sleep_seconds=cfg["api"]["sleep_seconds"],
-        timeout=cfg["api"]["timeout"],
-        max_retries=cfg["api"]["max_retries"],
-    )
+    if client is None:
+        client = F1Client(
+            base_url=cfg["api"]["base_url"],
+            user_agent=cfg["api"]["user_agent"],
+            cache_dir=cfg["data"]["cache_dir"],
+            refresh=refresh,
+            sleep_seconds=cfg["api"]["sleep_seconds"],
+            timeout=cfg["api"]["timeout"],
+            max_retries=cfg["api"]["max_retries"],
+        )
 
     # Assemble every cached season once, then (re)compute features. For an
     # upcoming race we inject synthetic rows so the pre-race features are
