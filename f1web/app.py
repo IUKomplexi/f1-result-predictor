@@ -33,6 +33,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from f1data import F1APIError  # noqa: E402
 from predict import get_prediction  # noqa: E402
 
+# Anchored to the repo root so the report resolves regardless of the server's
+# working directory.
+BACKTEST_REPORT = Path(__file__).resolve().parent.parent / "reports" / "backtest.md"
+
 
 def _payload(pred: Dict) -> Dict:
     """JSON-safe representation of a prediction dict."""
@@ -80,23 +84,30 @@ def create_app() -> Flask:
 
     @app.get("/backtest")
     def backtest() -> Response:
-        report_path = Path("reports/backtest.md")
-        if not report_path.exists():
+        if not BACKTEST_REPORT.exists():
             return Response(
                 "reports/backtest.md not found - run `f1-backtest` first",
                 status=404,
             )
         return render_template(
-            "backtest.html", content=report_path.read_text(encoding="utf-8")
+            "backtest.html", content=BACKTEST_REPORT.read_text(encoding="utf-8")
         )
 
     return app
 
 
 def _request_prediction() -> Dict:
-    """Compute the prediction for the current request's query arguments."""
-    season = request.args.get("season", type=int)
-    round_ = request.args.get("round", type=int)
+    """Compute the prediction for the current request's query arguments.
+
+    Invalid (non-integer) ``season``/``round`` query values raise ValueError
+    instead of silently falling back to the next race.
+    """
+    args = request.args
+    season, round_ = args.get("season", type=int), args.get("round", type=int)
+    if (args.get("season") is not None and season is None) or (
+        args.get("round") is not None and round_ is None
+    ):
+        raise ValueError("season/round must be integers")
     return get_prediction(season=season, round_=round_, quiet=True)
 
 

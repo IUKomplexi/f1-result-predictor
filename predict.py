@@ -450,14 +450,19 @@ def main() -> int:
     args = parser.parse_args()
 
     cfg = load_config()
-    pred = get_prediction(
-        season=args.season,
-        round_=args.round,
-        grid_csv=args.grid,
-        refresh=args.refresh,
-        cfg=cfg,
-        model_path=args.model,
-    )
+    try:
+        pred = get_prediction(
+            season=args.season,
+            round_=args.round,
+            grid_csv=args.grid,
+            refresh=args.refresh,
+            cfg=cfg,
+            model_path=args.model,
+        )
+    except ValueError as exc:
+        # get_prediction raises ValueError for bad arguments (e.g. --season
+        # without --round); keep the CLI error clean, without a traceback.
+        raise SystemExit(str(exc)) from None
     result, meta = pred["result"], pred["meta"]
     target_season, target_round = pred["season"], pred["round"]
 

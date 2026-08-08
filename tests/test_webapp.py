@@ -11,23 +11,25 @@ from f1web.app import _payload, create_app
 
 
 def _canned_prediction() -> dict:
+    import numpy as np
+
     return {
         "result": pd.DataFrame(
             {
-                "pred_rank": [1, 2],
+                "pred_rank": [np.int64(1), np.int64(2)],
                 "driver_id": ["russell", "leclerc"],
                 "constructor_id": ["mercedes", "ferrari"],
-                "grid": [1, 2],
-                "expected_points": [15.0, 12.0],
-                "p_scored": [0.9, 0.8],
-                "p_top3": [0.6, 0.5],
-                "p_win": [0.5, 0.2],
-                "actual_points": [25.0, 12.0],
-                "actual_position": [1, 4],
+                "grid": [np.int64(1), np.int64(2)],
+                "expected_points": [np.float64(15.0), np.float64(12.0)],
+                "p_scored": [np.float64(0.9), np.float64(0.8)],
+                "p_top3": [np.float64(0.6), np.float64(0.5)],
+                "p_win": [np.float64(0.5), np.float64(0.2)],
+                "actual_points": [np.float64(25.0), np.float64(12.0)],
+                "actual_position": [np.int64(1), np.int64(4)],
             }
         ),
         "meta": {"race_name": "Las Vegas", "circuit_id": "vegas",
-                 "date": "2024-11-23"},
+                 "date": pd.Timestamp("2024-11-23")},
         "season": 2024,
         "round": 22,
         "synthetic": False,
@@ -98,20 +100,30 @@ def test_error_paths(client, monkeypatch):
 def test_backtest_route(client, monkeypatch):
     import f1web.app as app_module
 
-    if Path("reports/backtest.md").exists():
+    if app_module.BACKTEST_REPORT.exists():
         resp = client.get("/backtest")
         assert resp.status_code == 200
         assert "Walk-forward" in resp.get_data(as_text=True)
 
-    class FakePath:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def exists(self):
-            return False
-
-        def read_text(self, *args, **kwargs):
-            raise AssertionError("should not be called")
-
-    monkeypatch.setattr(app_module, "Path", FakePath)
+    # 404 when the report file is missing.
+    monkeypatch.setattr(app_module, "BACKTEST_REPORT", Path("does/not/exist.md"))
     assert client.get("/backtest").status_code == 404
+
+
+def test_systemexit_maps_to_409(client, monkeypatch):
+    import f1web.app as app_module
+
+    def no_next(**kw):
+        raise SystemExit("no upcoming race: seasons complete")
+
+    monkeypatch.setattr(app_module, "get_prediction", no_next)
+    page = client.get("/")
+    assert page.status_code == 409
+    assert "no upcoming race" in page.get_data(as_text=True)
+    api = client.get("/api/prediction").get_json()
+    assert api["error"] == "no upcoming race: seasons complete"
+
+
+def test_invalid_query_params_are_400(client):
+    assert client.get("/prediction?season=abc").status_code == 400
+    assert client.get("/api/prediction?round=xyz").status_code == 400
