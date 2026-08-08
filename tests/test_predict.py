@@ -339,3 +339,26 @@ def test_predict_race_ranking_agrees_with_backtest_rank_by():
     v["pred_points"] = v["expected_points"]
     ranks = _rank_by(v, "pred_points", "grid").tolist()
     assert ranks == list(range(1, len(out) + 1))
+
+
+def test_main_clean_error_without_round(monkeypatch):
+    """predict.main() turns get_prediction's ValueError into a clean SystemExit."""
+    import sys
+
+    import predict as predict_module
+
+    def boom(**kw):
+        raise ValueError("round_ is required when season is given")
+
+    monkeypatch.setattr(predict_module, "get_prediction", boom)
+    monkeypatch.setattr(sys, "argv", ["predict.py", "--season", "2024"])
+    with pytest.raises(SystemExit) as exc:
+        predict_module.main()
+    assert "round_ is required" in str(exc.value)
+
+
+def test_get_prediction_requires_season_for_round():
+    from predict import get_prediction
+
+    with pytest.raises(ValueError, match="season is required when round is given"):
+        get_prediction(round_=22, quiet=True)

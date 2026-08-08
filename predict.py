@@ -366,6 +366,8 @@ def get_prediction(
     ``synthetic``, ``verified``, ``calibrated``, ``checkpoint``.
     """
     cfg = cfg or load_config()
+    if round_ is not None and season is None:
+        raise ValueError("season is required when round is given")
     seasons = list(range(cfg["data"]["start_season"], cfg["data"]["end_season"] + 1))
     client = F1Client(
         base_url=cfg["api"]["base_url"],
