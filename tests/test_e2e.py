@@ -109,6 +109,14 @@ class SyntheticSession:
             )
         if endpoint == "last":
             return _response(404, text="no results")
+        if len(parts) > 2 and parts[2].split(".")[0] == "sprint":
+            # Sprint results for round <parts[1]>: synthetic calendars never
+            # mark sprint rounds, so this serves an empty sprint (matching the
+            # real API's shape for a round without a sprint).
+            return self._respond(
+                {"MRData": {"total": 0,
+                            "RaceTable": {"season": str(season), "Races": []}}}
+            )
         if season not in SEASONS:
             # Upcoming season: no results/qualifying to serve.
             return self._respond(
