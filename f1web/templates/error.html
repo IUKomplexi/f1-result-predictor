@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Error — F1 Result Predictor{% endblock %}
+{% block body %}
+  <h1>Error</h1>
+  <p>{{ message }}</p>
+  <p class="note">Run <code>scripts/fetch_all.py</code> and <code>model/train.py</code> first,
+     or check the URL parameters.</p>
+{% endblock %}

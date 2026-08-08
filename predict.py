@@ -348,23 +348,30 @@ def format_report(
 # CLI
 # --------------------------------------------------------------------------
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--season", type=int, help="target season (default: next race)")
-    parser.add_argument("--round", type=int, help="target round (required with --season)")
-    parser.add_argument("--grid", help="CSV with 'driver_id,grid' for an upcoming race")
-    parser.add_argument("--model", help="model checkpoint path (default: config [model] checkpoint)")
-    parser.add_argument("--out", help="report path (default: reports/prediction.md)")
-    parser.add_argument("--refresh", action="store_true", help="ignore the raw-data cache")
-    args = parser.parse_args()
+def get_prediction(
+    season: Optional[int] = None,
+    round_: Optional[int] = None,
+    grid_csv: Optional[str] = None,
+    refresh: bool = False,
+    cfg: Optional[Dict] = None,
+    model_path: Optional[str] = None,
+    quiet: bool = False,
+) -> dict:
+    """Compute a prediction, returning results + metadata (no I/O side effects).
 
-    cfg = load_config()
+    ``season``/``round_`` target a specific race; both None selects the next
+    race. ``grid_csv`` supplies a qualifying grid for an upcoming race.
+    Returns a dict with: ``result`` (DataFrame from :func:`predict_race`),
+    ``meta`` (race_name/circuit_id/date), ``season``, ``round``,
+    ``synthetic``, ``verified``, ``calibrated``, ``checkpoint``.
+    """
+    cfg = cfg or load_config()
     seasons = list(range(cfg["data"]["start_season"], cfg["data"]["end_season"] + 1))
     client = F1Client(
         base_url=cfg["api"]["base_url"],
         user_agent=cfg["api"]["user_agent"],
         cache_dir=cfg["data"]["cache_dir"],
-        refresh=args.refresh,
+        refresh=refresh,
         sleep_seconds=cfg["api"]["sleep_seconds"],
         timeout=cfg["api"]["timeout"],
         max_retries=cfg["api"]["max_retries"],
@@ -376,26 +383,28 @@ def main() -> int:
     season_datas = [fetch_season(client, s) for s in seasons]
     base_df = add_features(assemble(season_datas))
 
-    if args.season is not None:
-        if args.round is None:
-            raise SystemExit("--round is required when --season is given")
-        target_season, target_round = args.season, args.round
+    if season is not None:
+        if round_ is None:
+            raise ValueError("round_ is required when season is given")
+        target_season, target_round = season, round_
     else:
         target_season, target_round = find_next_race(client, base_df, seasons)
 
     # A round with no cached results is an upcoming race: inject synthetic
     # entry rows so pre-race features are derived exactly as they would be
-    # before the race. Applies to auto-discovery and explicit --season/--round.
+    # before the race.
     synthetic = base_df[(base_df["season"] == target_season) &
                         (base_df["round"] == target_round)].empty
+    grid_map = None
     if synthetic:
-        print(
-            f"Note: no cached results for {target_season} R{target_round} - "
-            "prediction uses synthetic entry rows and is unverified.",
-            file=sys.stderr,
-        )
+        if not quiet:
+            print(
+                f"Note: no cached results for {target_season} R{target_round} - "
+                "prediction uses synthetic entry rows and is unverified.",
+                file=sys.stderr,
+            )
         calendar = fetch_calendar(client, target_season)
-        grid_map = read_grid_csv(args.grid) if args.grid else None
+        grid_map = read_grid_csv(grid_csv) if grid_csv else None
         rows = _synthetic_rows(
             calendar, target_round, _entry_list(client, target_season, base_df), grid_map
         )
@@ -410,18 +419,51 @@ def main() -> int:
     else:
         df = base_df
 
-    model_path = args.model or cfg["model"]["checkpoint"]
-    model = load_checkpoint(model_path)
+    checkpoint = model_path or cfg["model"]["checkpoint"]
+    model = load_checkpoint(checkpoint)
     calibrators = load_calibrators(cfg["model"]["calibrators"])
     result = predict_race(df, model, target_season, target_round, calibrators)
 
     target_rows = df[(df["season"] == target_season) & (df["round"] == target_round)]
     meta = {k: (target_rows[k].iloc[0] if k in target_rows else None)
             for k in ("race_name", "circuit_id", "date")}
+    return {
+        "result": result,
+        "meta": meta,
+        "season": target_season,
+        "round": target_round,
+        "synthetic": synthetic,
+        "verified": not synthetic,
+        "calibrated": bool(calibrators),
+        "checkpoint": checkpoint,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--season", type=int, help="target season (default: next race)")
+    parser.add_argument("--round", type=int, help="target round (required with --season)")
+    parser.add_argument("--grid", help="CSV with 'driver_id,grid' for an upcoming race")
+    parser.add_argument("--model", help="model checkpoint path (default: config [model] checkpoint)")
+    parser.add_argument("--out", help="report path (default: reports/prediction.md)")
+    parser.add_argument("--refresh", action="store_true", help="ignore the raw-data cache")
+    args = parser.parse_args()
+
+    cfg = load_config()
+    pred = get_prediction(
+        season=args.season,
+        round_=args.round,
+        grid_csv=args.grid,
+        refresh=args.refresh,
+        cfg=cfg,
+        model_path=args.model,
+    )
+    result, meta = pred["result"], pred["meta"]
+    target_season, target_round = pred["season"], pred["round"]
 
     report = format_report(result, target_season, target_round, meta,
-                           verified=not synthetic, checkpoint=model_path,
-                           calibrated=bool(calibrators))
+                           verified=pred["verified"], checkpoint=pred["checkpoint"],
+                           calibrated=pred["calibrated"])
     out = Path(args.out or cfg["report"]["prediction"])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")

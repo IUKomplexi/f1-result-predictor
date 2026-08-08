@@ -43,6 +43,7 @@ working directory, so run from the repo root (or pass absolute `--out`/
 | `python predict.py` · `f1-predict` | predict the **next race** → `reports/prediction.md` |
 | `python predict.py --season 2024 --round 22` | predict any race; past races are verified vs actuals |
 | `python predict.py --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
+| `f1-web [--host 127.0.0.1] [--port 8080]` | local web UI (needs the `web` extra) |
 
 Examples:
 
@@ -52,6 +53,18 @@ f1-predict --season 2024 --round 22              # dry run: Las Vegas 2024 + ver
 f1-predict --grid qual.csv                       # with known grid for the next race
 python model/search.py --n 16 --max-test-season 2019   # re-tune hyperparameters
 ```
+
+## Web UI
+
+```bash
+pip install -e ".[web]"       # Flask is an optional extra
+f1-web --port 8080            # open http://127.0.0.1:8080/
+```
+
+Endpoints: `/` (next-race prediction page), `/prediction?season=&round=` (any
+race), `/api/prediction` (JSON), `/backtest` (report), `/health`. Predictions
+are computed on demand through the same code path as the CLI (a few seconds
+per request — it is a local tool, not a service).
 
 ## Configuration
 

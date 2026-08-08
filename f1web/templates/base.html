@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}F1 Result Predictor{% endblock %}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 64rem; padding: 0 1rem; color: #1a1a1a; }
+    h1 { font-size: 1.4rem; }
+    nav a { margin-right: 1rem; color: #0366d6; text-decoration: none; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; }
+    th { background: #f5f5f5; }
+    td.num, th.num { text-align: right; }
+    .note { color: #555; font-size: 0.9rem; }
+    .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 0.3rem; font-size: 0.8rem; }
+    .badge-warn { background: #fff3cd; }
+    .badge-ok { background: #d4edda; }
+    pre { background: #f6f8fa; padding: 1rem; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/">Next race</a>
+    <a href="/api/prediction">JSON</a>
+    <a href="/backtest">Backtest</a>
+  </nav>
+  {% block body %}{% endblock %}
+</body>
+</html>

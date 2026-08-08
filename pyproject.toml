@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+web = ["flask>=3.0"]
 
 [project.scripts]
 f1-predict = "predict:main"
@@ -27,10 +28,14 @@ f1-train = "model.train:main"
 f1-backtest = "model.evaluate:main"
 f1-calibrate = "model.calibrate:main"
 f1-search = "model.search:main"
+f1-web = "f1web.app:main"
 
 [tool.setuptools]
-packages = ["f1data", "features", "model"]
+packages = ["f1data", "features", "model", "f1web"]
 py-modules = ["predict", "config"]
+
+[tool.setuptools.package-data]
+f1web = ["templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
