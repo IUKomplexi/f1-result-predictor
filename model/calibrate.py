@@ -15,6 +15,7 @@ The saved calibrators are consumed by ``predict.py``.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from model.train import (
     prepare,
     walk_forward_seasons,
 )
+from reporting import to_md
 
 TARGETS = {"scored": "p_scored", "top3": "p_top3", "win": "p_win"}
 
@@ -139,18 +141,6 @@ def reliability_table(y_true, y_prob, bins: int = 10) -> pd.DataFrame:
     return table.round(3)  # type: ignore[reportReturnType]  # groupby().agg() is Unknown without stubs
 
 
-def _to_md(df: pd.DataFrame) -> str:
-    """Render a DataFrame as a markdown table without the `tabulate` package."""
-    cols = list(df.columns)
-    header = "| " + " | ".join(str(c) for c in cols) + " |"
-    sep = "| " + " | ".join("---" for _ in cols) + " |"
-    body = [
-        "| " + " | ".join(str(row[c]) for c in cols) + " |"
-        for _, row in df.iterrows()
-    ]
-    return "\n".join([header, sep, *body])
-
-
 def summarize(oos: pd.DataFrame, calibrators: dict[str, IsotonicRegression],
               context: str = "", keep: set | None = None) -> str:
     """Raw-vs-calibrated Brier scores and reliability tables, as text.
@@ -185,9 +175,45 @@ def summarize(oos: pd.DataFrame, calibrators: dict[str, IsotonicRegression],
         cal = calibrators[target].predict(oos[score].to_numpy(dtype=float))
         lines.append(f"### {target}")
         lines.append("")
-        lines.append(_to_md(reliability_table(oos[target], cal)))
+        lines.append(to_md(reliability_table(oos[target], cal)))
         lines.append("")
     return "\n".join(lines)
+
+
+def calibration_snapshot(
+    oos: pd.DataFrame,
+    calibrators: dict[str, IsotonicRegression],
+    keep: set,
+    context: str = "",
+) -> dict:
+    """JSON-safe calibration evaluation for the web dashboard.
+
+    Per target (scored/top3/win): raw and calibrated Brier, the deployment
+    decision, and the binned reliability table for a reliability curve.
+    """
+    targets: dict[str, dict] = {}
+    for target, score in TARGETS.items():
+        y = oos[target].to_numpy(dtype=float)
+        raw = oos[score].to_numpy(dtype=float)
+        cal = calibrators[target].predict(raw)
+        rel = reliability_table(oos[target], cal)
+        targets[target] = {
+            "brier_raw": brier(y, raw),
+            "brier_calibrated": brier(y, cal),
+            "delta": brier(y, cal) - brier(y, raw),
+            "deployed": target in keep,
+            "reliability": [
+                {
+                    "mean_pred": float(mp),
+                    "observed": float(ob),
+                    "n": int(n),
+                }
+                for mp, ob, n in zip(
+                    rel["mean_pred"], rel["observed"], rel["n"], strict=True
+                )
+            ],
+        }
+    return {"context": context, "deployed": sorted(keep), "targets": targets}
 
 
 # --------------------------------------------------------------------------
@@ -202,6 +228,8 @@ def main() -> int:
     parser.add_argument("--cache-dir", default="data/raw")
     parser.add_argument("--dataset", default="data/features.parquet")
     parser.add_argument("--out", default="data/model/calibrators.joblib")
+    parser.add_argument("--out-json", default="data/model/calibration.json",
+                        help="JSON snapshot for the web dashboard")
     args = parser.parse_args()
 
     client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
@@ -243,6 +271,15 @@ def main() -> int:
     save_calibrators(deployment, args.out)
     print(summarize(eval_oos, eval_cal, context=context, keep=keep))  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
     print(f"\nWrote {args.out}")
+
+    snapshot = json.dumps(
+        calibration_snapshot(eval_oos, eval_cal, keep=keep, context=context),  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
+        indent=2,
+    )
+    json_out = Path(args.out_json)
+    json_out.parent.mkdir(parents=True, exist_ok=True)
+    json_out.write_text(snapshot, encoding="utf-8")
+    print(f"Wrote {json_out}")
     return 0
 
 

@@ -194,9 +194,19 @@ def assemble(season_datas: Sequence[dict]) -> pd.DataFrame:
 
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add pre-race features and target columns. Never touches future data."""
-    out = df.copy()
-    out = out.sort_values(["date", "round"]).reset_index(drop=True)
+    out = df.copy().sort_values(["date", "round"]).reset_index(drop=True)
+    out = _add_baseline(out)
+    out = _add_driver_history(out)
+    out = _add_constructor_history(out)
+    out = _add_circuit_history(out)
+    out = _add_teammate_gaps(out)
+    out = _add_championship(out)
+    out = _add_era_and_targets(out)
+    return out
 
+
+def _add_baseline(out: pd.DataFrame) -> pd.DataFrame:
+    """Normalize input columns (points, sprint, qualifying, status flags)."""
     out["points"] = out["points"].astype(float)
     if "sprint_points" in out.columns:
         out["sprint_points"] = out["sprint_points"].fillna(0.0).astype(float)
@@ -212,8 +222,11 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     out["is_dnf"] = ~out["status"].map(is_classified).fillna(False)
     # finish_pos: numeric position, NaN when unknown (e.g. missing).
     out["finish_pos"] = out["position"].where(out["position"].fillna(0) > 0)
+    return out
 
-    # --- Driver career history (across all seasons, strictly prior) ---
+
+def _add_driver_history(out: pd.DataFrame) -> pd.DataFrame:
+    """Driver career history (across all seasons, strictly prior)."""
     g = out.groupby("driver_id", sort=False)
     out["n_prior_races"] = g.cumcount()
     out["team_tenure"] = out.groupby(["driver_id", "constructor_id"], sort=False).cumcount()
@@ -227,10 +240,15 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
         lambda s: s.astype(float).shift(1).rolling(FORM_WINDOW, min_periods=1).mean()
     )
     out["driver_wins_prior"] = g["position"].transform(_career_wins)
+    return out
 
-    # --- Constructor history ---
-    # Aggregated per race (both cars) so that one driver's same-race result
-    # never leaks into the other driver's features.
+
+def _add_constructor_history(out: pd.DataFrame) -> pd.DataFrame:
+    """Constructor history aggregated per race (both cars).
+
+    One driver's same-race result never leaks into the other driver's
+    features.
+    """
     team_race = out.groupby(["constructor_id", "season", "round"], sort=False).agg(
         team_points=("points", "sum"),
         team_sprint_points=("sprint_points", "sum"),
@@ -281,8 +299,11 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
         on=["constructor_id", "season", "round"],
         how="left",
     )
+    return out
 
-    # --- Circuit history per driver ---
+
+def _add_circuit_history(out: pd.DataFrame) -> pd.DataFrame:
+    """Prior visits at the same circuit per driver."""
     g = out.groupby(["driver_id", "circuit_id"], sort=False)
     out["circuit_prev_finish_mean"] = g["finish_pos"].transform(
         lambda s: s.shift(1).rolling(CIRCUIT_WINDOW, min_periods=1).mean()
@@ -291,32 +312,43 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
         lambda s: s.shift(1).rolling(CIRCUIT_WINDOW, min_periods=1).mean()
     )
     out["circuit_n_prior"] = g.cumcount()
+    return out
 
-    # --- Teammate-relative performance (strictly prior) ---
-    # A driver's benchmark is the teammate in the same car. The raw gap is
-    # computed within the same race (own value minus the teammates' mean),
-    # then rolled over *prior* races only via shift(1), so the current
-    # race's teammate result never leaks into this race's feature row.
-    def _teammate_gap(value_col: str, out_col: str) -> None:
-        grp = out.groupby(["season", "round", "constructor_id"], sort=False)[value_col]
-        others_sum = grp.transform("sum") - out[value_col]
-        others_n = grp.transform("size") - 1
-        out["_raw_teammate_gap"] = (
-            (out[value_col] - others_sum / others_n.replace(0, np.nan))
-            .where(others_n > 0)
-        )
-        gd = out.groupby("driver_id", sort=False)
-        out[out_col] = gd["_raw_teammate_gap"].transform(
-            lambda s: s.shift(1).rolling(FORM_WINDOW, min_periods=1).mean()
-        )
-        del out["_raw_teammate_gap"]
 
-    _teammate_gap("finish_pos", "finish_gap_vs_teammate")
-    _teammate_gap("qual_pos", "qual_gap_vs_teammate")
+def _teammate_gap(out: pd.DataFrame, value_col: str, out_col: str) -> None:
+    """Rolling gap to the teammate for ``value_col`` (strictly prior).
 
-    # --- Championship position entering the race ---
-    # Includes the current round's sprint points (known before the main race),
-    # plus all main-race + sprint points from earlier rounds of the season.
+    The raw gap is computed within the same race (own value minus the
+    teammates' mean), then rolled over *prior* races only via shift(1), so
+    the current race's teammate result never leaks into this race's feature.
+    """
+    grp = out.groupby(["season", "round", "constructor_id"], sort=False)[value_col]
+    others_sum = grp.transform("sum") - out[value_col]
+    others_n = grp.transform("size") - 1
+    out["_raw_teammate_gap"] = (
+        (out[value_col] - others_sum / others_n.replace(0, np.nan))
+        .where(others_n > 0)
+    )
+    gd = out.groupby("driver_id", sort=False)
+    out[out_col] = gd["_raw_teammate_gap"].transform(
+        lambda s: s.shift(1).rolling(FORM_WINDOW, min_periods=1).mean()
+    )
+    del out["_raw_teammate_gap"]
+
+
+def _add_teammate_gaps(out: pd.DataFrame) -> pd.DataFrame:
+    """Teammate-relative performance (strictly prior)."""
+    _teammate_gap(out, "finish_pos", "finish_gap_vs_teammate")
+    _teammate_gap(out, "qual_pos", "qual_gap_vs_teammate")
+    return out
+
+
+def _add_championship(out: pd.DataFrame) -> pd.DataFrame:
+    """Championship position entering the race.
+
+    Includes the current round's sprint points (known before the main race),
+    plus all main-race + sprint points from earlier rounds of the season.
+    """
     g = out.groupby(["season", "driver_id"], sort=False)
     out["champ_points_entering"] = (
         g["race_points"].transform(lambda s: s.shift(1).cumsum().fillna(0.0))
@@ -331,11 +363,14 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     out["champ_pos_entering"] = out.groupby(["season", "round"])[
         "champ_points_entering"
     ].rank(ascending=False, method="min")
+    return out
 
-    # --- Era / targets ---
+
+def _add_era_and_targets(out: pd.DataFrame) -> pd.DataFrame:
+    """Points era, target columns, and weather-schema columns."""
     out["points_era"] = np.where(out["season"] >= 2019, "post2019", "pre2019")
     out["scored"] = out["points"] > 0
-    out["top3"] = out["position"].eq(3) | out["position"].eq(2) | out["position"].eq(1)
+    out["top3"] = out["position"].between(1, 3)
     out["win"] = out["position"].eq(1)
 
     # Weather columns: always present in the schema; NaN until weather data

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from model.train import (
     quantize_points,
     walk_forward_seasons,
 )
+from reporting import rank_by, to_md
 
 # --------------------------------------------------------------------------
 # Baselines
@@ -47,28 +49,6 @@ def baseline_zero_points(df: pd.DataFrame) -> pd.Series:
 # Race-level metrics
 # --------------------------------------------------------------------------
 
-def _rank_by(df: pd.DataFrame, score_col: str, tiebreak_col: str) -> pd.Series:
-    """Rank drivers within a race by descending score, ascending tiebreak.
-
-    Non-positive tiebreak values (e.g. ``grid=0`` for pit-lane starts, or a
-    missing position) are treated as the worst — they sort last, never first.
-
-    The returned Series is aligned to ``df``'s index (rank 1 = best), so it
-    can be boolean-indexed against ``df`` and compared across drivers.
-    """
-    tiebreak = (
-        df[tiebreak_col]
-        .replace(0, np.inf)
-        .fillna(np.inf)
-    )
-    ranked = (
-        df.assign(_tiebreak=tiebreak)
-        .sort_values([score_col, "_tiebreak"], ascending=[False, True])
-    )
-    ranks = pd.Series(range(1, len(df) + 1), index=ranked.index)
-    return ranks.reindex(df.index)
-
-
 def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
     """One race's metrics: winner hit, top-3 overlap, spearman, MAE."""
     actual_points = df["points"].to_numpy(dtype=float)
@@ -79,8 +59,8 @@ def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
 
     # Keep these as Series: boolean indexing a DataFrame with a Series aligns
     # by index, whereas a numpy array would select rows positionally.
-    actual_rank = _rank_by(df, "points", "position")
-    pred_rank = _rank_by(df, "pred_points", "grid")
+    actual_rank = rank_by(df, "points", "position")
+    pred_rank = rank_by(df, "pred_points", "grid")
 
     actual_winner_rows = df.loc[df["position"].eq(1), "driver_id"]
     pred_winner_rows = df.loc[pred_rank.eq(1), "driver_id"]
@@ -173,16 +153,28 @@ def run_backtest(
     return overall, by_season  # type: ignore[reportReturnType]  # Unknown unions from the groupby chain
 
 
-def _to_md(df: pd.DataFrame) -> str:
-    """Render a DataFrame as a markdown table without the `tabulate` package."""
-    cols = list(df.columns)
-    header = "| " + " | ".join(str(c) for c in cols) + " |"
-    sep = "| " + " | ".join("---" for _ in cols) + " |"
-    body = [
-        "| " + " | ".join(str(row[c]) for c in cols) + " |"
-        for _, row in df.iterrows()
-    ]
-    return "\n".join([header, sep, *body])
+def _metric_row(row: pd.Series) -> dict[str, float]:
+    """One metric row as JSON-safe floats (pandas values are often np scalars)."""
+    return {str(metric): float(value) for metric, value in row.items()}
+
+
+def backtest_snapshot(
+    overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]
+) -> dict:
+    """JSON-safe snapshot of the backtest for the web dashboard.
+
+    ``overall`` is mean metrics per baseline; ``by_season`` is the same per
+    (baseline, season). Keys are strings (JSON object keys must be).
+    """
+    return {
+        "overall": {str(name): _metric_row(overall.loc[name]) for name in overall.index},
+        "by_season": {
+            str(name): {
+                str(season): _metric_row(row) for season, row in table.iterrows()
+            }
+            for name, table in by_season.items()
+        },
+    }
 
 
 def format_tables(overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]) -> str:
@@ -193,7 +185,7 @@ def format_tables(overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]) -> 
         "",
         "## Overall (mean per race across all test seasons)",
         "",
-        _to_md(overall),
+        to_md(overall),
         "",
     ]
     for name in ("model", "grid", "championship", "zero"):
@@ -202,7 +194,7 @@ def format_tables(overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]) -> 
             continue
         lines.append(f"## Per season — {name}")
         lines.append("")
-        lines.append(_to_md(table))
+        lines.append(to_md(table))
         lines.append("")
     return "\n".join(lines)
 
@@ -215,6 +207,8 @@ def main() -> int:
     parser.add_argument("--cache-dir", default="data/raw")
     parser.add_argument("--dataset", default="data/features.parquet")
     parser.add_argument("--out", default="reports/backtest.md")
+    parser.add_argument("--out-json", default="reports/backtest.json",
+                        help="JSON snapshot for the web dashboard")
     parser.add_argument("--no-quantize", action="store_true",
                         help="keep continuous expected points (deployed output is quantized)")
     args = parser.parse_args()
@@ -228,6 +222,12 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")
     print(f"\nWrote {out}")
+
+    snapshot = json.dumps(backtest_snapshot(overall, by_season), indent=2)
+    json_out = Path(args.out_json)
+    json_out.parent.mkdir(parents=True, exist_ok=True)
+    json_out.write_text(snapshot, encoding="utf-8")
+    print(f"Wrote {json_out}")
     return 0
 
 

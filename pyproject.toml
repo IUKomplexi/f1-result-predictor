@@ -34,7 +34,7 @@ f1-web = "f1web.app:main"
 
 [tool.setuptools]
 packages = ["f1data", "features", "model", "f1web", "f1weather"]
-py-modules = ["predict", "config"]
+py-modules = ["predict", "config", "reporting", "httpclient"]
 
 [tool.setuptools.package-data]
 f1web = ["templates/*.html"]

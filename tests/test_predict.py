@@ -326,9 +326,9 @@ def test_rank_expected_pit_lane_last():
 
 
 def test_predict_race_ranking_agrees_with_backtest_rank_by():
-    """predict_race's ordering must match race_metrics' _rank_by on the same
+    """predict_race's ordering must match the shared rank_by on the same
     quantized predictions (regression: grid=0 tiebreak diverged)."""
-    from model.evaluate import _rank_by
+    from reporting import rank_by
 
     df = add_features(_synthetic_df(n_seasons=8))
     model = train_final_model(df)
@@ -338,7 +338,7 @@ def test_predict_race_ranking_agrees_with_backtest_rank_by():
         columns={"actual_points": "points", "actual_position": "position"}
     ).copy()
     v["pred_points"] = v["expected_points"]
-    ranks = _rank_by(v, "pred_points", "grid").tolist()
+    ranks = rank_by(v, "pred_points", "grid").tolist()
     assert ranks == list(range(1, len(out) + 1))
 
 

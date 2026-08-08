@@ -35,6 +35,7 @@ from features.build import add_features, assemble
 from model.calibrate import apply_calibration, load_calibrators
 from model.evaluate import race_metrics
 from model.train import load_checkpoint, prepare, quantize_points
+from reporting import rank_by, to_md
 
 # --------------------------------------------------------------------------
 # Target race discovery
@@ -240,6 +241,47 @@ def _synthetic_rows(
     return rows
 
 
+def _target_frame(
+    client: F1Client,
+    base_df: pd.DataFrame,
+    season_datas: list[dict],
+    seasons: list[int],
+    target_season: int,
+    target_round: int,
+    grid_csv: str | None,
+    quiet: bool,
+) -> tuple[pd.DataFrame, bool]:
+    """(feature frame, is_synthetic) for the target race.
+
+    A round with no cached results is an upcoming race: synthetic entry rows
+    are injected so pre-race features are derived exactly as they would be
+    before the race.
+    """
+    synthetic = base_df[(base_df["season"] == target_season) &
+                        (base_df["round"] == target_round)].empty
+    if not synthetic:
+        return base_df, False
+    if not quiet:
+        print(
+            f"Note: no cached results for {target_season} R{target_round} - "
+            "prediction uses synthetic entry rows and is unverified.",
+            file=sys.stderr,
+        )
+    calendar = fetch_calendar(client, target_season)
+    grid_map = read_grid_csv(grid_csv) if grid_csv else None
+    rows = _synthetic_rows(
+        calendar, target_round, _entry_list(client, target_season, base_df), grid_map
+    )
+    if seasons[0] <= target_season <= seasons[-1]:
+        season_datas[target_season - seasons[0]]["results"][target_round] = rows
+    else:
+        season_datas.append(
+            {"calendar": calendar, "results": {target_round: rows},
+             "qualifying": {}, "sprints": {}}
+        )
+    return add_features(assemble(season_datas)), True
+
+
 def read_grid_csv(path: str | Path) -> dict[str, int]:
     """Load a qualifying grid override (CSV with ``driver_id,grid`` columns)."""
     table = pd.read_csv(path)
@@ -254,19 +296,15 @@ def read_grid_csv(path: str | Path) -> dict[str, int]:
 # --------------------------------------------------------------------------
 
 def _rank_expected(out: pd.DataFrame) -> pd.DataFrame:
-    """Sort by expected points desc; ties broken by grid.
+    """Sort by expected points desc; ties broken by grid (pit-lane starts last).
 
-    The grid tiebreak treats pit-lane starts (``grid == 0``) as last, exactly
-    like the backtest's ``_rank_by``, so quantized-point ties rank identically
-    in `predict.py` and `model/evaluate.py`.
+    Uses the shared :func:`reporting.rank_by` so quantized-point ties rank
+    identically to the backtest's ``race_metrics``.
     """
-    out = out.assign(
-        _grid_tb=out["grid"].replace(0, np.inf).fillna(np.inf)
-    ).sort_values(
-        ["expected_points", "_grid_tb"], ascending=[False, True]
-    ).drop(columns="_grid_tb").reset_index(drop=True)
+    out = out.assign(_rank=rank_by(out, "expected_points", "grid"))
+    out = out.sort_values("_rank").reset_index(drop=True)
     out.insert(0, "pred_rank", range(1, len(out) + 1))
-    return out
+    return out.drop(columns="_rank")
 
 
 def predict_race(
@@ -318,17 +356,6 @@ def predict_race(
 # Reporting
 # --------------------------------------------------------------------------
 
-def _to_md(df: pd.DataFrame) -> str:
-    cols = list(df.columns)
-    header = "| " + " | ".join(str(c) for c in cols) + " |"
-    sep = "| " + " | ".join("---" for _ in cols) + " |"
-    body = [
-        "| " + " | ".join(str(row[c]) for c in cols) + " |"
-        for _, row in df.iterrows()
-    ]
-    return "\n".join([header, sep, *body])
-
-
 def format_report(
     result: pd.DataFrame,
     season: int,
@@ -376,7 +403,7 @@ def format_report(
     table["p_scored"] = (table["p_scored"] * 100).round(1).astype(str) + "%"
     table["p_top3"] = (table["p_top3"] * 100).round(1).astype(str) + "%"
     table["p_win"] = (table["p_win"] * 100).round(1).astype(str) + "%"
-    lines.append(_to_md(table))  # type: ignore[reportArgumentType]  # table is a column slice (Unknown)
+    lines.append(to_md(table))  # type: ignore[reportArgumentType]  # table is a column slice (Unknown)
     lines.append("")
 
     if verified:
@@ -389,7 +416,7 @@ def format_report(
         actual["actual_points"] = actual["actual_points"].astype(float)
         lines.append("## Actual results")
         lines.append("")
-        lines.append(_to_md(actual))  # type: ignore[reportArgumentType]  # column slice (Unknown)
+        lines.append(to_md(actual))  # type: ignore[reportArgumentType]  # column slice (Unknown)
         lines.append("")
         lines.append("## Verification vs actuals")
         lines.append("")
@@ -457,34 +484,9 @@ def get_prediction(
     else:
         target_season, target_round = find_next_race(client, base_df, seasons)
 
-    # A round with no cached results is an upcoming race: inject synthetic
-    # entry rows so pre-race features are derived exactly as they would be
-    # before the race.
-    synthetic = base_df[(base_df["season"] == target_season) &
-                        (base_df["round"] == target_round)].empty
-    grid_map = None
-    if synthetic:
-        if not quiet:
-            print(
-                f"Note: no cached results for {target_season} R{target_round} - "
-                "prediction uses synthetic entry rows and is unverified.",
-                file=sys.stderr,
-            )
-        calendar = fetch_calendar(client, target_season)
-        grid_map = read_grid_csv(grid_csv) if grid_csv else None
-        rows = _synthetic_rows(
-            calendar, target_round, _entry_list(client, target_season, base_df), grid_map
-        )
-        if seasons[0] <= target_season <= seasons[-1]:
-            season_datas[target_season - seasons[0]]["results"][target_round] = rows
-        else:
-            season_datas.append(
-                {"calendar": calendar, "results": {target_round: rows},
-                 "qualifying": {}, "sprints": {}}
-            )
-        df = add_features(assemble(season_datas))
-    else:
-        df = base_df
+    df, synthetic = _target_frame(
+        client, base_df, season_datas, seasons, target_season, target_round, grid_csv, quiet
+    )
 
     # Weather is not adopted (see reports/weather.md): the shipped model does
     # not use weather features, so no forecast is fetched at predict time.
