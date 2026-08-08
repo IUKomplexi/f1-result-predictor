@@ -39,3 +39,7 @@ f1web = ["templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# DeprecationWarnings are errors so the suite cannot silently accrue
+# deprecation debt (the joblib/numpy 2.5 warning is suppressed at the
+# checkpoint I/O sites in model/train.py).
+filterwarnings = ["error::DeprecationWarning"]

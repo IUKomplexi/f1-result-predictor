@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional, Sequence
 
-import joblib
 import numpy as np
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression
@@ -28,7 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from features.build import build_dataset  # noqa: E402
 from f1data import F1Client  # noqa: E402
-from model.train import HurdleModels, prepare, walk_forward_seasons  # noqa: E402
+from model.train import (  # noqa: E402
+    HurdleModels,
+    _joblib_dump,
+    _joblib_load,
+    prepare,
+    walk_forward_seasons,
+)
 
 TARGETS = {"scored": "p_scored", "top3": "p_top3", "win": "p_win"}
 
@@ -97,7 +102,7 @@ def load_calibrators(path: str | Path) -> Optional[Dict[str, IsotonicRegression]
     p = Path(path)
     if not p.exists():
         return None
-    payload = joblib.load(p)
+    payload = _joblib_load(p)
     if not isinstance(payload, dict) or "calibrators" not in payload:
         raise ValueError(f"{p} is not a calibrator file (missing 'calibrators' key)")
     return payload["calibrators"]
@@ -106,7 +111,7 @@ def load_calibrators(path: str | Path) -> Optional[Dict[str, IsotonicRegression]
 def save_calibrators(calibrators: Dict[str, IsotonicRegression], path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump({"calibrators": calibrators}, path)
+    _joblib_dump({"calibrators": calibrators}, path)
 
 
 # --------------------------------------------------------------------------

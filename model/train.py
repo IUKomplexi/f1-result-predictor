@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -196,6 +197,30 @@ def train_final_model(df: pd.DataFrame) -> HurdleModels:
     return HurdleModels().fit(X, y)
 
 
+def _joblib_dump(obj: Any, path: Path) -> None:
+    """``joblib.dump`` with a targeted suppression of a numpy 2.5 deprecation.
+
+    joblib's ``numpy_pickle`` still restores array shape by assignment
+    (``array.shape = ...``), which numpy 2.5 deprecated; the upstream fix is
+    unreleased as of joblib 1.5.3. Suppress only DeprecationWarnings raised
+    inside joblib, so checkpoint I/O stays clean under ``-W error``.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", category=DeprecationWarning, module="joblib"
+        )
+        joblib.dump(obj, path)
+
+
+def _joblib_load(path: Path) -> Any:
+    """``joblib.load`` with the same joblib/numpy 2.5 suppression as dump."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", category=DeprecationWarning, module="joblib"
+        )
+        return joblib.load(path)
+
+
 def save_checkpoint(models: HurdleModels, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -208,12 +233,12 @@ def save_checkpoint(models: HurdleModels, path: str | Path) -> None:
         sys.modules["model.train"] = sys.modules["__main__"]
     for cls in (HurdleModels, _ConstantProb, _ConstantPoints):
         cls.__module__ = "model.train"
-    joblib.dump({"models": models, "features": FEATURES}, path)
+    _joblib_dump({"models": models, "features": FEATURES}, path)
     logger.info("Saved checkpoint to %s", path)
 
 
 def load_checkpoint(path: str | Path) -> HurdleModels:
-    payload = joblib.load(path)
+    payload = _joblib_load(Path(path))
     stored = list(payload.get("features", []))
     if stored != list(FEATURES):
         raise ValueError(
