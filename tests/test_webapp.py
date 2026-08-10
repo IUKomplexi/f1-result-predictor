@@ -1,4 +1,4 @@
-"""Tests for the f1web Flask app (HTTP layer with a canned prediction)."""
+"""Tests for the f1web FastAPI app (HTTP layer with a canned prediction)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from fastapi.testclient import TestClient
 
 from f1data import F1APIError
 from f1web.app import _payload, create_app
@@ -30,8 +31,11 @@ def _canned_prediction() -> dict:
                 "actual_position": [np.int64(1), np.int64(4)],
             }
         ),
-        "meta": {"race_name": "Las Vegas", "circuit_id": "vegas",
-                 "date": pd.Timestamp("2024-11-23")},
+        "meta": {
+            "race_name": "Las Vegas",
+            "circuit_id": "vegas",
+            "date": pd.Timestamp("2024-11-23"),
+        },
         "season": 2024,
         "round": 22,
         "synthetic": False,
@@ -47,32 +51,17 @@ def client(monkeypatch):
 
     app_module._PREDICTION_CACHE.clear()  # no cross-test cache pollution
     monkeypatch.setattr(app_module, "get_prediction", lambda **kw: _canned_prediction())
-    return create_app().test_client()
+    return TestClient(create_app())
 
 
 def test_health(client):
-    assert client.get("/health").get_json() == {"status": "ok"}
-
-
-def test_index_renders_prediction(client):
-    resp = client.get("/")
-    assert resp.status_code == 200
-    html = resp.get_data(as_text=True)
-    assert "Las Vegas" in html
-    assert "russell" in html and "mercedes" in html
-    assert "verified vs actuals" in html
-
-
-def test_prediction_page_with_query(client):
-    resp = client.get("/prediction?season=2024&round=22")
-    assert resp.status_code == 200
-    assert "Round 22" in resp.get_data(as_text=True)
+    assert client.get("/health").json() == {"status": "ok"}
 
 
 def test_api_prediction_json(client):
     resp = client.get("/api/prediction?season=2024&round=22")
     assert resp.status_code == 200
-    data = resp.get_json()
+    data = resp.json()
     assert data["season"] == 2024 and data["round"] == 22
     assert data["race"]["race_name"] == "Las Vegas"
     assert data["drivers"][0]["driver_id"] == "russell"
@@ -92,25 +81,9 @@ def test_error_paths(client, monkeypatch):
         raise ValueError("no rows for season 2024 round 99")
 
     monkeypatch.setattr(app_module, "get_prediction", boom)
-    page = client.get("/prediction?season=2024&round=99")
-    assert page.status_code == 400
-    assert "no rows for season" in page.get_data(as_text=True)
     api = client.get("/api/prediction?season=2024&round=99")
     assert api.status_code == 400
-    assert api.get_json()["error"].startswith("no rows for season")
-
-
-def test_backtest_route(client, monkeypatch):
-    import f1web.app as app_module
-
-    if app_module.BACKTEST_REPORT.exists():
-        resp = client.get("/backtest")
-        assert resp.status_code == 200
-        assert "Walk-forward" in resp.get_data(as_text=True)
-
-    # 404 when the report file is missing.
-    monkeypatch.setattr(app_module, "BACKTEST_REPORT", Path("does/not/exist.md"))
-    assert client.get("/backtest").status_code == 404
+    assert api.json()["error"].startswith("no rows for season")
 
 
 def test_systemexit_maps_to_409(client, monkeypatch):
@@ -120,16 +93,16 @@ def test_systemexit_maps_to_409(client, monkeypatch):
         raise SystemExit("no upcoming race: seasons complete")
 
     monkeypatch.setattr(app_module, "get_prediction", no_next)
-    page = client.get("/")
-    assert page.status_code == 409
-    assert "no upcoming race" in page.get_data(as_text=True)
-    api = client.get("/api/prediction").get_json()
+    api = client.get("/api/prediction").json()
     assert api["error"] == "no upcoming race: seasons complete"
 
 
-def test_invalid_query_params_are_400(client):
-    assert client.get("/prediction?season=abc").status_code == 400
-    assert client.get("/api/prediction?round=xyz").status_code == 400
+def test_invalid_query_params_are_422(client):
+    # FastAPI rejects non-integer season/round with 422 (validation error).
+    assert client.get("/api/prediction?season=abc").status_code == 422
+    assert client.get("/api/prediction?round=xyz").status_code == 422
+    assert client.get("/api/calendar?season=abc").status_code == 422
+    assert client.get("/api/standings?season=abc").status_code == 422
 
 
 def test_prediction_is_cached_within_ttl(client, monkeypatch):
@@ -161,7 +134,7 @@ def test_api_backtest_snapshot(client, tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, "BACKTEST_JSON", snap)
     resp = client.get("/api/backtest")
     assert resp.status_code == 200
-    assert resp.get_json()["overall"]["model"]["mae"] == 1.25
+    assert resp.json()["overall"]["model"]["mae"] == 1.25
 
 
 def test_api_backtest_missing_is_404(client, monkeypatch):
@@ -170,7 +143,7 @@ def test_api_backtest_missing_is_404(client, monkeypatch):
     monkeypatch.setattr(app_module, "BACKTEST_JSON", Path("does/not/exist.json"))
     resp = client.get("/api/backtest")
     assert resp.status_code == 404
-    assert "f1-backtest" in resp.get_json()["error"]
+    assert "f1-backtest" in resp.json()["error"]
 
 
 def test_api_calibration_snapshot(client, tmp_path, monkeypatch):
@@ -180,7 +153,7 @@ def test_api_calibration_snapshot(client, tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, "CALIBRATION_JSON", snap)
     resp = client.get("/api/calibration")
     assert resp.status_code == 200
-    assert resp.get_json()["deployed"] == ["win"]
+    assert resp.json()["deployed"] == ["win"]
 
 
 def test_api_calibration_missing_is_404(client, monkeypatch):
@@ -189,7 +162,7 @@ def test_api_calibration_missing_is_404(client, monkeypatch):
     monkeypatch.setattr(app_module, "CALIBRATION_JSON", Path("does/not/exist.json"))
     resp = client.get("/api/calibration")
     assert resp.status_code == 404
-    assert "f1-calibrate" in resp.get_json()["error"]
+    assert "f1-calibrate" in resp.json()["error"]
 
 
 def test_api_calendar(client, monkeypatch):
@@ -201,13 +174,13 @@ def test_api_calendar(client, monkeypatch):
     monkeypatch.setattr(app_module, "fetch_calendar", fake_calendar)
     resp = client.get("/api/calendar?season=2024")
     assert resp.status_code == 200
-    data = resp.get_json()
+    data = resp.json()
     assert data["season"] == 2024
     assert data["calendar"][0]["race_name"] == "Bahrain"
 
 
 def test_api_calendar_requires_season(client):
-    assert client.get("/api/calendar").status_code == 400
+    assert client.get("/api/calendar").status_code == 422
 
 
 def test_api_calendar_error_is_502(client, monkeypatch):
@@ -219,34 +192,36 @@ def test_api_calendar_error_is_502(client, monkeypatch):
     monkeypatch.setattr(app_module, "fetch_calendar", boom)
     resp = client.get("/api/calendar?season=2024")
     assert resp.status_code == 502
-    assert "boom" in resp.get_json()["error"]
+    assert "boom" in resp.json()["error"]
 
 
 def test_api_standings(client, monkeypatch):
     import f1web.app as app_module
 
     monkeypatch.setattr(
-        app_module, "fetch_driver_standings",
+        app_module,
+        "fetch_driver_standings",
         lambda client_, season, round_: [{"driver_id": "verstappen"}],
     )
     monkeypatch.setattr(
-        app_module, "fetch_constructor_standings",
+        app_module,
+        "fetch_constructor_standings",
         lambda client_, season, round_: [{"constructor_id": "red_bull"}],
     )
     resp = client.get("/api/standings?season=2024&round=10")
     assert resp.status_code == 200
-    data = resp.get_json()
+    data = resp.json()
     assert data["season"] == 2024 and data["round"] == 10
     assert data["driver"][0]["driver_id"] == "verstappen"
     assert data["constructor"][0]["constructor_id"] == "red_bull"
 
 
 def test_api_standings_requires_season(client):
-    assert client.get("/api/standings").status_code == 400
+    assert client.get("/api/standings").status_code == 422
 
 
 def test_api_status(client):
-    data = client.get("/api/status").get_json()
+    data = client.get("/api/status").json()
     assert set(data) == {"seasons", "model", "data", "reports", "dashboard"}
     assert set(data["reports"]) == {"has_backtest", "has_calibration"}
     assert set(data["model"]) == {"checkpoint", "calibrators", "has_checkpoint", "has_calibrators"}
@@ -258,7 +233,7 @@ def test_dashboard_not_built_is_503(client, monkeypatch):
     monkeypatch.setattr(app_module, "UI_DIST_INDEX", Path("does/not/exist.html"))
     resp = client.get("/dashboard")
     assert resp.status_code == 503
-    assert "npm run build" in resp.get_data(as_text=True)
+    assert "npm run build" in resp.text
 
 
 def test_dashboard_serves_built_spa(client, tmp_path, monkeypatch):
@@ -270,15 +245,22 @@ def test_dashboard_serves_built_spa(client, tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, "UI_DIST", tmp_path)
     resp = client.get("/dashboard")
     assert resp.status_code == 200
-    assert "dashboard" in resp.get_data(as_text=True)
+    assert "dashboard" in resp.text
+    # Root `/` serves the same dashboard (single frontend).
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "dashboard" in resp.text
 
 
 def test_spa_assets_served(client, tmp_path, monkeypatch):
     import f1web.app as app_module
 
-    asset = tmp_path / "app.js"
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    asset = assets / "app.js"
     asset.write_text("console.log('x')", encoding="utf-8")
     monkeypatch.setattr(app_module, "UI_DIST", tmp_path)
+    monkeypatch.setattr(app_module, "UI_ASSETS_DIR", assets)
     resp = client.get("/assets/app.js")
     assert resp.status_code == 200
-    assert "console.log" in resp.get_data(as_text=True)
+    assert "console.log" in resp.text

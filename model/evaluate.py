@@ -12,8 +12,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
+from f1core.reporting import rank_by, to_md
 from f1data import F1Client
 from features.build import build_dataset
 from model.train import (
@@ -23,7 +22,6 @@ from model.train import (
     quantize_points,
     walk_forward_seasons,
 )
-from reporting import rank_by, to_md
 
 # --------------------------------------------------------------------------
 # Baselines

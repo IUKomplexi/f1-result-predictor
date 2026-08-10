@@ -2,12 +2,12 @@
 
 Usage::
 
-    python predict.py                            # next race (latest season's next round)
-    python predict.py --season 2024 --round 22   # any race; past races are verified vs actuals
-    python predict.py --grid qual.csv            # supply a qualifying grid
-                                                # (driver_id,grid) for an upcoming race
+    f1-predict                               # next race (latest season's next round)
+    f1-predict --season 2024 --round 22      # any race; past races are verified vs actuals
+    f1-predict --grid qual.csv               # supply a qualifying grid
+                                             # (driver_id,grid) for an upcoming race
 
-Requires a trained checkpoint (``python model/train.py``) and cached raw data
+Requires a trained checkpoint (``f1-train``) and cached raw data
 (``python scripts/fetch_all.py``). Output: the ranked grid with expected
 points and win/podium probabilities, saved to ``reports/prediction.md``.
 
@@ -27,15 +27,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from config import load_config
+from f1core.config import load_config
+from f1core.reporting import rank_by, to_md
 from f1data import F1APIError, F1Client, fetch_calendar, fetch_season
 from features.build import add_features, assemble
 from model.calibrate import apply_calibration, load_calibrators
 from model.evaluate import race_metrics
 from model.train import load_checkpoint, prepare, quantize_points
-from reporting import rank_by, to_md
 
 # --------------------------------------------------------------------------
 # Target race discovery

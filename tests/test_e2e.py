@@ -8,20 +8,15 @@ rounds x 12 drivers) to keep the test fast.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import ClassVar
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from helpers import _response, ok_response
 
+from f1core.predict import format_report, predict_race
 from f1data import F1Client, fetch_season
 from features.build import add_features, assemble
 from model.train import POINTS_TABLE, save_checkpoint, train_final_model
-from predict import format_report, predict_race
 
 SEASONS = [2010, 2011, 2012]
 ROUNDS = 4
@@ -195,7 +190,7 @@ def test_pipeline_predicts_upcoming_round_with_synthetic_entries(pipeline):
     Predict a round the cache has no results for: get_prediction injects
     entry rows and still returns a ranked prediction.
     """
-    from predict import get_prediction
+    from f1core.predict import get_prediction
 
     tmp = pipeline["tmp"]
     pred = get_prediction(

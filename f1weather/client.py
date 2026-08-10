@@ -20,7 +20,7 @@ from typing import Any
 
 import requests
 
-from httpclient import RETRYABLE_STATUS, CachedHTTPClient
+from f1core.httpclient import RETRYABLE_STATUS, CachedHTTPClient
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"

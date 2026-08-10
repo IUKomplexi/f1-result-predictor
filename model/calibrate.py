@@ -23,8 +23,7 @@ import numpy as np
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
+from f1core.reporting import to_md
 from f1data import F1Client
 from features.build import build_dataset
 from model.train import (
@@ -34,7 +33,6 @@ from model.train import (
     prepare,
     walk_forward_seasons,
 )
-from reporting import to_md
 
 TARGETS = {"scored": "p_scored", "top3": "p_top3", "win": "p_win"}
 

@@ -2,7 +2,7 @@
  * Typed client for the internal predictor API (endpoints in f1web/app.py).
  *
  * All requests are same-origin: the Vite dev server proxies `/api` to the
- * Flask backend on :8080, and in production Flask serves the built SPA from
+ * FastAPI backend on :8080, and in production FastAPI serves the built SPA from
  * the same origin. Every error response has the shape `{"error": string}`,
  * surfaced here as an `ApiError` with the HTTP status.
  */

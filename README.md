@@ -15,35 +15,36 @@ grid ranked by expected points.
 ## Setup
 
 ```bash
-python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[test]"     # Windows (project + test deps)
-.venv/Scripts/python scripts/fetch_all.py            # fetch + cache 2010-2025 (one-time)
-.venv/Scripts/python -m pytest -q                    # run the test suite
+uv sync --all-extras     # install project + test/lint/web deps into .venv (Python 3.12)
+uv run scripts/fetch_all.py      # fetch + cache 2010-2025 (one-time)
+uv run pytest -q                 # run the test suite
 ```
 
-Requires Python ≥ 3.11. The raw API responses are cached under `data/raw/`
-(one-time ~2 min fetch; everything after that runs offline). The install also
-registers console scripts (`f1-predict`, `f1-train`, `f1-backtest`,
-`f1-calibrate`, `f1-search`) — activate the venv (`.venv\Scripts\activate` on
-Windows, `source .venv/bin/activate` elsewhere) so they are on your PATH.
+Requires Python ≥ 3.12 and [uv](https://docs.astral.sh/uv/) (``uv sync`` pins
+the environment to ``uv.lock``). The raw API responses are cached under
+`data/raw/` (one-time ~2 min fetch; everything after that runs offline). The
+install also registers console scripts (`f1-predict`, `f1-train`, `f1-backtest`,
+`f1-calibrate`, `f1-search`, `f1-web`) — activate the venv
+(`.venv\Scripts\activate` on Windows, `source .venv/bin/activate` elsewhere) so
+they are on your PATH.
 
 ## Usage
 
-Every command has two equivalent forms: `python <module>.py ...` from the repo
-root, or the installed console script. Config/report paths are relative to the
-working directory, so run from the repo root (or pass absolute `--out`/
+Every command has two equivalent forms: `uv run python <module>.py ...` from the
+repo root, or the installed console script. Config/report paths are relative to
+the working directory, so run from the repo root (or pass absolute `--out`/
 `--dataset` paths).
 
 | Command (repo root / console script) | What it does |
 | --- | --- |
-| `python scripts/fetch_all.py [--start 2010] [--end 2025]` | fetch and cache raw API data |
+| `uv run scripts/fetch_all.py [--start 2010] [--end 2025]` | fetch and cache raw API data |
 | `python model/train.py` · `f1-train` | train the final model → `data/model/hurdle.joblib` |
 | `python model/calibrate.py` · `f1-calibrate` | fit isotonic probability calibrators → `data/model/calibrators.joblib` |
 | `python model/evaluate.py [--no-quantize]` · `f1-backtest` | walk-forward backtest vs baselines → `reports/backtest.md` (quantized by default) |
-| `python predict.py` · `f1-predict` | predict the **next race** → `reports/prediction.md` |
-| `python predict.py --season 2024 --round 22` | predict any race; past races are verified vs actuals |
-| `python predict.py --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
-| `f1-web [--host 127.0.0.1] [--port 8080]` | local web UI (needs the `web` extra) |
+| `f1-predict` | predict the **next race** → `reports/prediction.md` |
+| `f1-predict --season 2024 --round 22` | predict any race; past races are verified vs actuals |
+| `f1-predict --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
+| `f1-web [--host 127.0.0.1] [--port 8080]` | local web API + dashboard (needs the `web` extra) |
 | `docker compose up --build` | build + start the dashboard in a container |
 
 Examples:
@@ -78,16 +79,24 @@ docker compose exec web f1-calibrate         # refresh /api/calibration
 Without Docker (requires the `web` extra):
 
 ```bash
-pip install -e ".[web]"       # Flask is an optional extra
+uv sync --extra web          # or uv sync --all-extras
 f1-web --port 8080            # open http://127.0.0.1:8080/
 ```
 
-Endpoints: `/dashboard` (React dashboard), `/` and `/prediction?season=&round=`
-(server-rendered pages), `/backtest` (report), `/health`, and the JSON API under
-`/api/*` (`/api/prediction`, `/api/backtest`, `/api/calibration`, `/api/calendar`,
-`/api/standings`, `/api/status`). Predictions are computed on demand through the
-same code path as the CLI (a few seconds per request — it is a local tool, not a
-service).
+Endpoints: `/` and `/dashboard` (React dashboard), `/health`, and the JSON API
+under `/api/*` (`/api/prediction`, `/api/backtest`, `/api/calibration`,
+`/api/calendar`, `/api/standings`, `/api/status`). The dashboard is the single
+frontend — there is no server-rendered HTML (the FastAPI backend only serves
+JSON + the built SPA). Predictions are computed on demand through the same code
+path as the CLI (a few seconds per request — it is a local tool, not a service).
+
+### Accessing the dashboard
+
+Open the dashboard in a normal browser at a **concrete** address:
+
+- **This machine:** `http://127.0.0.1:8080/` (or `http://localhost:8080/`)
+
+> ⚠️ **Do not use `http://0.0.0.0:8080/`.** `0.0.0.0` is the "bind to all
 
 ## Configuration
 
@@ -100,13 +109,15 @@ flags override config values.
 ```
 scripts/fetch_all.py   ->  data/raw/*.json            (cached API responses)
 f1data/                     polite cached client + normalized fetchers
+f1weather/                  weather data layer (evaluated, not adopted)
+f1core/                     shared core: predict, config, reporting, httpclient
 features/build.py           per-start dataset: strictly pre-race features,
                             points target, leakage-tested
 model/train.py              hurdle model (HGB classifier + regressor)
 model/search.py             walk-forward-validated hyperparameter search
 model/calibrate.py          isotonic probability calibration (per-target)
 model/evaluate.py           walk-forward backtest vs grid/championship/zero
-predict.py                  next-race prediction + markdown report
+f1web/app.py                FastAPI JSON API + built-SPA host
 ```
 
 Leakage safety: every rolling/cumulative feature uses `shift(1)` so it only
@@ -180,20 +191,20 @@ available for future re-evaluation. See `reports/weather.md` for the full
 comparison and how to re-run it.
 
 ## Development
-- Tests: `pytest -q` — fully offline (recorded fixtures, no network). The
+- Tests: `uv run pytest -q` — fully offline (recorded fixtures, no network). The
   suite is enforced deprecation-free (`filterwarnings = ["error::DeprecationWarning"]`
   in `pyproject.toml`).
 - `tests/test_e2e.py` runs the **full pipeline end-to-end** (fetch →
   assemble → features → train → predict → report) offline against a synthetic
   API session, so CI exercises the whole chain, not just pieces.
-- Lint & types: `ruff check .` and `pyright` (installed via the `lint`
-  extra) are both at **0 errors**. `pyrightconfig.json` + `.vscode/settings.json`
+- Lint & types: `uv run ruff check .` and `uv run pyright` (installed via the
+  `lint` extra) are both at **0 errors**. `pyrightconfig.json` + `.vscode/settings.json`
   pin basic mode and exclude `build/`/`tests/`/`data/`; pandas is untyped, so
   the few remaining `Unknown`-union sites carry scoped, justified
   `# type: ignore[reportX]` comments. Pylance in the editor uses the same
   settings as the CLI.
-- CI: `.github/workflows/ci.yml` runs the test matrix on Python 3.11/3.12/3.13
-  plus a lint job (ruff + pyright) on every push to `main` and every PR — live
-  at https://github.com/IUKomplexi/f1-result-predictor/actions (private repo).
-- Reproducibility: `pip install -r requirements.txt` (project + test deps).
+- CI: `.github/workflows/ci.yml` runs the test matrix on Python 3.12/3.13 plus
+  a lint job (ruff + pyright) on every push to `main` and every PR.
+- Reproducibility: `uv sync --frozen` (installs the locked deps from `uv.lock`;
+  `--all-extras` to include test/lint/web tooling).
 - License: MIT (see `LICENSE`).

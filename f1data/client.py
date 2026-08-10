@@ -23,7 +23,7 @@ from pathlib import Path
 
 import requests
 
-from httpclient import RETRYABLE_STATUS, CachedHTTPClient
+from f1core.httpclient import RETRYABLE_STATUS, CachedHTTPClient
 
 DEFAULT_BASE_URL = "https://api.jolpi.ca/ergast/f1"
 DEFAULT_USER_AGENT = (

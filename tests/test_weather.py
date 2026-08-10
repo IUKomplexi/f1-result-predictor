@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import ClassVar
 
 import numpy as np
 import pandas as pd
 from helpers import _response, ok_response
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from f1weather import (
     WEATHER_COLUMNS,
@@ -302,7 +298,7 @@ def test_weather_is_strictly_pre_race_no_forward_leak():
 
 def test_apply_target_weather_uses_forecast_for_upcoming(monkeypatch):
     """An upcoming (synthetic) race requests the FORECAST and merges it in."""
-    import predict as predict_module
+    import f1core.predict as predict_module
 
     calls = {}
 
@@ -350,7 +346,7 @@ def test_apply_target_weather_uses_forecast_for_upcoming(monkeypatch):
 
 def test_apply_target_weather_uses_archive_for_past(monkeypatch):
     """A past race loads the cached ERA5 actuals (forecast=False)."""
-    import predict as predict_module
+    import f1core.predict as predict_module
 
     calls = {}
 

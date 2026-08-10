@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from f1core.predict import predict_race
 from features.build import add_features
 from model.evaluate import (
     baseline_champ_points,
@@ -22,7 +23,6 @@ from model.train import (
     train_final_model,
     walk_forward_seasons,
 )
-from predict import predict_race
 
 
 def _synthetic_df(n_seasons: int = 8, rounds: int = 4, drivers: int = 10) -> pd.DataFrame:

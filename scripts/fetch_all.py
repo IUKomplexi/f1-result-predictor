@@ -14,9 +14,6 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from f1data import F1Client, fetch_season
 

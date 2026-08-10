@@ -18,8 +18,6 @@ from sklearn.ensemble import (
     HistGradientBoostingRegressor,
 )
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from f1data import F1Client
 from features.build import (
     CATEGORICAL_FEATURES,

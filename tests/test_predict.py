@@ -10,9 +10,9 @@ import pytest
 from helpers import ok_response
 from test_model import _synthetic_df
 
+from f1core.predict import _synthetic_rows, format_report, predict_race
 from features.build import add_features, assemble
 from model.train import train_final_model
-from predict import _synthetic_rows, format_report, predict_race
 
 
 def _mini_df() -> pd.DataFrame:
@@ -125,8 +125,8 @@ def test_find_next_race_beyond_cached_seasons(tmp_path):
     import pandas as pd
     from helpers import ok_response
 
+    from f1core.predict import find_next_race
     from f1data import F1Client
-    from predict import find_next_race
 
     class FakeSession:
         headers: ClassVar[dict[str, str]] = {}
@@ -198,8 +198,8 @@ def _fake_session(routes):
 
 
 def test_entry_list_uses_last_completed_race_grid(tmp_path):
+    from f1core.predict import _entry_list
     from f1data import F1Client
-    from predict import _entry_list
 
     session = _fake_session(
         {
@@ -228,8 +228,8 @@ def test_entry_list_uses_last_completed_race_grid(tmp_path):
 
 
 def test_entry_list_falls_back_to_cached_teams(tmp_path):
+    from f1core.predict import _entry_list
     from f1data import F1Client
-    from predict import _entry_list
 
     session = _fake_session(
         {
@@ -311,7 +311,7 @@ def test_format_report_labels_calibration_status():
 
 def test_rank_expected_pit_lane_last():
     """Ties in expected points: pit-lane (grid=0) starts rank last."""
-    from predict import _rank_expected
+    from f1core.predict import _rank_expected
 
     out = pd.DataFrame(
         {
@@ -328,7 +328,7 @@ def test_rank_expected_pit_lane_last():
 def test_predict_race_ranking_agrees_with_backtest_rank_by():
     """predict_race's ordering must match the shared rank_by on the same
     quantized predictions (regression: grid=0 tiebreak diverged)."""
-    from reporting import rank_by
+    from f1core.reporting import rank_by
 
     df = add_features(_synthetic_df(n_seasons=8))
     model = train_final_model(df)
@@ -346,7 +346,7 @@ def test_main_clean_error_without_round(monkeypatch):
     """predict.main() turns get_prediction's ValueError into a clean SystemExit."""
     import sys
 
-    import predict as predict_module
+    import f1core.predict as predict_module
 
     def boom(**kw):
         raise ValueError("round_ is required when season is given")
@@ -359,7 +359,7 @@ def test_main_clean_error_without_round(monkeypatch):
 
 
 def test_get_prediction_requires_season_for_round():
-    from predict import get_prediction
+    from f1core.predict import get_prediction
 
     with pytest.raises(ValueError, match="season is required when round is given"):
         get_prediction(round_=22, quiet=True)

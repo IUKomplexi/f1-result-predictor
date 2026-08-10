@@ -1,17 +1,16 @@
-"""Web UI + JSON API for the F1 result predictor (Flask).
+"""JSON API + SPA host for the F1 result predictor (FastAPI).
 
-Serves both the classic server-rendered pages and the JSON API consumed by
-the React dashboard (``f1web/ui``). Usage::
+Serves the JSON API consumed by the React dashboard (``f1web/ui``) and the
+built SPA itself. There is no server-rendered HTML frontend; the dashboard is
+the single UI. Usage::
 
     f1-web --port 8080              # serve http://127.0.0.1:8080/
     f1-web --host 0.0.0.0           # listen on all interfaces
 
 Endpoints::
 
-    /                                 next-race prediction page
-    /prediction?season=&round=        prediction for a specific race
-    /dashboard                        React dashboard (built SPA from ui/dist)
-    /backtest                         walk-forward backtest report
+    /                                 built SPA (dashboard)
+    /dashboard                        built SPA (alias of /)
     /health                           {"status": "ok"}
 
 JSON API (all errors share the shape ``{"error": ...}``)::
@@ -37,11 +36,12 @@ import sys
 import time
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, render_template, request, send_from_directory
+from fastapi import FastAPI, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from config import load_config
+from f1core.config import load_config
+from f1core.predict import get_prediction
 from f1data import (
     F1APIError,
     F1Client,
@@ -49,16 +49,17 @@ from f1data import (
     fetch_constructor_standings,
     fetch_driver_standings,
 )
-from predict import get_prediction
 
 # Anchored to the repo root so reports resolve regardless of the server's
 # working directory.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BACKTEST_REPORT = REPO_ROOT / "reports" / "backtest.md"
 BACKTEST_JSON = REPO_ROOT / "reports" / "backtest.json"
 CALIBRATION_JSON = REPO_ROOT / "reports" / "calibration.json"
 UI_DIST = REPO_ROOT / "f1web" / "ui" / "dist"
 UI_DIST_INDEX = UI_DIST / "index.html"
+# Vite writes JS/CSS chunks under dist/assets and the built index.html
+# references them as /assets/<file> — so the /assets route resolves here.
+UI_ASSETS_DIR = UI_DIST / "assets"
 
 # In-memory cache for live predictions: (season, round) -> (timestamp, payload).
 _PREDICTION_CACHE: dict[tuple[int | None, int | None], tuple[float, dict]] = {}
@@ -106,172 +107,145 @@ def _data_client() -> F1Client:
     return F1Client(cache_dir=cfg["data"]["cache_dir"], user_agent=cfg["api"]["user_agent"])
 
 
-def create_app() -> Flask:
-    app = Flask(__name__, template_folder="templates")
+def _error(message: str, status: int) -> JSONResponse:
+    """Standard error payload (all API errors share the shape ``{"error": ...}``)."""
+    return JSONResponse(status_code=status, content={"error": message})
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="F1 Result Predictor", version="0.1.0")
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        # Keep every API error on the documented {"error": ...} shape, including
+        # FastAPI's 422 validation responses for bad query params.
+        first = exc.errors()[0] if exc.errors() else {}
+        loc = ".".join(str(p) for p in first.get("loc", ()) if p != "query")
+        return _error(f"invalid query parameter {loc}: {first.get('msg', 'invalid')}", 422)
 
     @app.get("/health")
-    def health() -> Response:
-        return jsonify({"status": "ok"})
+    def health() -> dict:
+        return {"status": "ok"}
 
-    @app.get("/")
-    @app.get("/prediction")
-    def prediction_page() -> Response:
-        try:
-            season, round_ = _prediction_args()
-            pred = get_prediction(season=season, round_=round_, quiet=True)
-        except SystemExit as exc:  # e.g. no upcoming race in the data
-            return _error_page(str(exc), 409)
-        except (ValueError, F1APIError) as exc:
-            return _error_page(str(exc), 400)
-        return Response(
-            render_template(
-                "prediction.html", pred=pred, rows=pred["result"].to_dict("records")
-            )
-        )
-
-    @app.get("/dashboard")
-    def dashboard() -> Response:
+    @app.get("/", include_in_schema=False)
+    @app.get("/dashboard", include_in_schema=False)
+    def dashboard():
         if not UI_DIST_INDEX.exists():
-            return Response(
+            return _error(
                 "Dashboard not built - run `npm run build` in f1web/ui (see README)",
-                status=503,
-                content_type="text/plain",
+                503,
             )
-        return Response(UI_DIST_INDEX.read_text(encoding="utf-8"), content_type="text/html")
+        return FileResponse(UI_DIST_INDEX)
 
-    @app.get("/assets/<path:filename>")
-    def spa_assets(filename: str) -> Response:
-        return send_from_directory(UI_DIST, filename)
+    @app.get("/assets/{file_path:path}", include_in_schema=False)
+    def spa_assets(file_path: str):
+        if not UI_DIST_INDEX.exists():
+            return _error(
+                "Dashboard not built - run `npm run build` in f1web/ui (see README)",
+                503,
+            )
+        target = (UI_ASSETS_DIR / file_path).resolve()
+        if not target.is_relative_to(UI_ASSETS_DIR.resolve()) or not target.is_file():
+            return _error("not found", 404)
+        return FileResponse(target)
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    def favicon():
+        icon = UI_DIST / "favicon.svg"
+        if not icon.is_file():
+            return _error("not found", 404)
+        return FileResponse(icon)
 
     @app.get("/api/prediction")
-    def prediction_api() -> Response:
+    def prediction_api(
+        season: int | None = Query(default=None),
+        round: int | None = Query(default=None),
+    ):
         try:
-            season, round_ = _prediction_args()
-            return jsonify(_cached_prediction(season, round_))
+            return _cached_prediction(season, round)
         except SystemExit as exc:
-            return _error_json(str(exc), 409)
+            return _error(str(exc), 409)
         except (ValueError, F1APIError) as exc:
-            return _error_json(str(exc), 400)
+            return _error(str(exc), 400)
 
     @app.get("/api/backtest")
-    def backtest_api() -> Response:
+    def backtest_api():
         data = _read_json(BACKTEST_JSON)
         if data is None:
-            return _error_json(
-                f"{BACKTEST_JSON} not found - run `f1-backtest` first", 404
-            )
-        return jsonify(data)
+            return _error(f"{BACKTEST_JSON} not found - run `f1-backtest` first", 404)
+        return data
 
     @app.get("/api/calibration")
-    def calibration_api() -> Response:
+    def calibration_api():
         data = _read_json(CALIBRATION_JSON)
         if data is None:
-            return _error_json(
-                f"{CALIBRATION_JSON} not found - run `f1-calibrate` first", 404
-            )
-        return jsonify(data)
+            return _error(f"{CALIBRATION_JSON} not found - run `f1-calibrate` first", 404)
+        return data
 
     @app.get("/api/calendar")
-    def calendar_api() -> Response:
-        season = request.args.get("season", type=int)
-        if season is None:
-            return _error_json("season is required", 400)
+    def calendar_api(season: int):
         try:
             calendar = fetch_calendar(_data_client(), season)
         except (F1APIError, KeyError, TypeError) as exc:
-            return _error_json(f"could not fetch calendar for {season}: {exc}", 502)
-        return jsonify({"season": season, "calendar": calendar})
+            return _error(f"could not fetch calendar for {season}: {exc}", 502)
+        return {"season": season, "calendar": calendar}
 
     @app.get("/api/standings")
-    def standings_api() -> Response:
-        season = request.args.get("season", type=int)
-        if season is None:
-            return _error_json("season is required", 400)
-        round_ = request.args.get("round", type=int)
+    def standings_api(
+        season: int,
+        round: int | None = Query(default=None),
+    ):
         client = _data_client()
         try:
-            driver = fetch_driver_standings(client, season, round_)
-            constructor = fetch_constructor_standings(client, season, round_)
+            driver = fetch_driver_standings(client, season, round)
+            constructor = fetch_constructor_standings(client, season, round)
         except (F1APIError, KeyError, TypeError) as exc:
-            return _error_json(f"could not fetch standings for {season}: {exc}", 502)
-        return jsonify(
-            {"season": season, "round": round_, "driver": driver, "constructor": constructor}
-        )
+            return _error(f"could not fetch standings for {season}: {exc}", 502)
+        return {"season": season, "round": round, "driver": driver, "constructor": constructor}
 
     @app.get("/api/status")
-    def status_api() -> Response:
+    def status_api() -> dict:
         cfg = load_config()
 
         def exists(rel: str) -> bool:
             return (REPO_ROOT / rel).exists()
 
-        return jsonify(
-            {
-                "seasons": {
-                    "start": cfg["data"]["start_season"],
-                    "end": cfg["data"]["end_season"],
-                },
-                "model": {
-                    "checkpoint": cfg["model"]["checkpoint"],
-                    "calibrators": cfg["model"]["calibrators"],
-                    "has_checkpoint": exists(cfg["model"]["checkpoint"]),
-                    "has_calibrators": exists(cfg["model"]["calibrators"]),
-                },
-                "data": {
-                    "dataset": cfg["data"]["dataset"],
-                    "has_dataset": exists(cfg["data"]["dataset"]),
-                    "has_raw_cache": (REPO_ROOT / cfg["data"]["cache_dir"]).is_dir(),
-                },
-                "reports": {
-                    "has_backtest": BACKTEST_JSON.exists(),
-                    "has_calibration": CALIBRATION_JSON.exists(),
-                },
-                "dashboard": {"built": UI_DIST_INDEX.exists()},
-            }
-        )
-
-    @app.get("/backtest")
-    def backtest() -> Response:
-        if not BACKTEST_REPORT.exists():
-            return Response(
-                "reports/backtest.md not found - run `f1-backtest` first",
-                status=404,
-            )
-        return Response(
-            render_template("backtest.html", content=BACKTEST_REPORT.read_text(encoding="utf-8"))
-        )
+        return {
+            "seasons": {
+                "start": cfg["data"]["start_season"],
+                "end": cfg["data"]["end_season"],
+            },
+            "model": {
+                "checkpoint": cfg["model"]["checkpoint"],
+                "calibrators": cfg["model"]["calibrators"],
+                "has_checkpoint": exists(cfg["model"]["checkpoint"]),
+                "has_calibrators": exists(cfg["model"]["calibrators"]),
+            },
+            "data": {
+                "dataset": cfg["data"]["dataset"],
+                "has_dataset": exists(cfg["data"]["dataset"]),
+                "has_raw_cache": (REPO_ROOT / cfg["data"]["cache_dir"]).is_dir(),
+            },
+            "reports": {
+                "has_backtest": BACKTEST_JSON.exists(),
+                "has_calibration": CALIBRATION_JSON.exists(),
+            },
+            "dashboard": {"built": UI_DIST_INDEX.exists()},
+        }
 
     return app
 
 
-def _prediction_args() -> tuple[int | None, int | None]:
-    """Parse season/round query args; non-integer values raise ValueError."""
-    args = request.args
-    season, round_ = args.get("season", type=int), args.get("round", type=int)
-    if (args.get("season") is not None and season is None) or (
-        args.get("round") is not None and round_ is None
-    ):
-        raise ValueError("season/round must be integers")
-    return season, round_
-
-
-def _error_page(message: str, status: int) -> Response:
-    return Response(render_template("error.html", message=message), status=status)
-
-
-def _error_json(message: str, status: int) -> Response:
-    resp = jsonify({"error": message})
-    resp.status_code = status
-    return resp
-
-
 def main() -> int:
+    import uvicorn
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
-    create_app().run(host=args.host, port=args.port, debug=args.debug)
+    level = "debug" if args.debug else "info"
+    uvicorn.run(create_app(), host=args.host, port=args.port, log_level=level)
     return 0
 
 

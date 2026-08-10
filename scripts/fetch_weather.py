@@ -18,11 +18,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from config import load_config
+from f1core.config import load_config
 from f1data import F1Client, fetch_season
 from f1weather import (
     WeatherClient,

@@ -1,4 +1,4 @@
-"""Web UI for the F1 result predictor (Flask)."""
+"""Web UI for the F1 result predictor (FastAPI)."""
 
 from .app import create_app, main
 

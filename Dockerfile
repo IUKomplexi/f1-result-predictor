@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
-# Multi-stage image for the F1 result predictor web dashboard.
+# Two-stage image for the F1 result predictor dashboard.
 #
 # Stage 1 builds the React SPA (f1web/ui/dist is gitignored, so it is
-# compiled here); stage 2 installs the Python app and bakes in the cached
-# data, reports, and config for a fully offline, turnkey runtime.
+# compiled here); stage 2 installs the Python app with uv (locked) and bakes
+# in the cached data, reports, and config for a fully offline, turnkey runtime.
 #
 # Build:  docker build -t f1-result-predictor .
 # Run:    docker run -p 8080:8080 f1-result-predictor
-#         -> http://127.0.0.1:8080/dashboard
+#         -> http://127.0.0.1:8080/  (dashboard)
 
 # ---- Stage 1: build the SPA -------------------------------------------------
 FROM node:22-slim AS ui
@@ -20,26 +20,27 @@ RUN npm run build
 # ---- Stage 2: Python runtime ------------------------------------------------
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_RETRIES=5 \
-    PIP_TIMEOUT=60
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
+
+# uv gives a locked, reproducible install from uv.lock (no compiler needed:
+# all deps ship manylinux wheels).
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Install the project (all deps ship manylinux wheels; no compiler needed).
-# Editable install: the app must resolve from /app, where data/, reports/,
-# config.toml and f1web/ui/dist are baked in — a site-packages copy would
-# not see them (mirrors requirements.txt's `-e .[test]`).
-COPY pyproject.toml ./
+# Copy the project sources and install editable (uv sync installs the current
+# project editable into /app/.venv), so the app resolves data/, reports/ and
+# config.toml from /app at runtime.
+COPY pyproject.toml uv.lock ./
+COPY f1core/ f1core/
 COPY f1data/ f1data/
 COPY f1weather/ f1weather/
 COPY features/ features/
 COPY model/ model/
 COPY f1web/__init__.py f1web/app.py f1web/
-COPY f1web/templates/ f1web/templates/
-COPY config.py predict.py reporting.py httpclient.py ./
-RUN pip install -e ".[web]"
+RUN uv sync --frozen --no-dev --extra web
 
 # Bake the cached raw API + dataset + model checkpoints and the reports.
 # config.toml is optional (code defaults match it); copied so overrides stick.
