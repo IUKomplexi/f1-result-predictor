@@ -44,6 +44,7 @@ working directory, so run from the repo root (or pass absolute `--out`/
 | `python predict.py --season 2024 --round 22` | predict any race; past races are verified vs actuals |
 | `python predict.py --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
 | `f1-web [--host 127.0.0.1] [--port 8080]` | local web UI (needs the `web` extra) |
+| `docker compose up --build` | build + start the dashboard in a container |
 
 Examples:
 
@@ -56,15 +57,37 @@ python model/search.py --n 16 --max-test-season 2019   # re-tune hyperparameters
 
 ## Web UI
 
+Quickest path — no venv or Node toolchain needed, fully offline:
+
+```bash
+docker compose up --build      # build the image, start on http://127.0.0.1:8080/
+```
+
+The image is self-contained: it builds the React dashboard (`f1web/ui`),
+installs the app, and bakes in the cached raw data, the dataset and the model
+checkpoints (`data/`), so everything runs offline. Generated snapshots
+(`reports/backtest.json`, `reports/calibration.json`) live in a named `reports`
+volume and survive rebuilds; the baked-in data is refreshed only by rebuilding
+the image (e.g. after `scripts/fetch_all.py` or `f1-train`):
+
+```bash
+docker compose exec web f1-backtest          # refresh /api/backtest
+docker compose exec web f1-calibrate         # refresh /api/calibration
+```
+
+Without Docker (requires the `web` extra):
+
 ```bash
 pip install -e ".[web]"       # Flask is an optional extra
 f1-web --port 8080            # open http://127.0.0.1:8080/
 ```
 
-Endpoints: `/` (next-race prediction page), `/prediction?season=&round=` (any
-race), `/api/prediction` (JSON), `/backtest` (report), `/health`. Predictions
-are computed on demand through the same code path as the CLI (a few seconds
-per request — it is a local tool, not a service).
+Endpoints: `/dashboard` (React dashboard), `/` and `/prediction?season=&round=`
+(server-rendered pages), `/backtest` (report), `/health`, and the JSON API under
+`/api/*` (`/api/prediction`, `/api/backtest`, `/api/calibration`, `/api/calendar`,
+`/api/standings`, `/api/status`). Predictions are computed on demand through the
+same code path as the CLI (a few seconds per request — it is a local tool, not a
+service).
 
 ## Configuration
 

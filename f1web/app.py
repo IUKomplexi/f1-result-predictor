@@ -18,7 +18,7 @@ JSON API (all errors share the shape ``{"error": ...}``)::
 
     /api/prediction?season=&round=    prediction (live, briefly cached)
     /api/backtest                     backtest snapshot (reports/backtest.json)
-    /api/calibration                  calibration snapshot (data/model/calibration.json)
+    /api/calibration                  calibration snapshot (reports/calibration.json)
     /api/calendar?season=             race calendar
     /api/standings?season=&round=     driver + constructor standings
     /api/status                       artifact presence + model/dataset paths
@@ -56,7 +56,7 @@ from predict import get_prediction
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKTEST_REPORT = REPO_ROOT / "reports" / "backtest.md"
 BACKTEST_JSON = REPO_ROOT / "reports" / "backtest.json"
-CALIBRATION_JSON = REPO_ROOT / "data" / "model" / "calibration.json"
+CALIBRATION_JSON = REPO_ROOT / "reports" / "calibration.json"
 UI_DIST = REPO_ROOT / "f1web" / "ui" / "dist"
 UI_DIST_INDEX = UI_DIST / "index.html"
 

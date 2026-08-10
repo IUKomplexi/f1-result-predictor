@@ -228,7 +228,7 @@ def main() -> int:
     parser.add_argument("--cache-dir", default="data/raw")
     parser.add_argument("--dataset", default="data/features.parquet")
     parser.add_argument("--out", default="data/model/calibrators.joblib")
-    parser.add_argument("--out-json", default="data/model/calibration.json",
+    parser.add_argument("--out-json", default="reports/calibration.json",
                         help="JSON snapshot for the web dashboard")
     args = parser.parse_args()
 
