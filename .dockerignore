@@ -1,0 +1,22 @@
+# Python tooling / build artifacts (rebuilt in-image)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+*.egg-info/
+ruff_errors.txt
+pyright_errors.json
+
+# Frontend deps + build output (built in the ui stage)
+f1web/ui/node_modules/
+f1web/ui/dist/
+
+# Git + tooling state
+.git/
+.github/
+.reasonix/
+.vscode/
+
+# Derived weather cache (regenerable; not needed for the dashboard)
+data/weather/
