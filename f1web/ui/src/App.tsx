@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, type KeyboardEvent } from 'react'
-import { NextRace } from './components/next-race/NextRace'
+import { Race } from './components/race/Race'
 import { RaceHistory } from './components/race-history/RaceHistory'
 import { SeasonContext } from './components/season/SeasonContext'
 import { Skeleton } from './components/ui/DataState'
@@ -19,7 +19,7 @@ const Settings = lazy(() =>
 )
 
 const TABS = [
-  { id: 'next', label: 'Next Race', component: NextRace },
+  { id: 'race', label: 'Race', component: Race },
   { id: 'history', label: 'Race History', component: RaceHistory },
   { id: 'backtest', label: 'Backtest', component: Backtest },
   { id: 'calibration', label: 'Calibration', component: Calibration },
@@ -31,7 +31,7 @@ const TABS = [
 type TabId = (typeof TABS)[number]['id']
 
 export default function App() {
-  const [tab, setTab] = useState<TabId>('next')
+  const [tab, setTab] = useState<TabId>('race')
   const Active = TABS.find((entry) => entry.id === tab)?.component ?? TABS[0].component
 
   function moveFocus(event: KeyboardEvent, index: number) {
