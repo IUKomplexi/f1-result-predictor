@@ -7,6 +7,7 @@ import {
   type ConfigResponse,
 } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
+import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import './Settings.css'
 
@@ -159,30 +160,69 @@ function Field({
   const help = field.help ? <p className="field-help">{field.help}</p> : null
 
   if (field.key === 'enabled' && field.type === 'features') {
+    const selectedIds = (editor.cfg.features?.enabled as string[] | null) ?? editor.defaults
+    const groups: { key: string; label: string }[] = [
+      { key: 'core', label: 'Core — on by default' },
+      { key: 'selectable', label: 'Selectable — off by default' },
+      { key: 'cut', label: 'Cut — removal improved the backtest' },
+    ]
     return (
       <div className="field span-all">
         <span className="field-label">Features</span>
         <button type="button" className="link-button" onClick={reset(editor, onChange)}>
           Reset to registry defaults
         </button>
-        <div className="feature-grid">
-          {editor.registry.map((id) => {
-            const selected = ((editor.cfg.features?.enabled as string[] | null) ??
-              editor.defaults)!.includes(id)
-            return (
-              <label key={id} className="feature-check">
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  onChange={(e) => toggleFeature(id, e.target.checked)}
-                />
-                <span>
-                  {id} <em className="feature-cat">{editor.categories[id]}</em>
-                </span>
-              </label>
-            )
-          })}
+        {groups.map((group) => (
+          <div key={group.key} className="feature-group">
+            <h3 className="feature-group-title">{group.label}</h3>
+            <div className="feature-grid">
+              {editor.registry
+                .filter((id) => editor.categories[id] === group.key)
+                .map((id) => {
+                  const selected = selectedIds!.includes(id)
+                  return (
+                    <label key={id} className="feature-check">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(e) => toggleFeature(id, e.target.checked)}
+                      />
+                      <span>{id}</span>
+                    </label>
+                  )
+                })}
+            </div>
+          </div>
+        ))}
+        {help}
+      </div>
+    )
+  }
+
+  if (field.section === 'weather') {
+    // Weather is evaluated but not adopted (reports/weather.md): keep the cache
+    // dir editable but present a visible, disabled "plug into data" placeholder.
+    return (
+      <div className="field span-all">
+        <div className="weather-note">
+          <Badge variant="warn">Not adopted</Badge>
+          <p className="field-help">
+            Weather features were evaluated but not adopted (see reports/weather.md);
+            the shipped model does not use them. The data plumbing is not enabled.
+          </p>
         </div>
+        <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
+          {field.key}
+        </label>
+        <input
+          id={`${field.section}-${field.key}`}
+          type="text"
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <button type="button" className="button" disabled title="Weather is not adopted; the data plumbing is not enabled.">
+          Plug into data
+        </button>
         {help}
       </div>
     )
