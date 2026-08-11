@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   CartesianGrid,
   Legend,
@@ -13,6 +14,7 @@ import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { JobRunner } from '../ui/JobRunner'
 import './Backtest.css'
 
 const BASELINES = ['model', 'grid', 'championship', 'zero'] as const
@@ -40,10 +42,80 @@ const METRICS: { key: keyof BacktestMetricRow; label: string }[] = [
 ]
 
 export function Backtest() {
-  const { state, retry } = useApi('backtest', () => getBacktest())
-  if (state.phase === 'loading') return <Skeleton rows={8} />
-  if (state.phase === 'error') return <ErrorState message={state.message} onRetry={retry} />
-  return <BacktestView backtest={state.data} />
+  const [quantize, setQuantize] = useState(true)
+  const [version, setVersion] = useState(0)
+  const { state, retry } = useApi(`backtest-${version}`, () => getBacktest())
+  return (
+    <>
+      <JobRunner
+        type="backtest"
+        runLabel="Run backtest"
+        onDone={() => setVersion((v) => v + 1)}
+        buildPayload={() => ({ quantize })}
+        options={
+          <div className="job-option">
+            <label className="check-line" title="Round expected points to the nearest points-table value (matches the deployed predictor).">
+              <input
+                type="checkbox"
+                checked={quantize}
+                onChange={(e) => setQuantize(e.target.checked)}
+              />
+              Quantize points
+            </label>
+          </div>
+        }
+        renderResult={(job) => <BacktestRunResult job={job} />}
+      />
+      {state.phase === 'loading' ? (
+        <Skeleton rows={8} />
+      ) : state.phase === 'error' ? (
+        <ErrorState message={state.message} onRetry={retry} />
+      ) : (
+        <BacktestView backtest={state.data} />
+      )}
+    </>
+  )
+}
+
+function BacktestRunResult({ job }: { job: { result: Record<string, unknown> | null; log: string[] } }) {
+  const overall = (job.result?.overall ?? {}) as Record<string, Record<string, number>>
+  return (
+    <div className="result-block">
+      <h3 className="card-title">Backtest run</h3>
+      {job.log.length > 0 && (
+        <details className="job-log">
+          <summary>Log</summary>
+          {job.log.map((line, i) => (
+            <pre key={i} className="log-line">{line}</pre>
+          ))}
+        </details>
+      )}
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Baseline</th>
+              <th scope="col" className="num">Winner hit</th>
+              <th scope="col" className="num">Top3 overlap</th>
+              <th scope="col" className="num">Spearman</th>
+              <th scope="col" className="num">MAE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(overall).map(([name, m]) => (
+              <tr key={name}>
+                <td>{name}</td>
+                <td className="num">{m.winner_hit?.toFixed(3)}</td>
+                <td className="num">{m.top3_overlap?.toFixed(3)}</td>
+                <td className="num">{m.spearman?.toFixed(3)}</td>
+                <td className="num">{m.mae?.toFixed(3)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 function BacktestView({ backtest }: { backtest: Backtest }) {

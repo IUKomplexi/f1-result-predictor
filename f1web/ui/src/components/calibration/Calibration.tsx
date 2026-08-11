@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -13,6 +14,7 @@ import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { JobRunner } from '../ui/JobRunner'
 import './Calibration.css'
 
 const TARGET_LABEL: Record<string, string> = {
@@ -22,10 +24,84 @@ const TARGET_LABEL: Record<string, string> = {
 }
 
 export function Calibration() {
-  const { state, retry } = useApi('calibration', () => getCalibration())
-  if (state.phase === 'loading') return <Skeleton rows={6} />
-  if (state.phase === 'error') return <ErrorState message={state.message} onRetry={retry} />
-  return <CalibrationView calibration={state.data} />
+  const [fitThrough, setFitThrough] = useState('')
+  const [evalFrom, setEvalFrom] = useState('')
+  const [version, setVersion] = useState(0)
+  const { state, retry } = useApi(`calibration-${version}`, () => getCalibration())
+
+  return (
+    <>
+      <JobRunner
+        type="calibrate"
+        runLabel="Run calibration"
+        onDone={() => setVersion((v) => v + 1)}
+        buildPayload={() => ({
+          fit_through_season: fitThrough === '' ? null : Number(fitThrough),
+          eval_from_season: evalFrom === '' ? null : Number(evalFrom),
+        })}
+        options={
+          <div className="season-config">
+            <div className="job-option">
+              <label className="field-label" htmlFor="cal-fit-through">Fit through season</label>
+              <input
+                id="cal-fit-through"
+                type="number"
+                value={fitThrough}
+                onChange={(e) => setFitThrough(e.target.value)}
+                placeholder="auto"
+              />
+            </div>
+            <div className="job-option">
+              <label className="field-label" htmlFor="cal-eval-from">Evaluate from season</label>
+              <input
+                id="cal-eval-from"
+                type="number"
+                value={evalFrom}
+                onChange={(e) => setEvalFrom(e.target.value)}
+                placeholder="auto"
+              />
+            </div>
+          </div>
+        }
+        renderResult={(job) => <CalibrateRunResult job={job} />}
+      />
+      <p className="muted config-intro">
+        The hold-out split (fit through / evaluate from) controls which
+        out-of-sample seasons calibrators are fit on and which they are
+        evaluated on for the deployment decision. Leave blank for the default
+        chronological two-thirds split. This configures the run — it does not
+        change the model.
+      </p>
+      {state.phase === 'loading' ? (
+        <Skeleton rows={6} />
+      ) : state.phase === 'error' ? (
+        <ErrorState message={state.message} onRetry={retry} />
+      ) : (
+        <CalibrationView calibration={state.data} />
+      )}
+    </>
+  )
+}
+
+function CalibrateRunResult({ job }: { job: { result: Record<string, unknown> | null; log: string[] } }) {
+  const result = job.result ?? {}
+  return (
+    <div className="result-block">
+      <h3 className="card-title">Calibration run</h3>
+      {job.log.length > 0 && (
+        <details className="job-log">
+          <summary>Log</summary>
+          {job.log.map((line, i) => (
+            <pre key={i} className="log-line">{line}</pre>
+          ))}
+        </details>
+      )}
+      <ul className="summary-list">
+        <li>deployed: <code className="mono">{String(result.deployed)}</code></li>
+        <li>fingerprint: <code className="mono">{String(result.fingerprint)}</code></li>
+      </ul>
+    </div>
+  )
 }
 
 function CalibrationView({ calibration }: { calibration: Calibration }) {

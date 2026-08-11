@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState, type KeyboardEvent } from 'react'
 import { Race } from './components/race/Race'
 import { RaceHistory } from './components/race-history/RaceHistory'
+import { OverridePrediction } from './components/override/OverridePrediction'
 import { SeasonContext } from './components/season/SeasonContext'
 import { Skeleton } from './components/ui/DataState'
 
@@ -11,8 +12,14 @@ const Backtest = lazy(() =>
 const Calibration = lazy(() =>
   import('./components/calibration/Calibration').then((m) => ({ default: m.Calibration })),
 )
-const Pipeline = lazy(() =>
-  import('./components/pipeline/Pipeline').then((m) => ({ default: m.Pipeline })),
+const Data = lazy(() =>
+  import('./components/data/Data').then((m) => ({ default: m.Data })),
+)
+const Train = lazy(() =>
+  import('./components/train/Train').then((m) => ({ default: m.Train })),
+)
+const Search = lazy(() =>
+  import('./components/search/Search').then((m) => ({ default: m.Search })),
 )
 const Settings = lazy(() =>
   import('./components/settings/Settings').then((m) => ({ default: m.Settings })),
@@ -21,9 +28,12 @@ const Settings = lazy(() =>
 const TABS = [
   { id: 'race', label: 'Race', component: Race },
   { id: 'history', label: 'Race History', component: RaceHistory },
+  { id: 'data', label: 'Data', component: Data },
+  { id: 'train', label: 'Train', component: Train },
+  { id: 'search', label: 'Search', component: Search },
   { id: 'backtest', label: 'Backtest', component: Backtest },
   { id: 'calibration', label: 'Calibration', component: Calibration },
-  { id: 'pipeline', label: 'Pipeline', component: Pipeline },
+  { id: 'specific', label: 'Specific Race', component: OverridePrediction },
   { id: 'settings', label: 'Settings', component: Settings },
   { id: 'season', label: 'Season', component: SeasonContext },
 ] as const
