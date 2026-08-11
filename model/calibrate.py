@@ -254,6 +254,30 @@ def calibration_snapshot(
 # CLI
 # --------------------------------------------------------------------------
 
+def _holdout_split(
+    oos: pd.DataFrame,
+    fit_through_season: int | None = None,
+    eval_from_season: int | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(fit, eval) OOS frames for the calibration evaluation split.
+
+    With both ``fit_through_season`` and ``eval_from_season`` given, the split
+    is explicit: fit on OOS seasons <= fit-through and evaluate on seasons >=
+    eval-from. Otherwise a chronological two-thirds split is used.
+    """
+    if fit_through_season is not None and eval_from_season is not None:
+        return (
+            oos[oos["season"] <= fit_through_season],  # type: ignore[reportAttributeAccessIssue]  # boolean-mask slice is Unknown
+            oos[oos["season"] >= eval_from_season],  # type: ignore[reportAttributeAccessIssue]
+        )
+    seasons = sorted(oos["season"].unique())
+    split_at = seasons[len(seasons) * 2 // 3]
+    return (
+        oos[oos["season"] < split_at],  # type: ignore[reportAttributeAccessIssue]
+        oos[oos["season"] >= split_at],  # type: ignore[reportAttributeAccessIssue]
+    )
+
+
 def run(
     *,
     start: int = 2010,
@@ -267,6 +291,8 @@ def run(
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
     log=None,
+    fit_through_season: int | None = None,
+    eval_from_season: int | None = None,
 ) -> dict:
     """Fit + deploy calibrators end-to-end and return a JSON-safe summary.
 
@@ -274,6 +300,14 @@ def run(
     calibrator checkpoint and the ``reports/calibration.json`` dashboard
     snapshot; the returned dict carries the full ``calibration_snapshot`` so
     the web runner can refresh the dashboard view without re-reading the file.
+
+    ``fit_through_season`` / ``eval_from_season`` optionally override the
+    hold-out split used for the *evaluation* Brier deltas (which calibrators
+    are deployed): with both set, calibrators for evaluation are fit on OOS
+    seasons <= ``fit_through_season`` and evaluated on seasons >=
+    ``eval_from_season``. Deployment calibrators are always fit on all OOS
+    scores. When omitted, the default chronological two-thirds split is used.
+    This is a configuration choice, not new model behavior.
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
@@ -292,11 +326,9 @@ def run(
 
     # Honest evaluation: fit calibrators on the earlier OOS seasons only and
     # evaluate on the later ones, so the reported Brier deltas are not
-    # in-sample for the calibration step.
-    seasons = sorted(oos["season"].unique())
-    split_at = seasons[len(seasons) * 2 // 3]
-    fit_oos = oos[oos["season"] < split_at]
-    eval_oos = oos[oos["season"] >= split_at]
+    # in-sample for the calibration step. An explicit split (fit through /
+    # evaluate from) overrides the default two-thirds chronological split.
+    fit_oos, eval_oos = _holdout_split(oos, fit_through_season, eval_from_season)
     if len(eval_oos) < 200:
         eval_oos = oos
         context = f"in-sample (too few hold-out rows; fit+eval on the same {len(oos)} OOS rows)"

@@ -39,7 +39,7 @@ JOB_TYPES: dict[str, str] = {
 JOB_PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     "fetch": ("start", "end", "refresh"),
     "train": ("refresh",),
-    "calibrate": ("refresh",),
+    "calibrate": ("fit_through_season", "eval_from_season", "refresh"),
     "backtest": ("quantize", "refresh"),
     "search": ("n", "max_test_season", "seed", "refresh"),
 }
@@ -173,7 +173,21 @@ def _calibrate_handler(payload: dict, log) -> dict:
     from model.calibrate import run as run_calibrate
 
     cfg = _load_config()
-    return run_calibrate(refresh=bool(payload.get("refresh", False)), cfg=cfg, log=log)
+    return run_calibrate(
+        refresh=bool(payload.get("refresh", False)), cfg=cfg, log=log,
+        fit_through_season=_int_or_none(payload.get("fit_through_season")),
+        eval_from_season=_int_or_none(payload.get("eval_from_season")),
+    )
+
+
+def _int_or_none(value) -> int | None:
+    """Coerce a job payload value to an int, or None when empty/invalid."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _backtest_handler(payload: dict, log) -> dict:

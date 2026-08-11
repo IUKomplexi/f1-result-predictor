@@ -133,3 +133,24 @@ def test_calibrators_keyed_to_feature_fingerprint(tmp_path):
     legacy = tmp_path / "legacy.joblib"
     joblib.dump({"calibrators": cal}, legacy)
     assert load_calibrators(legacy, expected=subset) is not None
+
+
+def test_holdout_split_default_and_explicit():
+    """The calibration evaluation split honors an explicit season override."""
+    from model.calibrate import _holdout_split
+
+    oos = pd.DataFrame(
+        {
+            "season": [2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020] * 2,
+            "scored": [1, 0] * 8,
+        }
+    )
+    # Default: two-thirds of the seasons go to fit, the last third to eval.
+    fit, eval_ = _holdout_split(oos)
+    assert set(fit["season"].unique()) == {2013, 2014, 2015, 2016, 2017}
+    assert set(eval_["season"].unique()) == {2018, 2019, 2020}
+
+    # Explicit override: fit through 2017, evaluate from 2019.
+    fit, eval_ = _holdout_split(oos, fit_through_season=2017, eval_from_season=2019)
+    assert set(fit["season"].unique()) == {2013, 2014, 2015, 2016, 2017}
+    assert set(eval_["season"].unique()) == {2019, 2020}
