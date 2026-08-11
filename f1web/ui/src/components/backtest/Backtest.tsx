@@ -4,6 +4,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -174,6 +175,27 @@ function BacktestView({ backtest }: { backtest: Backtest }) {
           ))}
         </div>
       </section>
+
+      <section className="card">
+        <h2 className="card-title">Model edge vs baselines (per season)</h2>
+        <p className="context-note">
+          Positive means the model beat the baseline that season (for MAE,
+          lower is better, so the edge is reversed). See how much better/worse
+          the model is than the grid / championship across seasons.
+        </p>
+        <div className="chart-grid">
+          {METRICS.map((metric) => (
+            <figure key={metric.key} className="chart-figure">
+              <figcaption>vs grid / championship — {metric.label}</figcaption>
+              <MetricEdgeChart
+                metric={metric.key}
+                seasons={seasons}
+                bySeason={backtest.by_season}
+              />
+            </figure>
+          ))}
+        </div>
+      </section>
     </>
   )
 }
@@ -241,6 +263,98 @@ function MetricChart({
               connectNulls={false}
             />
           ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// Metrics where a higher value is better. For the rest (MAE), lower is better,
+// so the edge is computed as baseline - model to keep "positive = model wins".
+const IMPROVE_UP = new Set<keyof BacktestMetricRow>([
+  'winner_hit',
+  'top3_overlap',
+  'spearman',
+])
+
+function edge(
+  model: number | undefined,
+  baseline: number | undefined,
+  metric: keyof BacktestMetricRow,
+): number | undefined {
+  if (model === undefined || baseline === undefined) return undefined
+  return IMPROVE_UP.has(metric) ? model - baseline : baseline - model
+}
+
+function MetricEdgeChart({
+  metric,
+  seasons,
+  bySeason,
+}: {
+  metric: keyof BacktestMetricRow
+  seasons: number[]
+  bySeason: Record<string, Record<string, BacktestMetricRow>>
+}) {
+  const data = seasons.map((season) => {
+    const s = String(season)
+    return {
+      season: s,
+      vsGrid: edge(bySeason.model?.[s]?.[metric], bySeason.grid?.[s]?.[metric], metric),
+      vsChamp: edge(
+        bySeason.model?.[s]?.[metric],
+        bySeason.championship?.[s]?.[metric],
+        metric,
+      ),
+    }
+  })
+  return (
+    <div className="chart">
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+          <CartesianGrid stroke="#2e2e3a" strokeDasharray="3 3" />
+          <XAxis
+            dataKey="season"
+            tick={{ fill: '#a8a8b5', fontSize: 11 }}
+            stroke="#2e2e3a"
+          />
+          <YAxis
+            tick={{ fill: '#a8a8b5', fontSize: 11 }}
+            stroke="#2e2e3a"
+            domain={['auto', 'auto']}
+          />
+          <Tooltip
+            contentStyle={{
+              background: '#23232e',
+              border: '1px solid #2e2e3a',
+              borderRadius: 8,
+              color: '#f2f2f5',
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: 12, color: '#a8a8b5' }} />
+          <ReferenceLine
+            y={0}
+            stroke="#6f6f7d"
+            strokeDasharray="4 4"
+            label={{ value: 'even', position: 'insideTopRight', fill: '#6f6f7d', fontSize: 10 }}
+          />
+          <Line
+            type="linear"
+            dataKey="vsGrid"
+            name="vs grid"
+            stroke="#4a7fd6"
+            strokeWidth={2}
+            dot={false}
+            connectNulls={false}
+          />
+          <Line
+            type="linear"
+            dataKey="vsChamp"
+            name="vs championship"
+            stroke="#d9a514"
+            strokeWidth={2}
+            dot={false}
+            connectNulls={false}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>
