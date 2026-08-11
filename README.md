@@ -12,6 +12,9 @@ E[points] = P(top-10) × E(points | top-10)
 with companion classifiers for P(top-3) and P(win). The output is the full
 grid ranked by expected points.
 
+> 📖 **New here?** Start with [`OVERVIEW.md`](OVERVIEW.md) — repository map,
+> architecture diagrams, and a guide to extending this codebase.
+
 ## Setup
 
 ```bash

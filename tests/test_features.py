@@ -12,7 +12,6 @@ from features.build import (
     add_features,
     assemble,
     build_dataset,
-    coverage_report,
 )
 
 
@@ -227,14 +226,6 @@ def test_build_dataset_caches(tmp_path):
     pd.testing.assert_frame_equal(df1, df2)
     assert "champ_points_entering" in df1.columns
     assert df1["points"].iloc[0] == 25.0
-
-
-def test_coverage_report_shape():
-    out = add_features(_mini_df())
-    report = coverage_report(out)
-    assert list(report["season"]) == [2020]
-    assert report.loc[0, "starts"] == 6
-    assert report.loc[0, "scored_rate"] == 1.0
 
 
 def test_team_switch_tenure_and_lag_features():

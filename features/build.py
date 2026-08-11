@@ -465,25 +465,3 @@ def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFram
             out[col] = out[f"{col}_w"]
             out = out.drop(columns=f"{col}_w")
     return out
-
-
-def coverage_report(df: pd.DataFrame) -> pd.DataFrame:
-    """Per-season row counts, scored rate, and feature-null counts."""
-    rows = []
-    for season, group in df.groupby("season"):
-        n_nulls = {
-            col: int(group[col].isna().sum())  # type: ignore[reportArgumentType]  # isna() is Unknown
-            for col in NUMERIC_FEATURES
-        }
-        rows.append(
-            {
-                "season": season,
-                "starts": len(group),
-                "races": group["round"].nunique(),
-                "drivers": group["driver_id"].nunique(),
-                "scored_rate": float(group["scored"].mean()),  # type: ignore[reportArgumentType]  # Unknown mean(),
-                "null_features": sum(n_nulls.values()),
-                **{f"null_{c}": v for c, v in n_nulls.items() if v},
-            }
-        )
-    return pd.DataFrame(rows).fillna("")

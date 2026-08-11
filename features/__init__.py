@@ -7,7 +7,6 @@ from .build import (
     add_features,
     assemble,
     build_dataset,
-    coverage_report,
 )
 
 __all__ = [
@@ -17,5 +16,4 @@ __all__ = [
     "add_features",
     "assemble",
     "build_dataset",
-    "coverage_report",
 ]
