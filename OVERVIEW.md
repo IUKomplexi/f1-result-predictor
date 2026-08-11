@@ -30,13 +30,13 @@ Dockerized.
 | `f1weather/` | Open-Meteo weather layer — **evaluated, not adopted** (kept deliberately) | `WeatherClient`, `load_race_weather`, `weather_frame` |
 | `features/` | Feature engineering: per-start dataset with strictly pre-race features + points target, plus the declarative feature registry | `build_dataset`, `add_features`, `assemble` (`build.py`); `REGISTRY`, `enabled_features`, `feature_fingerprint` (`registry.py`) |
 | `model/` | Hurdle model (HGB classifier + regressor), walk-forward backtest, isotonic calibration, hyperparameter search | `train_final_model`, `run_backtest`, `fit_calibrators`, `search` |
-| `f1core/` | Shared core: prediction pipeline, config loader, markdown/ranking helpers, HTTP base class | `predict_race`, `get_prediction` (`predict.py`), `load_config` (`config.py`), `to_md`/`rank_by` (`reporting.py`) |
-| `f1web/` | FastAPI JSON API + host for the built React SPA | `create_app` (`app.py`), `f1web/ui/` (React + Vite + TS) |
+| `f1core/` | Shared core: prediction pipeline, config loader **+ writer**, markdown/ranking helpers, HTTP base class | `predict_race`, `get_prediction` (`predict.py`), `load_config`/`save_config`/`validate_config` (`config.py`), `to_md`/`rank_by` (`reporting.py`) |
+| `f1web/` | FastAPI JSON API + host for the built React SPA, plus an in-process async job runner for pipeline steps | `create_app` (`app.py`), `JobManager` + `run_*` handlers (`jobs.py`), `f1web/ui/` (React + Vite + TS) |
 | `scripts/` | One-off fetch / tooling scripts | `fetch_all.py` (data), `fetch_weather.py` (weather), `download_fixtures.py` (test fixtures) |
 | `tests/` | Fully offline test suite (recorded fixtures) incl. full-pipeline e2e | `test_e2e.py`, `test_features.py`, `helpers.py`, `fixtures/` |
 | `data/` | Regenerable caches (gitignored): raw API JSON, dataset, model checkpoints | `raw/`, `features.parquet`, `model/`, `weather/` |
 | `reports/` | Generated snapshots (refresh with the CLI: `f1-backtest`, `f1-calibrate`) | `backtest.md`/`.json`, `prediction.md`, `calibration.json` (written on demand), `weather.md` |
-| `config.toml` | Optional runtime config; built-in defaults in `f1core/config.py` match it | — |
+| `config.toml` | Runtime config — the **single source of truth** (built-in defaults in `f1core/config.py` match it). The dashboard writes it back in place (`PUT /api/config`) | — |
 | `Dockerfile`, `docker-compose.yml` | Self-contained dashboard image (builds SPA, bakes data, named `reports` volume) | — |
 | `.github/workflows/ci.yml` | CI: pytest matrix (3.12/3.13) + ruff/pyright lint job | — |
 | `pyproject.toml` | Packaging, console scripts, ruff/pytest config | console scripts: `f1-predict`, `f1-train`, `f1-backtest`, `f1-calibrate`, `f1-search`, `f1-web` |
@@ -115,13 +115,30 @@ flowchart LR
         B["Race History"]
         C["Backtest"]
         D["Calibration"]
-        E["Season"]
+        E["Pipeline"]
+        F["Settings"]
+        G["Season"]
     end
-    SPA -->|"api/client.ts · typed calls"| API["FastAPI endpoints:<br/>/api/prediction · /api/status · /api/backtest<br/>/api/calibration · /api/calendar · /api/standings"]
+    SPA -->|"api/client.ts · typed calls"| API["FastAPI endpoints:<br/>/api/prediction · POST /api/predict · /api/status<br/>/api/backtest · /api/calibration · /api/calendar · /api/standings<br/>GET/PUT /api/config · POST /api/jobs · GET /api/jobs/{id}"]
     API -->|"get_prediction (300s TTL cache)"| CP[("model checkpoints")]
     API -->|"_read_json"| RP[("reports/backtest.json · calibration.json")]
     API -->|"f1data fetchers"| RAW[("data/raw/ · live fetch when uncached")]
+    API -->|"PUT /api/config · save_config"| CT[("config.toml · single source of truth")]
+    API -->|"POST /api/jobs · JobManager"| JOBS[["f1web/jobs.py · worker thread"]]
+    JOBS -->|"run_* wrappers"| PL[["model/… + scripts/fetch_all.py"]]
+    PL --> RP
+    PL --> CP
 ```
+
+**Control surface.** The dashboard drives the whole pipeline: **Settings**
+edits `config.toml` (including the HGB hyperparameters under `[model.params]`
+and the feature selection) and writes it back in place; **Pipeline** runs
+fetch / train / calibrate / backtest / search as async background jobs (one at
+a time via a worker thread, the rest queued) with live logs and inline results,
+and can apply a search's best config. `POST /api/predict` applies *ephemeral*
+overrides (season/round, grid CSV, feature toggles) in memory only. The CLI
+reads the exact same `config.toml`, so neither surface drifts. Jobs are tied to
+the server process lifetime; `reports/jobs/*.json` records a durable history.
 
 ## Key invariants (don't break these)
 
@@ -150,7 +167,9 @@ flowchart LR
 | Toggle features / audit the set | `config.toml` `[features] enabled`, CLI `--enable-features`/`--disable-features`, or `scripts/feature_audit.py` (`reports/features.md`) |
 | Try a model change | `model/train.py` (`HurdleModels`), tune via `model/search.py`, measure via `f1-backtest`; re-run `f1-calibrate` after retraining |
 | Add an API endpoint | route in `f1web/app.py` + typed function in `f1web/ui/src/api/client.ts` + component; errors must be `{"error": ...}` |
-| Add a dashboard tab | new component under `f1web/ui/src/components/<tab>/`, wire in `App.tsx`; reuse `useApi` and `lib/format` |
+| Add a config field | `f1core/config.py`: add to `DEFAULTS`, a `SCHEMA` field descriptor, and a check in `validate_config`; the Settings form and the TOML writer pick it up automatically |
+| Add a pipeline step (job) | add a `run_* -> dict` wrapper in the relevant module (each CLI `main()` delegates to it), register a handler + payload keys in `f1web/jobs.py`, and surface it on the Pipeline page |
+| Add a dashboard tab | new component under `f1web/ui/src/components/<tab>/`, wire in `App.tsx`; reuse `useApi`/`useJob` and `lib/format` |
 | Re-run the weather experiment | `reports/weather.md` has the full recipe and the gate result |
 | Add a CLI | function `main() -> int` + entry in `pyproject.toml` `[project.scripts]` |
 | Change the data source / season range | `config.toml` (`[api]`, `[data]`) — defaults live in `f1core/config.py` |

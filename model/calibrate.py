@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,7 @@ from model.train import (
     HurdleModels,
     _joblib_dump,
     _joblib_load,
+    model_params,
     prepare,
     walk_forward_seasons,
 )
@@ -53,9 +55,10 @@ def collect_oos_scores(
     selects the model columns (default: the full set).
     """
     chunks = []
+    params = model_params()  # read [model.params] once, outside the loop
     for train, test, _ in walk_forward_seasons(df):
         X_train, y_train = prepare(train, features)
-        model = HurdleModels().fit(X_train, y_train)
+        model = HurdleModels(params=params).fit(X_train, y_train)
         X_test, _ = prepare(test, features)
         probs = model.predict_probs(X_test)
         chunks.append(
@@ -251,38 +254,41 @@ def calibration_snapshot(
 # CLI
 # --------------------------------------------------------------------------
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--start", type=int, default=2010)
-    parser.add_argument("--end", type=int, default=2025)
-    parser.add_argument("--refresh", action="store_true")
-    parser.add_argument("--cache-dir", default="data/raw")
-    parser.add_argument("--dataset", default="data/features.parquet")
-    parser.add_argument("--out", default="data/model/calibrators.joblib")
-    parser.add_argument("--out-json", default="reports/calibration.json",
-                        help="JSON snapshot for the web dashboard")
-    parser.add_argument(
-        "--enable-features", default="",
-        help="comma-separated features to enable on top of config",
-    )
-    parser.add_argument(
-        "--disable-features", default="",
-        help="comma-separated features to disable on top of config",
-    )
-    args = parser.parse_args()
+def run(
+    *,
+    start: int = 2010,
+    end: int = 2025,
+    refresh: bool = False,
+    cache_dir: str = "data/raw",
+    dataset: str = "data/features.parquet",
+    out: str = "data/model/calibrators.joblib",
+    out_json: str = "reports/calibration.json",
+    enable_features: Sequence[str] = (),
+    disable_features: Sequence[str] = (),
+    cfg: dict | None = None,
+    log=None,
+) -> dict:
+    """Fit + deploy calibrators end-to-end and return a JSON-safe summary.
 
-    client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
-    df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
+    ``log`` is an optional progress callback (web job runner). Writes the
+    calibrator checkpoint and the ``reports/calibration.json`` dashboard
+    snapshot; the returned dict carries the full ``calibration_snapshot`` so
+    the web runner can refresh the dashboard view without re-reading the file.
+    """
+    log = log or (lambda msg: print(msg, flush=True))
+    cfg = cfg or load_config()
+    client = F1Client(cache_dir=cache_dir, refresh=refresh)
+    log(f"Building dataset {start}-{end} ...")
+    df = build_dataset(client, range(start, end + 1), cache_path=dataset)
     feats = enabled_features(
-        load_config(),
-        enable=[f for f in args.enable_features.split(",") if f],
-        disable=[f for f in args.disable_features.split(",") if f],
+        cfg, enable=list(enable_features), disable=list(disable_features)
     )
 
+    log(f"Collecting out-of-sample scores ({len(feats)} features, fp {feature_fingerprint(feats)})")
     oos = collect_oos_scores(df, feats)
     # Deployment calibrators: fit on ALL out-of-sample scores (most data).
     calibrators = fit_calibrators(oos)
-    save_calibrators(calibrators, args.out, features=feats)
+    save_calibrators(calibrators, out, features=feats)
 
     # Honest evaluation: fit calibrators on the earlier OOS seasons only and
     # evaluate on the later ones, so the reported Brier deltas are not
@@ -312,18 +318,58 @@ def main() -> int:
         < brier(eval_oos[target], eval_oos[score])
     }
     deployment = {t: calibrators[t] for t in keep}
-    save_calibrators(deployment, args.out, features=feats)
-    print(summarize(eval_oos, eval_cal, context=context, keep=keep))  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
-    print(f"\nWrote {args.out}")
+    save_calibrators(deployment, out, features=feats)
+    log(f"Deployed calibrators: {', '.join(sorted(keep)) if keep else 'none (raw kept)'}")
+    log(f"Wrote {out}")
 
-    snapshot = json.dumps(
-        calibration_snapshot(eval_oos, eval_cal, keep=keep, context=context),  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
-        indent=2,
+    snapshot = calibration_snapshot(
+        eval_oos, eval_cal, keep=keep, context=context  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
     )
-    json_out = Path(args.out_json)
+    json_out = Path(out_json)
     json_out.parent.mkdir(parents=True, exist_ok=True)
-    json_out.write_text(snapshot, encoding="utf-8")
-    print(f"Wrote {json_out}")
+    json_out.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+    log(f"Wrote {json_out}")
+
+    return {
+        "deployed": sorted(keep),
+        "n_features": len(feats),
+        "fingerprint": feature_fingerprint(feats),
+        "calibrators": out,
+        "snapshot": snapshot,
+        "summary": summarize(eval_oos, eval_cal, context=context, keep=keep),  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--start", type=int, default=2010)
+    parser.add_argument("--end", type=int, default=2025)
+    parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--cache-dir", default="data/raw")
+    parser.add_argument("--dataset", default="data/features.parquet")
+    parser.add_argument("--out", default="data/model/calibrators.joblib")
+    parser.add_argument("--out-json", default="reports/calibration.json",
+                        help="JSON snapshot for the web dashboard")
+    parser.add_argument(
+        "--enable-features", default="",
+        help="comma-separated features to enable on top of config",
+    )
+    parser.add_argument(
+        "--disable-features", default="",
+        help="comma-separated features to disable on top of config",
+    )
+    args = parser.parse_args()
+
+    result = run(
+        start=args.start, end=args.end, refresh=args.refresh,
+        cache_dir=args.cache_dir, dataset=args.dataset,
+        out=args.out, out_json=args.out_json,
+        enable_features=[f for f in args.enable_features.split(",") if f],
+        disable_features=[f for f in args.disable_features.split(",") if f],
+        log=lambda msg: print(msg, flush=True),
+    )
+    print(result["summary"])
+    print(f"\nWrote {result['calibrators']}")
     return 0
 
 

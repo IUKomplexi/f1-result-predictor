@@ -21,6 +21,16 @@ checkpoint = "data/model/hurdle.joblib"
 calibrators = "data/model/calibrators.joblib"
 seed = 42
 
+# HGB hyperparameters (see model/search.py). Train reads these first; the
+# code defaults in model/train.DEFAULT_PARAMS are the fallback. Search results
+# are applied here from the dashboard (Pipeline page) or by hand.
+[model.params]
+max_iter = 400
+learning_rate = 0.03
+max_depth = 3
+l2_regularization = 1.0
+min_samples_leaf = 20
+
 [report]
 backtest = "reports/backtest.md"
 prediction = "reports/prediction.md"

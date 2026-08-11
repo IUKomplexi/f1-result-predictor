@@ -8,6 +8,8 @@ rounds x 12 drivers) to keep the test fast.
 
 from __future__ import annotations
 
+import json
+import time
 from typing import ClassVar
 
 import pytest
@@ -220,3 +222,66 @@ def test_pipeline_predicts_upcoming_round_with_synthetic_entries(pipeline):
     assert pred["verified"] is False
     assert len(pred["result"]) == len(DRIVERS)
     assert pred["result"]["expected_points"].notna().all()
+
+
+def test_web_control_flow_config_job_snapshot(tmp_path, monkeypatch):
+    """Dashboard-control e2e: write config -> run a job -> snapshot refreshes.
+
+    Exercises the full API control loop introduced with the dashboard-control
+    work: PUT /api/config persists config.toml (the single source of truth); a
+    job handler reads that same config and writes reports/backtest.json; GET
+    /api/backtest then serves the fresh snapshot — no config file or terminal
+    edits, exactly as the Pipeline + Settings tabs do.
+    """
+    from fastapi.testclient import TestClient
+
+    import f1web.app as app_module
+    import f1web.jobs as jobs_module
+    from f1core.config import config_to_toml, load_config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(config_to_toml(load_config()), encoding="utf-8")
+    snapshot = tmp_path / "reports" / "backtest.json"
+    monkeypatch.setattr(app_module, "CONFIG_TOML", cfg_path)
+    monkeypatch.setattr(app_module, "BACKTEST_JSON", snapshot)
+    monkeypatch.setattr(jobs_module, "JOBS_DIR", tmp_path / "reports" / "jobs")
+
+    manager = jobs_module.JobManager()
+
+    def fake_backtest(payload, log):
+        # Stand-in pipeline step: read the config the dashboard just wrote and
+        # emit a backtest snapshot reflecting it (mirrors model/evaluate.run,
+        # which reads [model.params] and writes reports/backtest.json).
+        lr = load_config(cfg_path)["model"]["params"]["learning_rate"]
+        snapshot.parent.mkdir(parents=True, exist_ok=True)
+        snapshot.write_text(
+            json.dumps({"overall": {"model": {"mae": lr}}}), encoding="utf-8"
+        )
+        log(f"wrote snapshot with learning_rate={lr}")
+        return {"overall": {"model": {"mae": lr}}}
+
+    manager.register("backtest", fake_backtest)
+    client = TestClient(app_module.create_app(job_manager=manager))
+
+    # No snapshot yet.
+    assert client.get("/api/backtest").status_code == 404
+
+    # 1) Write config through the API.
+    cfg = client.get("/api/config").json()["config"]
+    cfg["model"]["params"]["learning_rate"] = 0.09
+    assert client.put("/api/config", json=cfg).status_code == 200
+    assert load_config(cfg_path)["model"]["params"]["learning_rate"] == 0.09
+
+    # 2) Run a job and wait for it to finish.
+    job_id = client.post("/api/jobs", json={"type": "backtest"}).json()["id"]
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        job = client.get(f"/api/jobs/{job_id}").json()
+        if job["status"] in ("done", "failed"):
+            break
+        time.sleep(0.02)
+    assert job["status"] == "done"
+
+    # 3) The snapshot the job wrote is now served by the API.
+    data = client.get("/api/backtest").json()
+    assert data["overall"]["model"]["mae"] == 0.09

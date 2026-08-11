@@ -11,12 +11,20 @@ const Backtest = lazy(() =>
 const Calibration = lazy(() =>
   import('./components/calibration/Calibration').then((m) => ({ default: m.Calibration })),
 )
+const Pipeline = lazy(() =>
+  import('./components/pipeline/Pipeline').then((m) => ({ default: m.Pipeline })),
+)
+const Settings = lazy(() =>
+  import('./components/settings/Settings').then((m) => ({ default: m.Settings })),
+)
 
 const TABS = [
   { id: 'next', label: 'Next Race', component: NextRace },
   { id: 'history', label: 'Race History', component: RaceHistory },
   { id: 'backtest', label: 'Backtest', component: Backtest },
   { id: 'calibration', label: 'Calibration', component: Calibration },
+  { id: 'pipeline', label: 'Pipeline', component: Pipeline },
+  { id: 'settings', label: 'Settings', component: Settings },
   { id: 'season', label: 'Season', component: SeasonContext },
 ] as const
 

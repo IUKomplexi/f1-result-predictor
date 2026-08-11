@@ -60,6 +60,9 @@ def quantize_points(values) -> np.ndarray:
 # Default gradient-boosting hyperparameters (see model/search.py to tune).
 # Chosen by walk-forward-validated search (model/search.py, test seasons
 # <= 2019) with the full feature set incl. teammate-relative features.
+# These are the *code fallback*: train reads ``[model.params]`` from config
+# (config.py DEFAULTS) first, so the dashboard can tune them without a code
+# change. Search results are applied by writing ``[model.params]``.
 DEFAULT_PARAMS = {
     "max_iter": 400,
     "learning_rate": 0.03,
@@ -67,6 +70,13 @@ DEFAULT_PARAMS = {
     "l2_regularization": 1.0,
     "min_samples_leaf": 20,
 }
+
+
+def model_params(cfg: dict | None = None) -> dict[str, Any]:
+    """Effective HGB hyperparameters: ``[model.params]`` from config, else code defaults."""
+    cfg = cfg or load_config()
+    params = (cfg.get("model") or {}).get("params")
+    return {**DEFAULT_PARAMS, **(params or {})}
 
 
 def _clf(seed: int, params: dict[str, Any] | None = None) -> HistGradientBoostingClassifier:
@@ -241,14 +251,17 @@ def walk_forward_seasons(
 
 
 def train_final_model(
-    df: pd.DataFrame, features: Sequence[str] | None = None
+    df: pd.DataFrame,
+    features: Sequence[str] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> HurdleModels:
     """Train on every season (used for live prediction).
 
-    ``features`` selects the model columns (default: the full set).
+    ``features`` selects the model columns (default: the full set). ``params``
+    are the HGB hyperparameters (default: ``model_params()`` from config).
     """
     X, y = prepare(df, features)
-    return HurdleModels().fit(X, y)
+    return HurdleModels(params=params or model_params()).fit(X, y)
 
 
 def _joblib_dump(obj: Any, path: Path) -> None:
@@ -334,6 +347,51 @@ def load_checkpoint(
     return payload["models"]
 
 
+def run(
+    *,
+    start: int = 2010,
+    end: int = 2025,
+    refresh: bool = False,
+    cache_dir: str = "data/raw",
+    dataset: str = "data/features.parquet",
+    out: str = "data/model/hurdle.joblib",
+    enable_features: Sequence[str] = (),
+    disable_features: Sequence[str] = (),
+    cfg: dict | None = None,
+    log=None,
+) -> dict:
+    """Run the training step end-to-end and return a JSON-safe summary.
+
+    ``log`` is an optional callable receiving progress lines (used by the web
+    job runner to stream output); it defaults to module logging. All arguments
+    are keyword-only so the web job runner and the CLI share one code path.
+    """
+    log = log or (lambda msg: logger.info(msg))
+    cfg = cfg or load_config()
+    client = F1Client(cache_dir=cache_dir, refresh=refresh)
+    log(f"Building dataset {start}-{end} ...")
+    df = build_dataset(client, range(start, end + 1), cache_path=dataset)
+    feats = enabled_features(
+        cfg, enable=list(enable_features), disable=list(disable_features)
+    )
+    log(
+        f"Training final model on {len(df)} rows ({df['season'].nunique()} "
+        f"seasons), {len(feats)} features (fp {feature_fingerprint(feats)})"
+    )
+    models = train_final_model(df, feats, params=model_params(cfg))
+    save_checkpoint(models, out, features=feats)
+    log(f"Saved checkpoint to {out}")
+    return {
+        "rows": len(df),
+        "seasons": int(df["season"].nunique()),  # type: ignore[reportArgumentType]  # nunique on an untyped Series is Unknown
+        "n_features": len(feats),
+        "features": feats,
+        "fingerprint": feature_fingerprint(feats),
+        "checkpoint": out,
+        "params": model_params(cfg),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", type=int, default=2010)
@@ -353,19 +411,13 @@ def main() -> int:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
-    df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    feats = enabled_features(
-        load_config(),
-        enable=[f for f in args.enable_features.split(",") if f],
-        disable=[f for f in args.disable_features.split(",") if f],
+    run(
+        start=args.start, end=args.end, refresh=args.refresh,
+        cache_dir=args.cache_dir, dataset=args.dataset, out=args.out,
+        enable_features=[f for f in args.enable_features.split(",") if f],
+        disable_features=[f for f in args.disable_features.split(",") if f],
+        log=lambda msg: logger.info(msg),
     )
-    logger.info(
-        "Training final model on %d rows (%d seasons), %d features (fp %s)",
-        len(df), df["season"].nunique(), len(feats), feature_fingerprint(feats),
-    )
-    models = train_final_model(df, feats)
-    save_checkpoint(models, args.out, features=feats)
     return 0
 
 

@@ -139,16 +139,31 @@ export interface Status {
 
 /* --------------------------------------------------------------- request */
 
-async function apiGet<T>(path: string): Promise<T> {
-  const resp = await fetch(path, { headers: { Accept: 'application/json' } })
-  const body: unknown = await resp.json().catch(() => null)
+async function apiJson<T>(
+  method: 'GET' | 'POST' | 'PUT',
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const resp = await fetch(path, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  const respBody: unknown = await resp.json().catch(() => null)
   if (!resp.ok) {
-    const error = (body as { error?: unknown } | null)?.error
+    const error = (respBody as { error?: unknown } | null)?.error
     const message =
       typeof error === 'string' ? error : `Request failed with status ${resp.status}`
     throw new ApiError(message, resp.status)
   }
-  return body as T
+  return respBody as T
+}
+
+async function apiGet<T>(path: string): Promise<T> {
+  return apiJson<T>('GET', path)
 }
 
 function qs(params: Record<string, string | number | null | undefined>): string {
@@ -184,4 +199,78 @@ export function getCalendar(season: number): Promise<Calendar> {
 
 export function getStandings(season: number, round?: number): Promise<Standings> {
   return apiGet<Standings>(`/api/standings${qs({ season, round })}`)
+}
+
+/* ------------------------------------------------- config / jobs / predict */
+
+/** One editable field in the config schema (see f1core.config.SCHEMA). */
+export interface ConfigField {
+  section: string
+  key: string
+  type: 'str' | 'int' | 'float' | 'bool' | 'list[str]' | 'params' | 'features'
+  min?: number
+  max?: number
+  help?: string
+}
+
+export interface ConfigResponse {
+  config: Record<string, Record<string, unknown>>
+  schema: ConfigField[]
+  features: {
+    registry: string[]
+    defaults: string[]
+    categories: Record<string, string>
+  }
+  seasons: { min: number; max: number }
+  model_params_keys: string[]
+  jobs: string[]
+}
+
+export interface JobSummary {
+  id: string
+  type: string
+  label: string
+  status: 'queued' | 'running' | 'done' | 'failed'
+  error: string | null
+  created_at: number
+  started_at: number | null
+  finished_at: number | null
+}
+
+export interface Job extends JobSummary {
+  payload: Record<string, unknown>
+  log: string[]
+  result: Record<string, unknown> | null
+}
+
+export interface PredictOverrides {
+  season?: number
+  round?: number
+  grid_csv?: string
+  enable_features?: string[]
+  disable_features?: string[]
+}
+
+export function getConfig(): Promise<ConfigResponse> {
+  return apiGet<ConfigResponse>('/api/config')
+}
+
+export function putConfig(cfg: Record<string, Record<string, unknown>>): Promise<ConfigResponse> {
+  return apiJson<ConfigResponse>('PUT', '/api/config', cfg)
+}
+
+export function postJob(type: string, payload?: Record<string, unknown>): Promise<{ id: string }> {
+  return apiJson<{ id: string }>('POST', '/api/jobs', { type, payload: payload ?? {} })
+}
+
+export function getJobs(): Promise<{ jobs: JobSummary[] }> {
+  return apiGet<{ jobs: JobSummary[] }>('/api/jobs')
+}
+
+export function getJob(id: string): Promise<Job> {
+  return apiGet<Job>(`/api/jobs/${id}`)
+}
+
+export function postPrediction(overrides: PredictOverrides): Promise<Prediction> {
+  return apiJson<Prediction>('POST', '/api/predict', overrides)
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from features.build import build_dataset
 from features.registry import enabled_features, feature_fingerprint
 from model.train import (
     HurdleModels,
+    model_params,
     points_for_position,
     prepare,
     quantize_points,
@@ -112,9 +114,10 @@ def run_backtest(
 
     season_rows: list[dict] = []
     model_by_season: dict[int, HurdleModels] = {}
+    params = model_params()  # read [model.params] once, outside the loop
     for train, test, season in walk_forward_seasons(df):
         X_train, y_train = prepare(train, features)
-        model = HurdleModels().fit(X_train, y_train)
+        model = HurdleModels(params=params).fit(X_train, y_train)
         model_by_season[season] = model
         X_test, _ = prepare(test, features)
         test = test.copy()
@@ -202,6 +205,68 @@ def format_tables(overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]) -> 
     return "\n".join(lines)
 
 
+def run(
+    *,
+    start: int = 2010,
+    end: int = 2025,
+    refresh: bool = False,
+    cache_dir: str = "data/raw",
+    dataset: str = "data/features.parquet",
+    out: str = "reports/backtest.md",
+    out_json: str = "reports/backtest.json",
+    quantize: bool = True,
+    enable_features: Sequence[str] = (),
+    disable_features: Sequence[str] = (),
+    cfg: dict | None = None,
+    log=None,
+) -> dict:
+    """Run the backtest end-to-end, write report + JSON snapshot, return a summary.
+
+    ``log`` is an optional progress callback (web job runner); all arguments are
+    keyword-only so the CLI and the dashboard share one code path. The returned
+    dict is JSON-safe and carries the full ``backtest_snapshot`` so the web
+    runner can refresh the dashboard views without re-reading the file.
+    """
+    log = log or (lambda msg: print(msg, flush=True))
+    cfg = cfg or load_config()
+    client = F1Client(cache_dir=cache_dir, refresh=refresh)
+    log(f"Building dataset {start}-{end} ...")
+    df = build_dataset(client, range(start, end + 1), cache_path=dataset)
+    feats = enabled_features(
+        cfg, enable=list(enable_features), disable=list(disable_features)
+    )
+    log(
+        f"Running walk-forward backtest with {len(feats)} features "
+        f"(fp {feature_fingerprint(feats)})"
+    )
+    overall, by_season = run_backtest(df, quantize=quantize, features=feats)
+
+    report = format_tables(overall, by_season)
+    out_p = Path(out)
+    out_p.parent.mkdir(parents=True, exist_ok=True)
+    out_p.write_text(report, encoding="utf-8")
+    log(f"Wrote {out_p}")
+
+    snapshot = backtest_snapshot(overall, by_season)
+    json_out = Path(out_json)
+    json_out.parent.mkdir(parents=True, exist_ok=True)
+    json_out.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+    log(f"Wrote {json_out}")
+
+    overall_rows = {
+        str(name): _metric_row(overall.loc[name]) for name in overall.index
+    }
+    return {
+        "overall": overall_rows,
+        "features": feats,
+        "n_features": len(feats),
+        "fingerprint": feature_fingerprint(feats),
+        "quantize": quantize,
+        "report": out,
+        "snapshot": snapshot,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", type=int, default=2010)
@@ -224,27 +289,18 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
-    df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    feats = enabled_features(
-        load_config(),
-        enable=[f for f in args.enable_features.split(",") if f],
-        disable=[f for f in args.disable_features.split(",") if f],
+    result = run(
+        start=args.start, end=args.end, refresh=args.refresh,
+        cache_dir=args.cache_dir, dataset=args.dataset,
+        out=args.out, out_json=args.out_json, quantize=not args.no_quantize,
+        enable_features=[f for f in args.enable_features.split(",") if f],
+        disable_features=[f for f in args.disable_features.split(",") if f],
+        log=lambda msg: print(msg, flush=True),
     )
-    overall, by_season = run_backtest(df, quantize=not args.no_quantize, features=feats)
-    print(f"Features ({len(feats)}, fp {feature_fingerprint(feats)}): {', '.join(feats)}")
+    overall = pd.DataFrame(result["overall"]).T
+    print(f"Features ({result['n_features']}, fp {result['fingerprint']}): "
+          f"{', '.join(result['features'])}")
     print(overall.to_string())
-    report = format_tables(overall, by_season)
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(report, encoding="utf-8")
-    print(f"\nWrote {out}")
-
-    snapshot = json.dumps(backtest_snapshot(overall, by_season), indent=2)
-    json_out = Path(args.out_json)
-    json_out.parent.mkdir(parents=True, exist_ok=True)
-    json_out.write_text(snapshot, encoding="utf-8")
-    print(f"Wrote {json_out}")
     return 0
 
 

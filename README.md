@@ -87,11 +87,32 @@ f1-web --port 8080            # open http://127.0.0.1:8080/
 ```
 
 Endpoints: `/` and `/dashboard` (React dashboard), `/health`, and the JSON API
-under `/api/*` (`/api/prediction`, `/api/backtest`, `/api/calibration`,
-`/api/calendar`, `/api/standings`, `/api/status`). The dashboard is the single
-frontend — there is no server-rendered HTML (the FastAPI backend only serves
-JSON + the built SPA). Predictions are computed on demand through the same code
-path as the CLI (a few seconds per request — it is a local tool, not a service).
+under `/api/*` (GET `/api/prediction`, `/api/backtest`, `/api/calibration`,
+`/api/calendar`, `/api/standings`, `/api/status`, GET/PUT `/api/config`,
+`POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/predict`).
+The dashboard is the single frontend — there is no server-rendered HTML (the
+FastAPI backend only serves JSON + the built SPA). Predictions are computed on
+demand through the same code path as the CLI (a few seconds per request — it is
+a local tool, not a service).
+
+### Full pipeline control from the dashboard
+
+The dashboard is the control surface for the whole pipeline. The **Settings**
+tab edits every `config.toml` value (including the HGB hyperparameters under
+`[model.params]` and the feature selection) and writes them back in place; the
+**Pipeline** tab runs fetch / train / calibrate / backtest / search as async
+background jobs (one at a time, the rest queued) with live logs and results
+rendered inline, and can apply a search's best config. The **Next Race** tab's
+prediction panel (and `POST /api/predict`) accepts *ephemeral* overrides
+(season/round, a grid CSV, feature toggles) that are merged over the config in
+memory only — nothing is written to `config.toml`.
+
+> ⚠️ **Docker config persistence:** in the container, `config.toml` lives inside
+> the image and resets on rebuild. To keep dashboard edits across rebuilds,
+> bind-mount it, e.g. `docker compose run -v "$PWD/config.toml:/app/config.toml"` —
+> the CLI and web always read/write the same file, so either surface works.
+> Jobs are tied to the server process lifetime: `uvicorn --reload` restarts
+> kill in-flight jobs (the `reports/jobs/*.json` history records what ran).
 
 ### Accessing the dashboard
 
@@ -104,8 +125,12 @@ Open the dashboard in a normal browser at a **concrete** address:
 ## Configuration
 
 `config.toml` (optional; built-in defaults match it): API base URL /
-User-Agent, cache paths, season range, model checkpoint, report paths. CLI
-flags override config values.
+User-Agent, cache paths, season range, model checkpoint, report paths, the
+feature selection (`[features] enabled`), and the HGB hyperparameters
+(`[model.params]`, read by train before the code defaults). CLI flags override
+config values. The file is the single source of truth: the dashboard writes it
+back in place (`PUT /api/config`) so the CLI and web always read the same
+settings; per-race prediction overrides are ephemeral (in-memory only).
 
 ## Architecture
 

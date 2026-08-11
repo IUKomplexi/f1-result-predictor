@@ -1,0 +1,134 @@
+.config-intro {
+  margin-bottom: var(--space-6);
+  max-width: 48rem;
+}
+
+.config-intro code,
+.field-help code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.config-section {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-4) var(--space-5);
+  margin: 0 0 var(--space-4);
+}
+
+.config-section legend {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  padding: 0 var(--space-2);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.field.span-all {
+  grid-column: 1 / -1;
+}
+
+.field-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.field input[type='text'],
+.field input[type='number'] {
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  width: 100%;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.field-help {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--info);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 0;
+  align-self: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--space-4);
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.feature-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.feature-check em {
+  font-style: normal;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-left: var(--space-1);
+}
+
+.feature-check input {
+  accent-color: var(--accent);
+}
+
+.save-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+.save-status {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.save-status.ok {
+  color: var(--success);
+}
+
+.save-status.error {
+  color: var(--danger);
+}

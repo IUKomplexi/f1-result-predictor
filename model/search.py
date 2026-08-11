@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -110,6 +111,59 @@ def search(
     return results.sort_values("score").reset_index(drop=True)
 
 
+def run(
+    *,
+    n: int = 16,
+    seed: int = 0,
+    max_test_season: int = 2019,
+    start: int = 2010,
+    end: int = 2025,
+    refresh: bool = False,
+    cache_dir: str = "data/raw",
+    dataset: str = "data/features.parquet",
+    enable_features: Sequence[str] = (),
+    disable_features: Sequence[str] = (),
+    cfg: dict | None = None,
+    log=None,
+) -> dict:
+    """Run a walk-forward hyperparameter search and return JSON-safe results.
+
+    ``log`` is an optional progress callback (web job runner). The returned
+    dict carries the full ranked result table plus the ``best`` configuration
+    (ready to be written to ``[model.params]`` by the dashboard).
+    """
+    log = log or (lambda msg: print(msg, flush=True))
+    cfg = cfg or load_config()
+    client = F1Client(cache_dir=cache_dir, refresh=refresh)
+    log(f"Building dataset {start}-{end} ...")
+    df = build_dataset(client, range(start, end + 1), cache_path=dataset)
+    feats = enabled_features(
+        cfg, enable=list(enable_features), disable=list(disable_features)
+    )
+    log(f"Searching {n} configs (test seasons <= {max_test_season}, {len(feats)} features) ...")
+    results = search(df, n=n, seed=seed, max_test_season=max_test_season, features=feats)
+
+    best_row = results.iloc[0].drop(["mae", "spearman", "score"]).to_dict()
+    best = {
+        k: (int(v) if k in {"max_iter", "max_depth", "min_samples_leaf"} else float(v))
+        for k, v in best_row.items()
+    }
+    log(f"Best config: {best}")
+    int_keys = {"max_iter", "max_depth", "min_samples_leaf"}
+    return {
+        "results": [
+            {k: (int(v) if k in int_keys else float(v)) for k, v in row.items()}
+            for row in results.round(4).to_dict(orient="records")
+        ],
+        "best": best,
+        "n": n,
+        "seed": seed,
+        "max_test_season": max_test_season,
+        "n_features": len(feats),
+        "features": feats,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--n", type=int, default=16, help="configs to sample")
@@ -131,25 +185,18 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
-    df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    feats = enabled_features(
-        load_config(),
-        enable=[f for f in args.enable_features.split(",") if f],
-        disable=[f for f in args.disable_features.split(",") if f],
+    result = run(
+        n=args.n, seed=args.seed, max_test_season=args.max_test_season,
+        start=args.start, end=args.end, refresh=args.refresh,
+        cache_dir=args.cache_dir, dataset=args.dataset,
+        enable_features=[f for f in args.enable_features.split(",") if f],
+        disable_features=[f for f in args.disable_features.split(",") if f],
+        log=lambda msg: print(msg, flush=True),
     )
-    results = search(df, n=args.n, seed=args.seed,
-                     max_test_season=args.max_test_season, features=feats)
-
     print(f"Walk-forward search (test seasons <= {args.max_test_season}):")
-    print(results.round(4).to_string(index=False))
-    best_row = results.iloc[0].drop(["mae", "spearman", "score"]).to_dict()
-    best = {
-        k: (int(v) if k in {"max_iter", "max_depth", "min_samples_leaf"} else float(v))
-        for k, v in best_row.items()
-    }
-    print("\nBest configuration (paste into model/train.py DEFAULT_PARAMS):")
-    print(best)
+    print(pd.DataFrame(result["results"]).to_string(index=False))
+    print("\nBest configuration (write to config [model.params] or DEFAULT_PARAMS):")
+    print(result["best"])
     return 0
 
 
