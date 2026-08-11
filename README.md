@@ -87,25 +87,30 @@ f1-web --port 8080            # open http://127.0.0.1:8080/
 ```
 
 Endpoints: `/` and `/dashboard` (React dashboard), `/health`, and the JSON API
-under `/api/*` (GET `/api/prediction`, `/api/backtest`, `/api/calibration`,
-`/api/calendar`, `/api/standings`, `/api/status`, GET/PUT `/api/config`,
-`POST /api/jobs`, `GET /api/jobs`, `GET /api/jobs/{id}`, `POST /api/predict`).
-The dashboard is the single frontend — there is no server-rendered HTML (the
-FastAPI backend only serves JSON + the built SPA). Predictions are computed on
-demand through the same code path as the CLI (a few seconds per request — it is
-a local tool, not a service).
+under `/api/*` (GET `/api/prediction`, GET `/api/predictions/season`,
+`/api/backtest`, `/api/calibration`, `/api/calendar`, `/api/standings`,
+`/api/status`, GET/PUT `/api/config`, `POST /api/jobs`, `GET /api/jobs`,
+`GET /api/jobs/{id}`, `POST /api/predict`). The dashboard is the single
+frontend — there is no server-rendered HTML (the FastAPI backend only serves
+JSON + the built SPA). Predictions are computed on demand through the same
+code path as the CLI and cached on disk under `data/predictions/` (gitignored),
+so repeat calls and whole-season fetches are instant. It is a local tool, not a
+service.
 
 ### Full pipeline control from the dashboard
 
 The dashboard is the control surface for the whole pipeline. The **Settings**
 tab edits every `config.toml` value (including the HGB hyperparameters under
 `[model.params]` and the feature selection) and writes them back in place; the
-**Pipeline** tab runs fetch / train / calibrate / backtest / search as async
-background jobs (one at a time, the rest queued) with live logs and results
-rendered inline, and can apply a search's best config. The **Next Race** tab's
-prediction panel (and `POST /api/predict`) accepts *ephemeral* overrides
-(season/round, a grid CSV, feature toggles) that are merged over the config in
-memory only — nothing is written to `config.toml`.
+**Race** tab shows a single race's prediction with a season selector and
+prev/next navigation; **Race History** loads a whole season in one request;
+each pipeline step runs from its own tab — **Data** (fetch), **Train**,
+**Search**, **Backtest** and **Calibration** — as async background jobs (one at
+a time, the rest queued) with live logs and results rendered inline, and can
+apply a search's best config. The **Specific Race** tab's prediction panel (and
+`POST /api/predict`) accepts *ephemeral* overrides (season/round, a grid CSV,
+feature toggles) that are merged over the config in memory only — nothing is
+written to `config.toml`.
 
 > ⚠️ **Docker config persistence:** in the container, `config.toml` lives inside
 > the image and resets on rebuild. To keep dashboard edits across rebuilds,

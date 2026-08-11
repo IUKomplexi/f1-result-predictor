@@ -34,7 +34,7 @@ Dockerized.
 | `f1web/` | FastAPI JSON API + host for the built React SPA, plus an in-process async job runner for pipeline steps | `create_app` (`app.py`), `JobManager` + `run_*` handlers (`jobs.py`), `f1web/ui/` (React + Vite + TS) |
 | `scripts/` | One-off fetch / tooling scripts | `fetch_all.py` (data), `fetch_weather.py` (weather), `download_fixtures.py` (test fixtures) |
 | `tests/` | Fully offline test suite (recorded fixtures) incl. full-pipeline e2e | `test_e2e.py`, `test_features.py`, `helpers.py`, `fixtures/` |
-| `data/` | Regenerable caches (gitignored): raw API JSON, dataset, model checkpoints | `raw/`, `features.parquet`, `model/`, `weather/` |
+| `data/` | Regenerable caches (gitignored): raw API JSON, dataset, model checkpoints, prediction cache | `raw/`, `features.parquet`, `model/`, `predictions/`, `weather/` |
 | `reports/` | Generated snapshots (refresh with the CLI: `f1-backtest`, `f1-calibrate`) | `backtest.md`/`.json`, `prediction.md`, `calibration.json` (written on demand), `weather.md` |
 | `config.toml` | Runtime config — the **single source of truth** (built-in defaults in `f1core/config.py` match it). The dashboard writes it back in place (`PUT /api/config`) | — |
 | `Dockerfile`, `docker-compose.yml` | Self-contained dashboard image (builds SPA, bakes data, named `reports` volume) | — |
@@ -111,16 +111,20 @@ out-of-sample scores.
 ```mermaid
 flowchart LR
     subgraph SPA["f1web/ui · React"]
-        A["Next Race"]
+        A["Race"]
         B["Race History"]
-        C["Backtest"]
-        D["Calibration"]
-        E["Pipeline"]
-        F["Settings"]
-        G["Season"]
+        C["Data"]
+        D["Train"]
+        E["Search"]
+        F["Backtest"]
+        G["Calibration"]
+        H["Specific Race"]
+        I["Settings"]
+        J["Season"]
     end
-    SPA -->|"api/client.ts · typed calls"| API["FastAPI endpoints:<br/>/api/prediction · POST /api/predict · /api/status<br/>/api/backtest · /api/calibration · /api/calendar · /api/standings<br/>GET/PUT /api/config · POST /api/jobs · GET /api/jobs/{id}"]
-    API -->|"get_prediction (300s TTL cache)"| CP[("model checkpoints")]
+    SPA -->|"api/client.ts · typed calls"| API["FastAPI endpoints:<br/>/api/prediction · /api/predictions/season · POST /api/predict · /api/status<br/>/api/backtest · /api/calibration · /api/calendar · /api/standings<br/>GET/PUT /api/config · POST /api/jobs · GET /api/jobs/{id}"]
+    API -->|"get_prediction · disk cache"| PC[("data/predictions/ · gitignored")]
+    API -->|"get_prediction"| CP[("model checkpoints")]
     API -->|"_read_json"| RP[("reports/backtest.json · calibration.json")]
     API -->|"f1data fetchers"| RAW[("data/raw/ · live fetch when uncached")]
     API -->|"PUT /api/config · save_config"| CT[("config.toml · single source of truth")]
@@ -132,13 +136,18 @@ flowchart LR
 
 **Control surface.** The dashboard drives the whole pipeline: **Settings**
 edits `config.toml` (including the HGB hyperparameters under `[model.params]`
-and the feature selection) and writes it back in place; **Pipeline** runs
-fetch / train / calibrate / backtest / search as async background jobs (one at
-a time via a worker thread, the rest queued) with live logs and inline results,
-and can apply a search's best config. `POST /api/predict` applies *ephemeral*
-overrides (season/round, grid CSV, feature toggles) in memory only. The CLI
-reads the exact same `config.toml`, so neither surface drifts. Jobs are tied to
-the server process lifetime; `reports/jobs/*.json` records a durable history.
+and the feature selection) and writes it back in place; each pipeline step runs
+from its own tab — **Data**, **Train**, **Search**, **Backtest**, **Calibration**
+— as async background jobs (one at a time via a worker thread, the rest queued)
+with live logs and inline results, and can apply a search's best config. The
+**Race** tab navigates a single race (season selector + prev/next), and **Race
+History** loads a whole season through `/api/predictions/season` in one dataset
+pass. `POST /api/predict` applies *ephemeral* overrides (season/round, grid CSV,
+feature toggles) in memory only. Repeat predictions hit the disk-backed cache
+under `data/predictions/` (gitignored, keyed by season/round/feature-fingerprint/
+params). The CLI reads the exact same `config.toml`, so neither surface drifts.
+Jobs are tied to the server process lifetime; `reports/jobs/*.json` records a
+durable history.
 
 ## Key invariants (don't break these)
 
@@ -168,7 +177,7 @@ the server process lifetime; `reports/jobs/*.json` records a durable history.
 | Try a model change | `model/train.py` (`HurdleModels`), tune via `model/search.py`, measure via `f1-backtest`; re-run `f1-calibrate` after retraining |
 | Add an API endpoint | route in `f1web/app.py` + typed function in `f1web/ui/src/api/client.ts` + component; errors must be `{"error": ...}` |
 | Add a config field | `f1core/config.py`: add to `DEFAULTS`, a `SCHEMA` field descriptor, and a check in `validate_config`; the Settings form and the TOML writer pick it up automatically |
-| Add a pipeline step (job) | add a `run_* -> dict` wrapper in the relevant module (each CLI `main()` delegates to it), register a handler + payload keys in `f1web/jobs.py`, and surface it on the Pipeline page |
+| Add a pipeline step (job) | add a `run_* -> dict` wrapper in the relevant module (each CLI `main()` delegates to it), register a handler + payload keys in `f1web/jobs.py`, and surface it on its dedicated tab (via the shared `JobRunner`) |
 | Add a dashboard tab | new component under `f1web/ui/src/components/<tab>/`, wire in `App.tsx`; reuse `useApi`/`useJob` and `lib/format` |
 | Re-run the weather experiment | `reports/weather.md` has the full recipe and the gate result |
 | Add a CLI | function `main() -> int` + entry in `pyproject.toml` `[project.scripts]` |
