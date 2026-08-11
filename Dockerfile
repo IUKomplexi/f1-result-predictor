@@ -39,7 +39,10 @@ COPY f1data/ f1data/
 COPY f1weather/ f1weather/
 COPY features/ features/
 COPY model/ model/
-COPY f1web/__init__.py f1web/app.py f1web/
+# Explicit file list (not a bare `COPY f1web/`): ui/ is built in stage 1 and
+# copied as dist below, and ui/node_modules must not enter the runtime image.
+# New modules in the f1web package must be added here (e.g. f1web/jobs.py).
+COPY f1web/__init__.py f1web/app.py f1web/jobs.py f1web/
 RUN uv sync --frozen --no-dev --extra web
 
 # Bake the cached raw API + dataset + model checkpoints and the reports.
