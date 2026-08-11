@@ -103,6 +103,39 @@ def test_invalid_query_params_are_422(client):
     assert client.get("/api/prediction?round=xyz").status_code == 422
     assert client.get("/api/calendar?season=abc").status_code == 422
     assert client.get("/api/standings?season=abc").status_code == 422
+    assert client.get("/api/predictions/season").status_code == 422
+    assert client.get("/api/predictions/season?season=abc").status_code == 422
+
+
+def test_api_predictions_season_batch(client, monkeypatch):
+    import f1web.app as app_module
+
+    def fake_season(season, **kw):
+        assert season == 2024
+        second = {**_canned_prediction(), "round": 23}
+        return [_canned_prediction(), second]
+
+    monkeypatch.setattr(app_module, "predict_season", fake_season)
+    resp = client.get("/api/predictions/season?season=2024")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["season"] == 2024
+    assert len(data["predictions"]) == 2
+    assert data["predictions"][0]["round"] == 22
+    assert data["predictions"][0]["drivers"][0]["driver_id"] == "russell"
+    assert data["predictions"][1]["round"] == 23
+
+
+def test_api_predictions_season_error_is_400(client, monkeypatch):
+    import f1web.app as app_module
+
+    def boom(season, **kw):
+        raise ValueError("no cached data for 2024")
+
+    monkeypatch.setattr(app_module, "predict_season", boom)
+    resp = client.get("/api/predictions/season?season=2024")
+    assert resp.status_code == 400
+    assert "no cached data" in resp.json()["error"]
 
 
 def test_prediction_is_cached_within_ttl(client, monkeypatch):

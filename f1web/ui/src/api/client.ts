@@ -185,6 +185,16 @@ export function getPrediction(season?: number, round?: number): Promise<Predicti
   return apiGet<Prediction>(`/api/prediction${qs({ season, round })}`)
 }
 
+export interface SeasonPredictions {
+  season: number
+  predictions: Prediction[]
+}
+
+/** All completed rounds of a season in one dataset pass (Race History). */
+export function getSeasonPredictions(season: number): Promise<SeasonPredictions> {
+  return apiGet<SeasonPredictions>(`/api/predictions/season${qs({ season })}`)
+}
+
 export function getBacktest(): Promise<Backtest> {
   return apiGet<Backtest>('/api/backtest')
 }

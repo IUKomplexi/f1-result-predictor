@@ -59,7 +59,7 @@ from f1core.config import (
     save_config,
     validate_config,
 )
-from f1core.predict import get_prediction
+from f1core.predict import get_prediction, predict_season, prediction_payload
 from f1data import (
     F1APIError,
     F1Client,
@@ -76,6 +76,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_TOML = REPO_ROOT / "config.toml"
 BACKTEST_JSON = REPO_ROOT / "reports" / "backtest.json"
 CALIBRATION_JSON = REPO_ROOT / "reports" / "calibration.json"
+# Disk-backed prediction cache (gitignored; keyed by season/round/feature-fingerprint/params).
+PREDICTION_CACHE_DIR = REPO_ROOT / "data" / "predictions"
 UI_DIST = REPO_ROOT / "f1web" / "ui" / "dist"
 UI_DIST_INDEX = UI_DIST / "index.html"
 # Vite writes JS/CSS chunks under dist/assets and the built index.html
@@ -88,29 +90,23 @@ _PREDICTION_TTL = 300.0  # seconds; the SPA's repeated calls stay fast
 
 
 def _payload(pred: dict) -> dict:
-    """JSON-safe representation of a prediction dict."""
-    rows = json.loads(pred["result"].to_json(orient="records"))
-    return {
-        "season": pred["season"],
-        "round": pred["round"],
-        "race": pred["meta"],
-        "synthetic": pred["synthetic"],
-        "verified": pred["verified"],
-        "calibrated": pred["calibrated"],
-        "checkpoint": pred["checkpoint"],
-        "features": pred.get("features"),
-        "drivers": rows,
-    }
+    """JSON-safe representation of a prediction dict (see predict.prediction_payload)."""
+    return prediction_payload(pred)
 
 
 def _cached_prediction(season: int | None, round_: int | None) -> dict:
-    """JSON-safe prediction for (season, round), cached for the TTL."""
+    """JSON-safe prediction for (season, round), cached in memory + on disk."""
     key = (season, round_)
     now = time.monotonic()
     hit = _PREDICTION_CACHE.get(key)
     if hit is not None and now - hit[0] < _PREDICTION_TTL:
         return hit[1]
-    payload = _payload(get_prediction(season=season, round_=round_, quiet=True))
+    # The disk-backed cache in get_prediction makes repeat calls instant (and
+    # skips dataset assembly on a hit); the in-memory TTL avoids even the JSON
+    # read within a short window.
+    payload = _payload(get_prediction(
+        season=season, round_=round_, quiet=True, cache_dir=PREDICTION_CACHE_DIR,
+    ))
     _PREDICTION_CACHE[key] = (now, payload)
     return payload
 
@@ -308,6 +304,17 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
             return _error(str(exc), 409)
         except (ValueError, F1APIError) as exc:
             return _error(str(exc), 400)
+
+    @app.get("/api/predictions/season")
+    def predictions_season_api(season: int):
+        """All completed rounds of a season in one dataset pass (Race History)."""
+        try:
+            preds = predict_season(season, quiet=True, cache_dir=PREDICTION_CACHE_DIR)
+        except SystemExit as exc:
+            return _error(str(exc), 409)
+        except (ValueError, F1APIError) as exc:
+            return _error(str(exc), 400)
+        return {"season": season, "predictions": [_payload(p) for p in preds]}
 
     @app.post("/api/predict")
     async def predict_api(request: Request):

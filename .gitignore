@@ -10,6 +10,7 @@ build/
 data/raw/
 data/features.parquet
 data/model/
+data/predictions/
 
 # Tooling state
 .reasonix/

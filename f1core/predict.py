@@ -19,6 +19,9 @@ values natively) unless supplied via ``--grid``.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -31,10 +34,10 @@ from f1core.config import load_config
 from f1core.reporting import rank_by, to_md
 from f1data import F1APIError, F1Client, fetch_calendar, fetch_season
 from features.build import add_features, assemble
-from features.registry import enabled_features
+from features.registry import enabled_features, feature_fingerprint
 from model.calibrate import apply_calibration, load_calibrators
 from model.evaluate import race_metrics
-from model.train import load_checkpoint, prepare, quantize_points
+from model.train import load_checkpoint, model_params, prepare, quantize_points
 
 # --------------------------------------------------------------------------
 # Target race discovery
@@ -291,6 +294,138 @@ def read_grid_csv(path: str | Path) -> dict[str, int]:
 
 
 # --------------------------------------------------------------------------
+# JSON-safe payload + disk-backed prediction cache
+# --------------------------------------------------------------------------
+
+# Default location for the disk-backed prediction cache (gitignored, like the
+# other data/ artifacts). Overridable per-call via ``cache_dir``.
+DEFAULT_PREDICTION_CACHE = "data/predictions"
+
+
+def prediction_payload(pred: dict) -> dict:
+    """JSON-safe representation of a prediction dict (drivers as records).
+
+    Mirrors the web dashboard's ``_payload`` shape so a cached entry can be
+    returned directly from ``/api/prediction`` and the season endpoint without
+    re-serializing the underlying DataFrame.
+    """
+    rows = json.loads(pred["result"].to_json(orient="records"))
+    return {
+        "season": pred["season"],
+        "round": pred["round"],
+        "race": pred["meta"],
+        "synthetic": pred["synthetic"],
+        "verified": pred["verified"],
+        "calibrated": pred["calibrated"],
+        "checkpoint": pred["checkpoint"],
+        "features": pred.get("features"),
+        "drivers": rows,
+    }
+
+
+def _params_hash(cfg: dict) -> str:
+    """Stable short hash of the effective ``[model.params]`` (cache key part)."""
+    payload = json.dumps(model_params(cfg), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:12]
+
+
+def prediction_cache_key(
+    season: int, round_: int, feats_fingerprint: str, params_hash: str
+) -> str:
+    """Cache filename key for ``(season, round)`` given the feature fingerprint.
+
+    A feature-selection or ``[model.params]`` change alters the fingerprint /
+    params hash, so stale entries are naturally bypassed (never read, never
+    written over) rather than invalidated eagerly.
+    """
+    payload = f"{season}|{round_}|{feats_fingerprint}|{params_hash}".encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def load_cached_prediction(cache_dir: str | Path, key: str) -> dict | None:
+    """Read a cached JSON payload for ``key``, or None when missing/corrupt."""
+    path = Path(cache_dir) / f"{key}.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_cached_prediction(cache_dir: str | Path, key: str, payload: dict) -> None:
+    """Atomically write a JSON payload for ``key`` under ``cache_dir``."""
+    path = Path(cache_dir) / f"{key}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _pred_from_payload(payload: dict) -> dict:
+    """Rebuild a prediction dict (with a DataFrame ``result``) from a cached payload."""
+    result = pd.DataFrame(payload["drivers"])[
+        [
+            "pred_rank", "driver_id", "constructor_id", "grid", "expected_points",
+            "p_scored", "p_top3", "p_win", "actual_points", "actual_position",
+        ]
+    ]
+    return {
+        "result": result,
+        "meta": payload["race"],
+        "season": payload["season"],
+        "round": payload["round"],
+        "synthetic": payload["synthetic"],
+        "verified": payload["verified"],
+        "calibrated": payload["calibrated"],
+        "checkpoint": payload["checkpoint"],
+        "features": payload.get("features"),
+    }
+
+
+# --------------------------------------------------------------------------
+# Shared prediction context (built once, reused across target races)
+# --------------------------------------------------------------------------
+
+def _make_client(cfg: dict, refresh: bool, client: F1Client | None) -> F1Client:
+    """The configured API client, or an injected one (tests)."""
+    if client is not None:
+        return client
+    return F1Client(
+        base_url=cfg["api"]["base_url"],
+        user_agent=cfg["api"]["user_agent"],
+        cache_dir=cfg["data"]["cache_dir"],
+        refresh=refresh,
+        sleep_seconds=cfg["api"]["sleep_seconds"],
+        timeout=cfg["api"]["timeout"],
+        max_retries=cfg["api"]["max_retries"],
+    )
+
+
+def _featured_frame(client: F1Client, seasons: Sequence[int]) -> tuple[list[dict], pd.DataFrame]:
+    """Fetch + assemble + feature every cached season exactly once.
+
+    This is the expensive part of a prediction (one dataset pass); scoring many
+    rounds from the returned frame avoids repeating it per race.
+    """
+    season_datas = [fetch_season(client, s) for s in seasons]
+    return season_datas, add_features(assemble(season_datas))
+
+
+def _load_models(cfg: dict, model_path: str | None, feats: Sequence[str]) -> tuple:
+    """(checkpoint, model, calibrators) for the configured model + feature set."""
+    checkpoint = model_path or cfg["model"]["checkpoint"]
+    model = load_checkpoint(checkpoint, expected=feats)
+    calibrators = load_calibrators(cfg["model"]["calibrators"], expected=list(feats))
+    return checkpoint, model, calibrators
+
+
+def _race_meta(df: pd.DataFrame, season: int, round_: int) -> dict:
+    """race_name/circuit_id/date for a round, tolerant of a missing round."""
+    target_rows = df[(df["season"] == season) & (df["round"] == round_)]
+    return {k: (target_rows[k].iloc[0] if k in target_rows else None)  # type: ignore[reportAttributeAccessIssue]  # boolean-mask slice is Unknown
+            for k in ("race_name", "circuit_id", "date")}
+
+
+# --------------------------------------------------------------------------
 # Scoring
 # --------------------------------------------------------------------------
 
@@ -450,6 +585,7 @@ def get_prediction(
     client: F1Client | None = None,
     enable_features: Sequence[str] | None = None,
     disable_features: Sequence[str] | None = None,
+    cache_dir: str | Path | None = None,
 ) -> dict:
     """Compute a prediction, returning results + metadata (no I/O side effects).
 
@@ -457,39 +593,44 @@ def get_prediction(
     race. ``grid_csv`` supplies a qualifying grid for an upcoming race.
     ``client`` injects an F1Client (tests); the default is built from ``cfg``.
     ``enable_features``/``disable_features`` override the config feature
-    selection. Returns a dict with: ``result`` (DataFrame from
-    :func:`predict_race`), ``meta`` (race_name/circuit_id/date), ``season``,
-    ``round``, ``synthetic``, ``verified``, ``calibrated``, ``checkpoint``,
-    ``features``.
+    selection. When ``cache_dir`` is given, the JSON payload is cached on disk
+    keyed by ``(season, round, feature-fingerprint, params-hash)`` so repeat
+    calls (and the web dashboard) are instant; a feature-selection or
+    ``[model.params]`` change bypasses stale entries automatically. Returns a
+    dict with: ``result`` (DataFrame from :func:`predict_race`), ``meta``
+    (race_name/circuit_id/date), ``season``, ``round``, ``synthetic``,
+    ``verified``, ``calibrated``, ``checkpoint``, ``features``.
     """
     cfg = cfg or load_config()
     if round_ is not None and season is None:
         raise ValueError("season is required when round is given")
     seasons = list(range(cfg["data"]["start_season"], cfg["data"]["end_season"] + 1))
-    if client is None:
-        client = F1Client(
-            base_url=cfg["api"]["base_url"],
-            user_agent=cfg["api"]["user_agent"],
-            cache_dir=cfg["data"]["cache_dir"],
-            refresh=refresh,
-            sleep_seconds=cfg["api"]["sleep_seconds"],
-            timeout=cfg["api"]["timeout"],
-            max_retries=cfg["api"]["max_retries"],
-        )
+    feats = enabled_features(cfg, enable=enable_features or [], disable=disable_features or [])
+    client = _make_client(cfg, refresh, client)
 
-    # Assemble every cached season once, then (re)compute features. For an
-    # upcoming race we inject synthetic rows so the pre-race features are
-    # derived exactly as they would be before the race.
-    season_datas = [fetch_season(client, s) for s in seasons]
-    base_df = add_features(assemble(season_datas))
-
+    # An explicit target is known up-front, so a cache hit skips the expensive
+    # dataset assembly entirely. The "next race" default needs the assembled
+    # frame to discover the target first.
     if season is not None:
         if round_ is None:
             raise ValueError("round_ is required when season is given")
         target_season, target_round = season, round_
+        needs_frame = True
     else:
+        season_datas, base_df = _featured_frame(client, seasons)
         target_season, target_round = find_next_race(client, base_df, seasons)
+        needs_frame = False
 
+    if cache_dir is not None:
+        key = prediction_cache_key(
+            target_season, target_round, feature_fingerprint(feats), _params_hash(cfg)
+        )
+        cached = load_cached_prediction(cache_dir, key)
+        if cached is not None:
+            return _pred_from_payload(cached)
+
+    if needs_frame:
+        season_datas, base_df = _featured_frame(client, seasons)
     df, synthetic = _target_frame(
         client, base_df, season_datas, seasons, target_season, target_round, grid_csv, quiet
     )
@@ -499,16 +640,11 @@ def get_prediction(
     # The plumbing (_apply_target_weather / merge_weather) stays available
     # for a future re-evaluation.
 
-    checkpoint = model_path or cfg["model"]["checkpoint"]
-    feats = enabled_features(cfg, enable=enable_features or [], disable=disable_features or [])
-    model = load_checkpoint(checkpoint, expected=feats)
-    calibrators = load_calibrators(cfg["model"]["calibrators"], expected=feats)
+    checkpoint, model, calibrators = _load_models(cfg, model_path, feats)
     result = predict_race(df, model, target_season, target_round, calibrators, feats)
 
-    target_rows = df[(df["season"] == target_season) & (df["round"] == target_round)]
-    meta = {k: (target_rows[k].iloc[0] if k in target_rows else None)  # type: ignore[reportAttributeAccessIssue]  # target_rows is a boolean-mask slice (Unknown)
-            for k in ("race_name", "circuit_id", "date")}
-    return {
+    meta = _race_meta(df, target_season, target_round)
+    pred = {
         "result": result,
         "meta": meta,
         "season": target_season,
@@ -519,6 +655,61 @@ def get_prediction(
         "checkpoint": checkpoint,
         "features": feats,
     }
+    if cache_dir is not None:
+        save_cached_prediction(cache_dir, key, prediction_payload(pred))
+    return pred
+
+
+def predict_season(
+    season: int,
+    cfg: dict | None = None,
+    model_path: str | None = None,
+    quiet: bool = True,
+    client: F1Client | None = None,
+    enable_features: Sequence[str] | None = None,
+    disable_features: Sequence[str] | None = None,
+    cache_dir: str | Path | None = None,
+) -> list[dict]:
+    """Score every completed round of ``season`` in one dataset pass.
+
+    Assembles the featured frame once (instead of once per race, the old
+    Race History cost) and scores each completed round from it. Each prediction
+    is shaped like :func:`get_prediction`'s return; ``synthetic`` is always
+    False here because only cached (completed) rounds are scored. When
+    ``cache_dir`` is given, per-round payloads are also written to the shared
+    disk cache so single-race fetches are instant too.
+    """
+    cfg = cfg or load_config()
+    seasons = list(range(cfg["data"]["start_season"], cfg["data"]["end_season"] + 1))
+    client = _make_client(cfg, False, client)
+    _, base_df = _featured_frame(client, seasons)
+    completed = sorted(
+        base_df.loc[base_df["season"] == season, "round"].astype(int).unique()
+    )
+    feats = enabled_features(cfg, enable=enable_features or [], disable=disable_features or [])
+    checkpoint, model, calibrators = _load_models(cfg, model_path, feats)
+
+    preds: list[dict] = []
+    for round_ in completed:
+        result = predict_race(base_df, model, season, round_, calibrators, feats)
+        pred = {
+            "result": result,
+            "meta": _race_meta(base_df, season, round_),
+            "season": season,
+            "round": int(round_),
+            "synthetic": False,
+            "verified": True,
+            "calibrated": bool(calibrators),
+            "checkpoint": checkpoint,
+            "features": feats,
+        }
+        if cache_dir is not None:
+            key = prediction_cache_key(
+                season, int(round_), feature_fingerprint(feats), _params_hash(cfg)
+            )
+            save_cached_prediction(cache_dir, key, prediction_payload(pred))
+        preds.append(pred)
+    return preds
 
 
 def main() -> int:

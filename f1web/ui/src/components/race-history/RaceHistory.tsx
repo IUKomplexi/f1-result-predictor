@@ -1,15 +1,9 @@
 import { useEffect, useState } from 'react'
-import {
-  ApiError,
-  getCalendar,
-  getPrediction,
-  getStatus,
-  type Prediction,
-} from '../../api/client'
+import { ApiError, getSeasonPredictions, getStatus, type Prediction } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { driverLabel, fmtDate } from '../../lib/format'
 import { Badge } from '../ui/Badge'
-import { ErrorState, ProgressState, Skeleton } from '../ui/DataState'
+import { ErrorState, Skeleton } from '../ui/DataState'
 import './RaceHistory.css'
 
 interface RaceResult {
@@ -85,30 +79,15 @@ function useSeasonResults(season: number | null): {
       return
     }
     let cancelled = false
-    setState({ phase: 'loading', label: 'Fetching calendar…', done: 0, total: 0 })
+    setState({ phase: 'loading', label: 'Fetching season predictions…', done: 0, total: 0 })
     ;(async () => {
       try {
-        const calendar = await getCalendar(season)
-        const rounds = calendar.calendar.map((entry) => entry.round)
-        setState({
-          phase: 'loading',
-          label: `Predicting 0/${rounds.length} races…`,
-          done: 0,
-          total: rounds.length,
-        })
-        const races: RaceResult[] = []
-        for (const round of rounds) {
-          if (cancelled) return
-          const prediction = await getPrediction(season, round)
-          races.push(analyzeRace(prediction))
-          setState({
-            phase: 'loading',
-            label: `Predicting ${races.length}/${rounds.length} races…`,
-            done: races.length,
-            total: rounds.length,
-          })
-        }
-        races.sort((a, b) => a.round - b.round)
+        // One dataset pass for the whole season (backend /api/predictions/season),
+        // instead of N sequential per-round recomputes.
+        const data = await getSeasonPredictions(season)
+        const races = data.predictions
+          .map(analyzeRace)
+          .sort((a, b) => a.round - b.round)
         if (!cancelled) setState({ phase: 'ready', races })
       } catch (error) {
         if (cancelled) return
@@ -157,11 +136,7 @@ export function RaceHistory() {
       </section>
 
       {state.phase === 'idle' || state.phase === 'loading' ? (
-        state.phase === 'loading' && state.total > 0 ? (
-          <ProgressState label={state.label} done={state.done} total={state.total} />
-        ) : (
-          <Skeleton rows={6} />
-        )
+        <Skeleton rows={6} />
       ) : null}
       {state.phase === 'error' ? (
         <ErrorState message={state.message} onRetry={retry} />

@@ -363,3 +363,172 @@ def test_get_prediction_requires_season_for_round():
 
     with pytest.raises(ValueError, match="season is required when round is given"):
         get_prediction(round_=22, quiet=True)
+
+
+# --------------------------------------------------------------------------
+# Disk-backed prediction cache
+# --------------------------------------------------------------------------
+
+def test_prediction_cache_key_distinguishes_season_round_fingerprint_params():
+    from f1core.predict import prediction_cache_key
+
+    k = prediction_cache_key(2024, 1, "fpA", "pA")
+    assert prediction_cache_key(2024, 1, "fpA", "pA") == k  # deterministic
+    distinct = {
+        prediction_cache_key(2024, 1, "fpA", "pA"),  # base
+        prediction_cache_key(2025, 1, "fpA", "pA"),  # different season
+        prediction_cache_key(2024, 2, "fpA", "pA"),  # different round
+        prediction_cache_key(2024, 1, "fpB", "pA"),  # different feature fingerprint
+        prediction_cache_key(2024, 1, "fpA", "pB"),  # different params hash
+    }
+    assert len(distinct) == 5
+
+
+def test_prediction_cache_roundtrip_rebuilds_result(tmp_path):
+    from f1core.predict import (
+        _pred_from_payload,
+        load_cached_prediction,
+        prediction_cache_key,
+        prediction_payload,
+        save_cached_prediction,
+    )
+
+    result = pd.DataFrame(
+        {
+            "pred_rank": [1, 2], "driver_id": ["a", "b"],
+            "constructor_id": ["t1", "t2"], "grid": [1, 2],
+            "expected_points": [25.0, 18.0], "p_scored": [0.9, 0.8],
+            "p_top3": [0.6, 0.5], "p_win": [0.4, 0.3],
+            "actual_points": [25.0, 18.0], "actual_position": [1, 2],
+        }
+    )
+    pred = {
+        "result": result,
+        "meta": {"race_name": "R1", "circuit_id": "c1", "date": "2024-03-01"},
+        "season": 2024, "round": 1, "synthetic": False, "verified": True,
+        "calibrated": False, "checkpoint": "c", "features": ["grid"],
+    }
+    key = prediction_cache_key(2024, 1, "fp", "ph")
+    save_cached_prediction(tmp_path, key, prediction_payload(pred))
+
+    cached = load_cached_prediction(tmp_path, key)
+    assert cached is not None
+    assert cached["season"] == 2024 and cached["round"] == 1
+    assert cached["race"] == pred["meta"]
+    assert cached["drivers"][0]["driver_id"] == "a"
+
+    rebuilt = _pred_from_payload(cached)
+    pd.testing.assert_frame_equal(rebuilt["result"], result)
+    assert rebuilt["meta"] == pred["meta"]
+    assert rebuilt["verified"] is True
+
+
+def test_prediction_cache_miss_and_fingerprint_invalidation(tmp_path):
+    from f1core.predict import load_cached_prediction, prediction_cache_key
+
+    save_key = prediction_cache_key(2024, 1, "fpA", "ph")
+    # A different round (miss), or a changed feature fingerprint (invalidation),
+    # must not read the entry written for save_key.
+    assert load_cached_prediction(tmp_path, save_key) is None
+    assert load_cached_prediction(
+        tmp_path, prediction_cache_key(2024, 1, "fpB", "ph")
+    ) is None
+    assert load_cached_prediction(
+        tmp_path, prediction_cache_key(2024, 1, "fpA", "ph2")
+    ) is None
+
+
+def test_get_prediction_disk_cache_skips_recompute(monkeypatch, tmp_path):
+    """A cache hit for an explicit (season, round) skips dataset assembly + scoring."""
+    import f1core.predict as p
+    from f1core.config import load_config
+
+    calls = {"assembly": 0, "predict": 0}
+    base = pd.DataFrame(
+        {
+            "season": [2024, 2024], "round": [1, 1],
+            "race_name": ["R1", "R1"], "circuit_id": ["c1", "c1"],
+            "date": ["2024-03-01", "2024-03-01"],
+            "driver_id": ["a", "b"], "constructor_id": ["t1", "t2"],
+            "grid": [1, 2], "position": [1, 2], "points": [25.0, 18.0],
+            "scored": [1, 1], "top3": [1, 1], "win": [1, 0],
+        }
+    )
+    result = pd.DataFrame(
+        {
+            "pred_rank": [1, 2], "driver_id": ["a", "b"],
+            "constructor_id": ["t1", "t2"], "grid": [1, 2],
+            "expected_points": [25.0, 18.0], "p_scored": [0.9, 0.8],
+            "p_top3": [0.6, 0.5], "p_win": [0.4, 0.3],
+            "actual_points": [25.0, 18.0], "actual_position": [1, 2],
+        }
+    )
+
+    def fake_frame(client, seasons):
+        calls["assembly"] += 1
+        return [], base
+
+    def fake_target(client, base_df, season_datas, seasons, ts, tr, grid_csv, quiet):
+        return base_df, False
+
+    def fake_models(cfg, model_path, feats):
+        return "checkpoint", object(), {}
+
+    def fake_predict(df_, model, season, round_, cal, feats):
+        calls["predict"] += 1
+        return result
+
+    monkeypatch.setattr(p, "_featured_frame", fake_frame)
+    monkeypatch.setattr(p, "_target_frame", fake_target)
+    monkeypatch.setattr(p, "_load_models", fake_models)
+    monkeypatch.setattr(p, "predict_race", fake_predict)
+
+    cfg = load_config()
+    p.get_prediction(season=2024, round_=1, cfg=cfg, cache_dir=tmp_path)
+    p.get_prediction(season=2024, round_=1, cfg=cfg, cache_dir=tmp_path)
+    # The dataset is assembled and scored exactly once across both calls.
+    assert calls == {"assembly": 1, "predict": 1}
+
+
+def test_get_prediction_cache_invalidates_on_feature_change(monkeypatch, tmp_path):
+    """Changing the feature selection produces a different cache key -> recompute."""
+    import copy
+
+    import f1core.predict as p
+    from f1core.config import load_config
+
+    calls = {"assembly": 0}
+    base = pd.DataFrame(
+        {
+            "season": [2024, 2024], "round": [1, 1],
+            "race_name": ["R1", "R1"], "circuit_id": ["c1", "c1"],
+            "date": ["2024-03-01", "2024-03-01"],
+            "driver_id": ["a", "b"], "constructor_id": ["t1", "t2"],
+            "grid": [1, 2], "position": [1, 2], "points": [25.0, 18.0],
+            "scored": [1, 1], "top3": [1, 1], "win": [1, 0],
+        }
+    )
+    result = base[["driver_id", "grid"]].copy()
+
+    def fake_frame(client, seasons):
+        calls["assembly"] += 1
+        return [], base
+
+    monkeypatch.setattr(p, "_featured_frame", fake_frame)
+    monkeypatch.setattr(p, "_target_frame",
+                        lambda client, bdf, sd, ss, ts, tr, gc, q: (bdf, False))
+    monkeypatch.setattr(p, "_load_models",
+                        lambda cfg, mp, feats: ("checkpoint", object(), {}))
+    monkeypatch.setattr(p, "predict_race",
+                        lambda df_, m, s, r, c, f: result.assign(
+                            pred_rank=range(1, len(result) + 1)))
+
+    cfg = load_config()
+    p.get_prediction(season=2024, round_=1, cfg=cfg, cache_dir=tmp_path)
+    assert calls["assembly"] == 1
+    # A different feature set (core defaults vs an explicit single feature)
+    # must not reuse the cached payload.
+    cfg2 = copy.deepcopy(cfg)
+    cfg2["features"] = {"enabled": ["grid"]}
+    p.get_prediction(season=2024, round_=1, cfg=cfg2, cache_dir=tmp_path)
+    assert calls["assembly"] == 2
