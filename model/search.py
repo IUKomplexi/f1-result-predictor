@@ -23,8 +23,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from f1core.config import load_config
 from f1data import F1Client
 from features.build import build_dataset
+from features.registry import enabled_features
 from model.evaluate import race_metrics
 from model.train import (
     HurdleModels,
@@ -64,19 +66,21 @@ def evaluate_config(
     df: pd.DataFrame,
     params: dict[str, Any],
     max_test_season: int | None = None,
+    features: list[str] | None = None,
 ) -> tuple[float, float]:
     """Mean per-race MAE and Spearman of one config on a walk-forward window.
 
     Metrics are computed per race (rankings are only meaningful within a
     single race — pooling rounds would corrupt them), then averaged. Expected
-    points are quantized, matching the deployed output.
+    points are quantized, matching the deployed output. ``features`` selects
+    the model columns (default: the full set).
     """
     mae, spearman = [], []
     for train, test, season in walk_forward_seasons(df):
         if max_test_season is not None and season > max_test_season:
             break
-        model = HurdleModels(seed=42, params=params).fit(*prepare(train))
-        X_test, _ = prepare(test)
+        model = HurdleModels(seed=42, params=params).fit(*prepare(train, features))
+        X_test, _ = prepare(test, features)
         test = test.copy()
         test["pred_points"] = quantize_points(model.predict_expected_points(X_test))
         for _, race in test.groupby(["season", "round"]):
@@ -93,11 +97,12 @@ def search(
     n: int = 16,
     seed: int = 0,
     max_test_season: int | None = None,
+    features: list[str] | None = None,
 ) -> pd.DataFrame:
     """Evaluate ``n`` configs and rank them (best = lowest combined score)."""
     rows = []
     for params in sample_configs(n, seed):
-        mae, spearman = evaluate_config(df, params, max_test_season)
+        mae, spearman = evaluate_config(df, params, max_test_season, features)
         rows.append({**params, "mae": mae, "spearman": spearman})
     results = pd.DataFrame(rows)
     # Lower is better: MAE rank + inverse-Spearman rank.
@@ -116,11 +121,25 @@ def main() -> int:
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--cache-dir", default="data/raw")
     parser.add_argument("--dataset", default="data/features.parquet")
+    parser.add_argument(
+        "--enable-features", default="",
+        help="comma-separated features to enable on top of config",
+    )
+    parser.add_argument(
+        "--disable-features", default="",
+        help="comma-separated features to disable on top of config",
+    )
     args = parser.parse_args()
 
     client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
     df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    results = search(df, n=args.n, seed=args.seed, max_test_season=args.max_test_season)
+    feats = enabled_features(
+        load_config(),
+        enable=[f for f in args.enable_features.split(",") if f],
+        disable=[f for f in args.disable_features.split(",") if f],
+    )
+    results = search(df, n=args.n, seed=args.seed,
+                     max_test_season=args.max_test_season, features=feats)
 
     print(f"Walk-forward search (test seasons <= {args.max_test_season}):")
     print(results.round(4).to_string(index=False))

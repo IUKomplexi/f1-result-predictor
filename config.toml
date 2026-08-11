@@ -25,5 +25,17 @@ seed = 42
 backtest = "reports/backtest.md"
 prediction = "reports/prediction.md"
 
+[features]
+# Feature selection (see features/registry.py + reports/features.md).
+# The explicit list below mirrors the registry defaults (core features on,
+# selectable/cut off). Remove the line to fall back to registry defaults, or
+# edit the list to override; CLI flags --enable-features/--disable-features
+# apply on top.
+enabled = ["grid", "qual_pos", "grid_qual_gap", "driver_prev_points_mean",
+           "driver_prev_points_sum", "team_prev_points_mean", "team_wins_prior",
+           "champ_points_entering", "constructor_champ_pos_entering",
+           "season_driver_pts_per_race", "season_team_pts_per_race",
+           "driver_id", "constructor_id", "circuit_id"]
+
 [weather]
 cache_dir = "data/weather"

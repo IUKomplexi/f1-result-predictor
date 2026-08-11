@@ -12,9 +12,11 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
+from f1core.config import load_config
 from f1core.reporting import rank_by, to_md
 from f1data import F1Client
 from features.build import build_dataset
+from features.registry import enabled_features, feature_fingerprint
 from model.train import (
     HurdleModels,
     points_for_position,
@@ -89,15 +91,18 @@ def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 def run_backtest(
-    df: pd.DataFrame, quantize: bool = True
+    df: pd.DataFrame,
+    quantize: bool = True,
+    features: list[str] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """Walk-forward backtest; returns (overall table, per-season tables).
 
     The model is re-trained for every test season (train = all strictly
-    earlier seasons). Metrics are computed per race and then averaged per
-    season and overall. Expected points are quantized to the points table by
-    default (the deployed output); pass ``quantize=False`` to compare the
-    raw continuous expectations.
+    earlier seasons) on ``features`` (default: the full feature set). Metrics
+    are computed per race and then averaged per season and overall. Expected
+    points are quantized to the points table by default (the deployed
+    output); pass ``quantize=False`` to compare the raw continuous
+    expectations.
     """
     df = df.copy()
     df["pred_model"] = np.nan
@@ -108,10 +113,10 @@ def run_backtest(
     season_rows: list[dict] = []
     model_by_season: dict[int, HurdleModels] = {}
     for train, test, season in walk_forward_seasons(df):
-        X_train, y_train = prepare(train)
+        X_train, y_train = prepare(train, features)
         model = HurdleModels().fit(X_train, y_train)
         model_by_season[season] = model
-        X_test, _ = prepare(test)
+        X_test, _ = prepare(test, features)
         test = test.copy()
         pred = model.predict_expected_points(X_test)
         test["pred_model"] = quantize_points(pred) if quantize else pred
@@ -209,11 +214,25 @@ def main() -> int:
                         help="JSON snapshot for the web dashboard")
     parser.add_argument("--no-quantize", action="store_true",
                         help="keep continuous expected points (deployed output is quantized)")
+    parser.add_argument(
+        "--enable-features", default="",
+        help="comma-separated features to enable on top of config",
+    )
+    parser.add_argument(
+        "--disable-features", default="",
+        help="comma-separated features to disable on top of config",
+    )
     args = parser.parse_args()
 
     client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
     df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    overall, by_season = run_backtest(df, quantize=not args.no_quantize)
+    feats = enabled_features(
+        load_config(),
+        enable=[f for f in args.enable_features.split(",") if f],
+        disable=[f for f in args.disable_features.split(",") if f],
+    )
+    overall, by_season = run_backtest(df, quantize=not args.no_quantize, features=feats)
+    print(f"Features ({len(feats)}, fp {feature_fingerprint(feats)}): {', '.join(feats)}")
     print(overall.to_string())
     report = format_tables(overall, by_season)
     out = Path(args.out)

@@ -116,6 +116,8 @@ f1weather/                  weather data layer (evaluated, not adopted)
 f1core/                     shared core: predict, config, reporting, httpclient
 features/build.py           per-start dataset: strictly pre-race features,
                             points target, leakage-tested
+features/registry.py        declarative feature registry (id, category,
+                            default, builder, rationale) + selection helpers
 model/train.py              hurdle model (HGB classifier + regressor)
 model/search.py             walk-forward-validated hyperparameter search
 model/calibrate.py          isotonic probability calibration (per-target)
@@ -125,6 +127,26 @@ f1web/app.py                FastAPI JSON API + built-SPA host
 
 Leakage safety: every rolling/cumulative feature uses `shift(1)` so it only
 ever sees races strictly before the target race (unit-tested).
+
+## Feature registry & selection
+
+All 31 features (27 numeric + 4 categorical) are registered in
+`features/registry.py` — the single source of truth for id, category, default,
+builder, and rationale — and classified by a walk-forward permutation-importance
+audit (`scripts/feature_audit.py`, documented in `reports/features.md`):
+
+| category | meaning | default |
+| --- | --- | --- |
+| `core` | high impact (survived FDR q=0.05 in ≥1 hurdle component) | on |
+| `selectable` | low impact; kept for experiments | off |
+| `cut` | removal improved the backtest ≥1 SE (ablation gate) | off |
+
+The default enabled set is the 14 core features (`config.toml` `[features]
+enabled`). Every feature is still computed; only the enabled subset enters the
+training matrix. Toggle per run with `--enable-features`/`--disable-features`
+on `f1-train`, `f1-backtest`, `f1-predict`, `f1-calibrate`, `f1-search`;
+toggling changes the model-checkpoint fingerprint, so stale checkpoints are
+rejected instead of silently reused.
 
 ## Probability calibration
 
@@ -143,24 +165,26 @@ automatically.
 ## Results (honest)
 
 Walk-forward backtest, train on all seasons strictly before the test season,
-evaluate 2013–2025 (mean per race). Model = hurdle with 9 extra pre-race
-features (teammate-relative gaps, sprint, pairing tenure, ...), tuned
-hyperparameters (`model/search.py`), and expected points **quantized to the
-points table** (adopted because it improved walk-forward MAE/top-3/Spearman):
+evaluate 2013–2025 (mean per race). Model = hurdle on the 14 **core**
+registry features (see [Feature registry & selection](#feature-registry--selection)),
+tuned hyperparameters (`model/search.py`), and expected points **quantized to
+the points table** (adopted because it improved walk-forward
+MAE/top-3/Spearman):
 
 | baseline | winner_hit | top3_overlap | spearman | MAE (pts) |
 | --- | --- | --- | --- | --- |
-| **model** | **0.539** | 0.667 | **0.654** | 2.93 |
+| **model** | **0.550** | 0.659 | **0.656** | 2.92 |
 | grid order | 0.535 | **0.686** | 0.623 | **2.83** |
 | championship | 0.450 | 0.613 | 0.617 | 3.99 |
 | zero | 0.535 | 0.686 | 0.623 | 4.99 |
 
-The model now **beats the grid-order baseline on winner hit-rate** (0.539 vs
-0.535) and on ranking correlation (Spearman 0.654 vs 0.623). Grid order still
-edges it on top-3 (0.667 vs 0.686) and MAE (2.93 vs 2.83 — the grid baseline
+The model **beats the grid-order baseline on winner hit-rate** (0.550 vs
+0.535) and on ranking correlation (Spearman 0.656 vs 0.623). Grid order still
+edges it on top-3 (0.659 vs 0.686) and MAE (2.92 vs 2.83 — the grid baseline
 predicts the exact points-table value whenever the pole sitter wins, which no
-probabilistic model can match). Every metric improved over the Phase-6 model
-(0.531 / 0.662 / 0.651 / 2.97).
+probabilistic model can match). The feature audit cut 17 low-impact/redundant
+features (kept off by default): winner_hit rose from 0.539 to 0.550 with no
+metric moving beyond the fold-to-fold noise floor (`reports/features.md`).
 
 Dry run (Las Vegas 2024, predicted from pre-race info only): winner hit ✓,
 top-3 overlap 0.67, Spearman 0.79, MAE 1.95 points.

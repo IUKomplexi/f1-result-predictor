@@ -28,7 +28,7 @@ Dockerized.
 | --- | --- | --- |
 | `f1data/` | Polite, cached Jolpica API client + normalized fetchers | `F1Client` (`client.py`), `fetch_season`, `fetch_calendar`, `fetch_*` (`fetchers.py`) |
 | `f1weather/` | Open-Meteo weather layer — **evaluated, not adopted** (kept deliberately) | `WeatherClient`, `load_race_weather`, `weather_frame` |
-| `features/` | Feature engineering: per-start dataset with strictly pre-race features + points target | `build_dataset`, `add_features`, `assemble` (`build.py`) |
+| `features/` | Feature engineering: per-start dataset with strictly pre-race features + points target, plus the declarative feature registry | `build_dataset`, `add_features`, `assemble` (`build.py`); `REGISTRY`, `enabled_features`, `feature_fingerprint` (`registry.py`) |
 | `model/` | Hurdle model (HGB classifier + regressor), walk-forward backtest, isotonic calibration, hyperparameter search | `train_final_model`, `run_backtest`, `fit_calibrators`, `search` |
 | `f1core/` | Shared core: prediction pipeline, config loader, markdown/ranking helpers, HTTP base class | `predict_race`, `get_prediction` (`predict.py`), `load_config` (`config.py`), `to_md`/`rank_by` (`reporting.py`) |
 | `f1web/` | FastAPI JSON API + host for the built React SPA | `create_app` (`app.py`), `f1web/ui/` (React + Vite + TS) |
@@ -146,7 +146,8 @@ flowchart LR
 
 | You want to… | Go here |
 | --- | --- |
-| Add a pre-race feature | `features/build.py` → `add_features` + a `_add_*` helper; register in `NUMERIC_FEATURES`/`CATEGORICAL_FEATURES`; test in `tests/test_features.py`; bump the dataset cache version in `build_dataset` if the schema changes |
+| Add a pre-race feature | `features/build.py` → `add_features` + a `_add_*` helper; register in `NUMERIC_FEATURES`/`CATEGORICAL_FEATURES` **and** in `features/registry.py` (id, category, default, builder, rationale); test in `tests/test_features.py` + `tests/test_registry.py`; bump the dataset cache version in `build_dataset` if the schema changes |
+| Toggle features / audit the set | `config.toml` `[features] enabled`, CLI `--enable-features`/`--disable-features`, or `scripts/feature_audit.py` (`reports/features.md`) |
 | Try a model change | `model/train.py` (`HurdleModels`), tune via `model/search.py`, measure via `f1-backtest`; re-run `f1-calibrate` after retraining |
 | Add an API endpoint | route in `f1web/app.py` + typed function in `f1web/ui/src/api/client.ts` + component; errors must be `{"error": ...}` |
 | Add a dashboard tab | new component under `f1web/ui/src/components/<tab>/`, wire in `App.tsx`; reuse `useApi` and `lib/format` |
@@ -186,9 +187,12 @@ moves, or refactors; the weather layer stays.
 ## Open questions / next steps
 
 - **Headline edge is thin.** The model beats grid order on winner hit-rate
-  (0.539 vs 0.535) and Spearman (0.654 vs 0.623) but grid still wins
-  top-3 overlap (0.686) and MAE (2.83). What feature could actually move
-  top-3/MAE — per-circuit setup, strategy data, 2026-regs data?
+  (0.550 vs 0.535) and Spearman (0.656 vs 0.623) but grid still wins
+  top-3 overlap (0.686) and MAE (2.83). The feature audit (2026-08,
+  `reports/features.md`) cut 17 low-impact/redundant features (off by
+  default; winner_hit 0.539 → 0.550, everything else within noise). What
+  feature could actually move top-3/MAE — per-circuit setup, strategy data,
+  2026-regs data?
 - **2026 regulation change** is an imminent transfer-risk event for a model
   trained on 2010–2025 (the `points_era` split only covers pre/post-2019).
 - **Weather re-evaluation** plumbing is ready (`f1weather/`); the first attempt

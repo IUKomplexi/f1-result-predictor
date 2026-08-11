@@ -1,10 +1,10 @@
 {
   "overall": {
     "model": {
-      "winner_hit": 0.5387,
-      "top3_overlap": 0.6667,
-      "spearman": 0.6541,
-      "mae": 2.9333
+      "winner_hit": 0.5498,
+      "top3_overlap": 0.6593,
+      "spearman": 0.6559,
+      "mae": 2.9155
     },
     "grid": {
       "winner_hit": 0.5351,
@@ -188,82 +188,82 @@
     },
     "model": {
       "2013": {
-        "winner_hit": 0.6316,
-        "top3_overlap": 0.6316,
-        "spearman": 0.7028,
-        "mae": 2.7536
+        "winner_hit": 0.6842,
+        "top3_overlap": 0.5965,
+        "spearman": 0.6949,
+        "mae": 2.7775
       },
       "2014": {
-        "winner_hit": 0.4211,
+        "winner_hit": 0.3684,
         "top3_overlap": 0.5263,
-        "spearman": 0.6227,
-        "mae": 3.8634
+        "spearman": 0.6303,
+        "mae": 3.8622
       },
       "2015": {
         "winner_hit": 0.5789,
-        "top3_overlap": 0.7368,
-        "spearman": 0.6451,
-        "mae": 3.0246
+        "top3_overlap": 0.7719,
+        "spearman": 0.6433,
+        "mae": 3.0257
       },
       "2016": {
         "winner_hit": 0.619,
-        "top3_overlap": 0.6508,
-        "spearman": 0.6673,
-        "mae": 2.5671
+        "top3_overlap": 0.6667,
+        "spearman": 0.6707,
+        "mae": 2.5628
       },
       "2017": {
-        "winner_hit": 0.45,
+        "winner_hit": 0.55,
         "top3_overlap": 0.6667,
-        "spearman": 0.6071,
-        "mae": 2.8525
+        "spearman": 0.6176,
+        "mae": 2.7725
       },
       "2018": {
-        "winner_hit": 0.5238,
-        "top3_overlap": 0.6984,
-        "spearman": 0.6104,
-        "mae": 2.869
+        "winner_hit": 0.4762,
+        "top3_overlap": 0.6508,
+        "spearman": 0.6111,
+        "mae": 2.831
       },
       "2019": {
-        "winner_hit": 0.4762,
-        "top3_overlap": 0.7302,
-        "spearman": 0.6619,
-        "mae": 2.7167
+        "winner_hit": 0.4286,
+        "top3_overlap": 0.7143,
+        "spearman": 0.667,
+        "mae": 2.6619
       },
       "2020": {
         "winner_hit": 0.5882,
         "top3_overlap": 0.6863,
-        "spearman": 0.5999,
-        "mae": 3.4029
+        "spearman": 0.6091,
+        "mae": 3.4382
       },
       "2021": {
-        "winner_hit": 0.5,
-        "top3_overlap": 0.6667,
-        "spearman": 0.6821,
-        "mae": 3.042
+        "winner_hit": 0.5909,
+        "top3_overlap": 0.6515,
+        "spearman": 0.6815,
+        "mae": 2.9739
       },
       "2022": {
-        "winner_hit": 0.4091,
-        "top3_overlap": 0.697,
-        "spearman": 0.6051,
-        "mae": 3.0136
+        "winner_hit": 0.5,
+        "top3_overlap": 0.6818,
+        "spearman": 0.601,
+        "mae": 2.9682
       },
       "2023": {
-        "winner_hit": 0.7727,
+        "winner_hit": 0.7273,
         "top3_overlap": 0.5909,
-        "spearman": 0.6527,
-        "mae": 2.8386
+        "spearman": 0.6496,
+        "mae": 2.8841
       },
       "2024": {
-        "winner_hit": 0.4583,
-        "top3_overlap": 0.625,
-        "spearman": 0.7459,
-        "mae": 2.6989
+        "winner_hit": 0.4167,
+        "top3_overlap": 0.5972,
+        "spearman": 0.7458,
+        "mae": 2.6762
       },
       "2025": {
-        "winner_hit": 0.5833,
-        "top3_overlap": 0.75,
-        "spearman": 0.6734,
-        "mae": 2.7154
+        "winner_hit": 0.625,
+        "top3_overlap": 0.7639,
+        "spearman": 0.6799,
+        "mae": 2.7073
       }
     },
     "zero": {

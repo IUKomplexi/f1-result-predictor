@@ -239,7 +239,9 @@ def test_build_dataset_merges_weather(tmp_path, monkeypatch):
     monkeypatch.setattr(
         fb, "add_features", lambda d: d.assign(**{c: np.nan for c in WEATHER_FEATURES})
     )
-    monkeypatch.setattr(fb, "_build_fresh", lambda client, seasons, cache: df.copy())
+    monkeypatch.setattr(
+        fb, "_build_fresh", lambda client, seasons, cache, fingerprint: df.copy()
+    )
 
     wx = weather_frame(
         [{"season": 2024, "round": 1, "temperature_max": 24.5,

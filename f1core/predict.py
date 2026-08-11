@@ -31,6 +31,7 @@ from f1core.config import load_config
 from f1core.reporting import rank_by, to_md
 from f1data import F1APIError, F1Client, fetch_calendar, fetch_season
 from features.build import add_features, assemble
+from features.registry import enabled_features
 from model.calibrate import apply_calibration, load_calibrators
 from model.evaluate import race_metrics
 from model.train import load_checkpoint, prepare, quantize_points
@@ -311,15 +312,18 @@ def predict_race(
     season: int,
     round_: int,
     calibrators: dict[str, Any] | None = None,
+    features: list[str] | None = None,
 ) -> pd.DataFrame:
     """Score every row of ``(season, round_)`` and rank by expected points.
 
     Returns driver/constructor/grid, expected points, P(scored)/P(top-3)/P(win)
     and ``pred_rank``; actual points/position are included when the race has
     results (``actual_points`` is NaN for upcoming races). When ``calibrators``
-    are given, the probability columns are isotonic-calibrated.
+    are given, the probability columns are isotonic-calibrated. ``features``
+    selects the model columns (must match the checkpoint's training set;
+    default: the full set).
     """
-    X, _ = prepare(df)
+    X, _ = prepare(df, features)
     target = df[(df["season"] == season) & (df["round"] == round_)]
     if target.empty:
         raise ValueError(f"no rows for season {season} round {round_}")
@@ -444,15 +448,19 @@ def get_prediction(
     model_path: str | None = None,
     quiet: bool = False,
     client: F1Client | None = None,
+    enable_features: Sequence[str] | None = None,
+    disable_features: Sequence[str] | None = None,
 ) -> dict:
     """Compute a prediction, returning results + metadata (no I/O side effects).
 
     ``season``/``round_`` target a specific race; both None selects the next
     race. ``grid_csv`` supplies a qualifying grid for an upcoming race.
     ``client`` injects an F1Client (tests); the default is built from ``cfg``.
-    Returns a dict with: ``result`` (DataFrame from :func:`predict_race`),
-    ``meta`` (race_name/circuit_id/date), ``season``, ``round``,
-    ``synthetic``, ``verified``, ``calibrated``, ``checkpoint``.
+    ``enable_features``/``disable_features`` override the config feature
+    selection. Returns a dict with: ``result`` (DataFrame from
+    :func:`predict_race`), ``meta`` (race_name/circuit_id/date), ``season``,
+    ``round``, ``synthetic``, ``verified``, ``calibrated``, ``checkpoint``,
+    ``features``.
     """
     cfg = cfg or load_config()
     if round_ is not None and season is None:
@@ -492,9 +500,10 @@ def get_prediction(
     # for a future re-evaluation.
 
     checkpoint = model_path or cfg["model"]["checkpoint"]
-    model = load_checkpoint(checkpoint)
-    calibrators = load_calibrators(cfg["model"]["calibrators"])
-    result = predict_race(df, model, target_season, target_round, calibrators)
+    feats = enabled_features(cfg, enable=enable_features or [], disable=disable_features or [])
+    model = load_checkpoint(checkpoint, expected=feats)
+    calibrators = load_calibrators(cfg["model"]["calibrators"], expected=feats)
+    result = predict_race(df, model, target_season, target_round, calibrators, feats)
 
     target_rows = df[(df["season"] == target_season) & (df["round"] == target_round)]
     meta = {k: (target_rows[k].iloc[0] if k in target_rows else None)  # type: ignore[reportAttributeAccessIssue]  # target_rows is a boolean-mask slice (Unknown)
@@ -508,6 +517,7 @@ def get_prediction(
         "verified": not synthetic,
         "calibrated": bool(calibrators),
         "checkpoint": checkpoint,
+        "features": feats,
     }
 
 
@@ -521,6 +531,14 @@ def main() -> int:
     )
     parser.add_argument("--out", help="report path (default: reports/prediction.md)")
     parser.add_argument("--refresh", action="store_true", help="ignore the raw-data cache")
+    parser.add_argument(
+        "--enable-features", default="",
+        help="comma-separated features to enable on top of config",
+    )
+    parser.add_argument(
+        "--disable-features", default="",
+        help="comma-separated features to disable on top of config",
+    )
     args = parser.parse_args()
 
     cfg = load_config()
@@ -532,6 +550,8 @@ def main() -> int:
             refresh=args.refresh,
             cfg=cfg,
             model_path=args.model,
+            enable_features=[f for f in args.enable_features.split(",") if f],
+            disable_features=[f for f in args.disable_features.split(",") if f],
         )
     except ValueError as exc:
         # get_prediction raises ValueError for bad arguments (e.g. --season

@@ -23,9 +23,11 @@ import numpy as np
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 
+from f1core.config import load_config
 from f1core.reporting import to_md
 from f1data import F1Client
 from features.build import build_dataset
+from features.registry import enabled_features, feature_fingerprint
 from model.train import (
     HurdleModels,
     _joblib_dump,
@@ -41,17 +43,20 @@ TARGETS = {"scored": "p_scored", "top3": "p_top3", "win": "p_win"}
 # Out-of-sample score collection
 # --------------------------------------------------------------------------
 
-def collect_oos_scores(df: pd.DataFrame) -> pd.DataFrame:
+def collect_oos_scores(
+    df: pd.DataFrame, features: list[str] | None = None
+) -> pd.DataFrame:
     """Raw model probabilities on held-out races via walk-forward.
 
     Each test-season row carries the raw scores of a model trained only on
-    strictly earlier seasons, plus the actual outcome labels.
+    strictly earlier seasons, plus the actual outcome labels. ``features``
+    selects the model columns (default: the full set).
     """
     chunks = []
     for train, test, _ in walk_forward_seasons(df):
-        X_train, y_train = prepare(train)
+        X_train, y_train = prepare(train, features)
         model = HurdleModels().fit(X_train, y_train)
-        X_test, _ = prepare(test)
+        X_test, _ = prepare(test, features)
         probs = model.predict_probs(X_test)
         chunks.append(
             pd.DataFrame(
@@ -96,21 +101,49 @@ def apply_calibration(probs: dict[str, np.ndarray],
     return out
 
 
-def load_calibrators(path: str | Path) -> dict[str, IsotonicRegression] | None:
-    """Load calibrators, or None when the file does not exist."""
+def load_calibrators(
+    path: str | Path, expected: list[str] | None = None
+) -> dict[str, IsotonicRegression] | None:
+    """Load calibrators, or None when the file does not exist.
+
+    ``expected`` is the feature selection the caller will predict with;
+    when the file carries a feature fingerprint it must match (a calibrator
+    file fit on a different enabled subset would silently corrupt the
+    probabilities). Legacy files without a fingerprint load unchecked.
+    """
     p = Path(path)
     if not p.exists():
         return None
     payload = _joblib_load(p)
     if not isinstance(payload, dict) or "calibrators" not in payload:
         raise ValueError(f"{p} is not a calibrator file (missing 'calibrators' key)")
+    if expected is not None and payload.get("fingerprint") not in (
+        None, feature_fingerprint(expected)
+    ):
+        raise ValueError(
+            "calibrator feature set does not match the requested feature set "
+            f"(stored fp {payload['fingerprint']} vs {feature_fingerprint(expected)}); "
+            "re-run f1-calibrate after f1-train"
+        )
     return payload["calibrators"]
 
 
-def save_calibrators(calibrators: dict[str, IsotonicRegression], path: str | Path) -> None:
+def save_calibrators(
+    calibrators: dict[str, IsotonicRegression],
+    path: str | Path,
+    features: list[str] | None = None,
+) -> None:
+    """Persist calibrators plus the feature-set fingerprint they were fit on.
+
+    ``features`` defaults to None (no fingerprint written); pass the enabled
+    feature set so :func:`load_calibrators` can reject a mismatch.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    _joblib_dump({"calibrators": calibrators}, path)
+    payload: dict = {"calibrators": calibrators}
+    if features is not None:
+        payload["fingerprint"] = feature_fingerprint(features)
+    _joblib_dump(payload, path)
 
 
 # --------------------------------------------------------------------------
@@ -228,15 +261,28 @@ def main() -> int:
     parser.add_argument("--out", default="data/model/calibrators.joblib")
     parser.add_argument("--out-json", default="reports/calibration.json",
                         help="JSON snapshot for the web dashboard")
+    parser.add_argument(
+        "--enable-features", default="",
+        help="comma-separated features to enable on top of config",
+    )
+    parser.add_argument(
+        "--disable-features", default="",
+        help="comma-separated features to disable on top of config",
+    )
     args = parser.parse_args()
 
     client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
     df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
+    feats = enabled_features(
+        load_config(),
+        enable=[f for f in args.enable_features.split(",") if f],
+        disable=[f for f in args.disable_features.split(",") if f],
+    )
 
-    oos = collect_oos_scores(df)
+    oos = collect_oos_scores(df, feats)
     # Deployment calibrators: fit on ALL out-of-sample scores (most data).
     calibrators = fit_calibrators(oos)
-    save_calibrators(calibrators, args.out)
+    save_calibrators(calibrators, args.out, features=feats)
 
     # Honest evaluation: fit calibrators on the earlier OOS seasons only and
     # evaluate on the later ones, so the reported Brier deltas are not
@@ -266,7 +312,7 @@ def main() -> int:
         < brier(eval_oos[target], eval_oos[score])
     }
     deployment = {t: calibrators[t] for t in keep}
-    save_calibrators(deployment, args.out)
+    save_calibrators(deployment, args.out, features=feats)
     print(summarize(eval_oos, eval_cal, context=context, keep=keep))  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
     print(f"\nWrote {args.out}")
 

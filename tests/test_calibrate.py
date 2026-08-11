@@ -105,3 +105,31 @@ def test_calibrator_roundtrip_and_missing(tmp_path):
 
         joblib.dump({"other": 1}, bad)
         load_calibrators(bad)
+
+
+def test_calibrators_keyed_to_feature_fingerprint(tmp_path):
+    """A calibrator file fit on a different feature set must be rejected."""
+    from features.registry import all_feature_ids
+
+    oos = pd.DataFrame(
+        {
+            "p_scored": [0.9, 0.1, 0.8, 0.2],
+            "p_top3": [0.9, 0.1, 0.8, 0.2],
+            "p_win": [0.9, 0.1, 0.8, 0.2],
+            "scored": [1, 0, 1, 0], "top3": [1, 0, 1, 0], "win": [1, 0, 1, 0],
+        }
+    )
+    cal = fit_calibrators(oos)
+    full = all_feature_ids()
+    subset = full[:-1]
+    path = tmp_path / "cal.joblib"
+    save_calibrators(cal, path, features=full)
+    assert load_calibrators(path, expected=full) is not None
+    with pytest.raises(ValueError, match="calibrator feature set does not match"):
+        load_calibrators(path, expected=subset)
+    # Legacy files without a fingerprint load unchecked (grandfathered).
+    import joblib
+
+    legacy = tmp_path / "legacy.joblib"
+    joblib.dump({"calibrators": cal}, legacy)
+    assert load_calibrators(legacy, expected=subset) is not None

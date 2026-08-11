@@ -388,6 +388,42 @@ def _add_era_and_targets(out: pd.DataFrame) -> pd.DataFrame:
 # Dataset builder + coverage report
 # --------------------------------------------------------------------------
 
+def _dataset_fingerprint() -> str:
+    """Fingerprint of the *computed* feature set, stored in the parquet cache.
+
+    ``add_features`` always computes every registry feature, so the cache
+    content only depends on the full computed set — not on the enabled
+    selection (that lives in the model-checkpoint fingerprint). Lazy import:
+    ``features/registry.py`` imports this module.
+    """
+    from features.registry import all_feature_ids, feature_fingerprint
+
+    return feature_fingerprint(all_feature_ids())
+
+
+def _read_cache_fingerprint(path: Path) -> str | None:
+    """Feature fingerprint embedded in a cached parquet (None when absent)."""
+    import pyarrow.parquet as pq
+
+    try:
+        schema = pq.read_schema(path)
+        fp = (schema.metadata or {}).get(b"feature_fingerprint")
+        return fp.decode("utf-8") if fp else None
+    except Exception:  # noqa: BLE001 - any read failure ⇒ "no fingerprint" ⇒ rebuild
+        return None
+
+
+def _write_parquet(df: pd.DataFrame, path: Path, fingerprint: str) -> None:
+    """Write the parquet cache with the feature fingerprint in its metadata."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    meta = dict(table.schema.metadata or {})
+    meta[b"feature_fingerprint"] = fingerprint.encode("utf-8")
+    pq.write_table(table.replace_schema_metadata(meta), path)
+
+
 def build_dataset(
     client: F1Client,
     seasons: Iterable[int],
@@ -404,38 +440,50 @@ def build_dataset(
     """
     seasons = list(seasons)
     cache = Path(cache_path)
+    # Corrupt parquet raises pyarrow.ArrowInvalid, which is not a ValueError
+    # in every version; treat any cache-read failure as "rebuild".
+    try:
+        from pyarrow.lib import ArrowInvalid
+    except ImportError:  # pragma: no cover - pyarrow is a hard dependency
+        ArrowInvalid = ValueError
     # Feature-version validation: if the cached parquet lacks any currently
-    # defined feature column, it is stale and must be rebuilt (silently using
-    # a stale feature set would invalidate every downstream result).
+    # defined feature column (or was built from a different feature set, per
+    # the embedded fingerprint), it is stale and must be rebuilt (silently
+    # using a stale feature set would invalidate every downstream result).
     required = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+    fingerprint = _dataset_fingerprint()
     if not refresh and cache.exists():
         try:
             cached = pd.read_parquet(cache)
             cached_seasons = set(cached["season"]) if "season" in cached else set()
             if (set(required) <= set(cached.columns)
-                    and cached_seasons >= set(seasons)):
+                    and cached_seasons >= set(seasons)
+                    and _read_cache_fingerprint(cache) == fingerprint):
                 logger.info("Loading cached dataset from %s", cache)
                 df = cached
             else:
                 logger.warning(
-                    "Cached dataset %s is stale (missing features or seasons); rebuilding",
+                    "Cached dataset %s is stale (missing features, seasons, or "
+                    "feature fingerprint); rebuilding",
                     cache,
                 )
-                df = _build_fresh(client, seasons, cache)
-        except (OSError, ValueError, ImportError):
+                df = _build_fresh(client, seasons, cache, fingerprint)
+        except (OSError, ValueError, ImportError, ArrowInvalid):
             logger.warning("Unreadable cached dataset %s; rebuilding", cache)
-            df = _build_fresh(client, seasons, cache)
+            df = _build_fresh(client, seasons, cache, fingerprint)
     else:
-        df = _build_fresh(client, seasons, cache)
+        df = _build_fresh(client, seasons, cache, fingerprint)
     return merge_weather(df, weather)
 
 
-def _build_fresh(client: F1Client, seasons: list[int], cache: Path) -> pd.DataFrame:
+def _build_fresh(
+    client: F1Client, seasons: list[int], cache: Path, fingerprint: str
+) -> pd.DataFrame:
     datas = [fetch_season(client, s) for s in seasons]
     df = add_features(assemble(datas))
     try:
         cache.parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(cache, index=False)
+        _write_parquet(df, cache, fingerprint)
         logger.info("Wrote dataset (%d rows) to %s", len(df), cache)
     except OSError:
         logger.warning("Could not write dataset cache %s", cache)

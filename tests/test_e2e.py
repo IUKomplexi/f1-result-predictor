@@ -193,6 +193,8 @@ def test_pipeline_predicts_upcoming_round_with_synthetic_entries(pipeline):
     from f1core.predict import get_prediction
 
     tmp = pipeline["tmp"]
+    from features.registry import all_feature_ids
+
     pred = get_prediction(
         season=SEASONS[-1] + 1,  # 2013 - not in SEASONS
         round_=1,
@@ -208,6 +210,8 @@ def test_pipeline_predicts_upcoming_round_with_synthetic_entries(pipeline):
                     "timeout": 30.0, "max_retries": 0},
             "report": {"backtest": str(tmp / "backtest.md"),
                        "prediction": str(tmp / "prediction.md")},
+            # The fixture checkpoint is trained on the full feature set.
+            "features": {"enabled": all_feature_ids()},
         },
         quiet=True,
         client=pipeline["client"],

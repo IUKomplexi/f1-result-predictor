@@ -37,6 +37,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "backtest": "reports/backtest.md",
         "prediction": "reports/prediction.md",
     },
+    "features": {
+        # None ⇒ registry defaults (features/registry.py): core on,
+        # selectable/cut off. An explicit list overrides the defaults.
+        "enabled": None,
+    },
     "weather": {
         "cache_dir": "data/weather",
     },

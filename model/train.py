@@ -6,7 +6,7 @@ import argparse
 import logging
 import sys
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -18,16 +18,16 @@ from sklearn.ensemble import (
     HistGradientBoostingRegressor,
 )
 
+from f1core.config import load_config
 from f1data import F1Client
-from features.build import (
-    CATEGORICAL_FEATURES,
-    NUMERIC_FEATURES,
-    build_dataset,
-)
+from features.build import CATEGORICAL_FEATURES, build_dataset
+from features.registry import all_feature_ids, enabled_features, feature_fingerprint
 
 logger = logging.getLogger(__name__)
 
-FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+# Canonical full feature set = the registry (27 numeric + 4 categorical), in
+# registry order. Feature selection (config + CLI) narrows this at prepare time.
+FEATURES = all_feature_ids()
 
 # Classic top-10 points table (fastest-lap point is part of the target data
 # and is not needed for the baselines).
@@ -87,16 +87,28 @@ def _reg(seed: int, params: dict[str, Any] | None = None) -> HistGradientBoostin
     )
 
 
-def prepare(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def prepare(
+    df: pd.DataFrame, features: Sequence[str] | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split a featured dataset into (X, y).
 
-    Categorical features are converted to pandas ``category`` dtype so the
-    gradient-boosted models treat them as categorical (unknown categories at
-    prediction time become missing values, which HGB handles natively).
+    ``features`` selects the model columns (default: the full
+    ``FEATURES`` set); categorical features among them are converted to
+    pandas ``category`` dtype so the gradient-boosted models treat them as
+    categorical (unknown categories at prediction time become missing
+    values, which HGB handles natively).
     """
-    X = df[FEATURES].copy()
+    feats = list(features) if features is not None else FEATURES
+    missing = [f for f in feats if f not in df.columns]
+    if missing:
+        raise ValueError(
+            f"features not present in the dataset: {missing}; "
+            "the dataset may be stale (rebuild with features/build.py)"
+        )
+    X = df[feats].copy()
     for col in CATEGORICAL_FEATURES:
-        X[col] = X[col].astype("category")
+        if col in X.columns:
+            X[col] = X[col].astype("category")
     y = pd.DataFrame(
         {
             "points": df["points"].astype(float),
@@ -228,9 +240,14 @@ def walk_forward_seasons(
         yield train, df[df["season"] == test_season], test_season  # type: ignore[reportReturnType]  # df[...] is Unknown; declared type is authoritative for callers
 
 
-def train_final_model(df: pd.DataFrame) -> HurdleModels:
-    """Train on every season (used for live prediction)."""
-    X, y = prepare(df)
+def train_final_model(
+    df: pd.DataFrame, features: Sequence[str] | None = None
+) -> HurdleModels:
+    """Train on every season (used for live prediction).
+
+    ``features`` selects the model columns (default: the full set).
+    """
+    X, y = prepare(df, features)
     return HurdleModels().fit(X, y)
 
 
@@ -258,9 +275,18 @@ def _joblib_load(path: Path) -> Any:
         return joblib.load(path)
 
 
-def save_checkpoint(models: HurdleModels, path: str | Path) -> None:
+def save_checkpoint(
+    models: HurdleModels, path: str | Path, features: Sequence[str] | None = None
+) -> None:
+    """Persist the model plus the feature set (and its fingerprint) it was trained on.
+
+    ``features`` defaults to the full ``FEATURES`` set. The stored fingerprint
+    lets :func:`load_checkpoint` reject a checkpoint trained on a different
+    feature selection instead of silently reusing it.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    feats = list(features) if features is not None else FEATURES
     # When train.py is executed as a script, classes are defined in
     # ``__main__``; a pickled reference to ``__main__.HurdleModels`` cannot be
     # resolved by other processes (e.g. predict.py). Alias the running module
@@ -270,16 +296,39 @@ def save_checkpoint(models: HurdleModels, path: str | Path) -> None:
         sys.modules["model.train"] = sys.modules["__main__"]
     for cls in (HurdleModels, _ConstantProb, _ConstantPoints):
         cls.__module__ = "model.train"
-    _joblib_dump({"models": models, "features": FEATURES}, path)
-    logger.info("Saved checkpoint to %s", path)
+    _joblib_dump(
+        {
+            "models": models,
+            "features": feats,
+            "fingerprint": feature_fingerprint(feats),
+        },
+        path,
+    )
+    logger.info("Saved checkpoint (%d features, fp %s) to %s",
+                len(feats), feature_fingerprint(feats), path)
 
 
-def load_checkpoint(path: str | Path) -> HurdleModels:
+def load_checkpoint(
+    path: str | Path, expected: Sequence[str] | None = None
+) -> HurdleModels:
+    """Load a checkpoint, rejecting one trained on a different feature set.
+
+    ``expected`` is the feature selection the caller will predict with
+    (default: the full ``FEATURES`` set). Checkpoints store both the feature
+    list and its fingerprint; legacy checkpoints without a fingerprint are
+    validated against their stored list.
+    """
     payload = _joblib_load(Path(path))
     stored = list(payload.get("features", []))
-    if stored != list(FEATURES):
+    if "fingerprint" in payload:
+        stored_fp = payload["fingerprint"]
+    else:
+        stored_fp = feature_fingerprint(stored)
+    expect = list(expected) if expected is not None else FEATURES
+    if stored_fp != feature_fingerprint(expect):
         raise ValueError(
-            "checkpoint feature set does not match the current feature set; "
+            "checkpoint feature set does not match the requested feature set "
+            f"(stored fp {stored_fp} vs {feature_fingerprint(expect)}); "
             "retrain with model/train.py"
         )
     return payload["models"]
@@ -293,14 +342,30 @@ def main() -> int:
     parser.add_argument("--cache-dir", default="data/raw")
     parser.add_argument("--dataset", default="data/features.parquet")
     parser.add_argument("--out", default="data/model/hurdle.joblib")
+    parser.add_argument(
+        "--enable-features", default="",
+        help="comma-separated features to enable on top of config",
+    )
+    parser.add_argument(
+        "--disable-features", default="",
+        help="comma-separated features to disable on top of config",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     client = F1Client(cache_dir=args.cache_dir, refresh=args.refresh)
     df = build_dataset(client, range(args.start, args.end + 1), cache_path=args.dataset)
-    logger.info("Training final model on %d rows (%d seasons)", len(df), df["season"].nunique())
-    models = train_final_model(df)
-    save_checkpoint(models, args.out)
+    feats = enabled_features(
+        load_config(),
+        enable=[f for f in args.enable_features.split(",") if f],
+        disable=[f for f in args.disable_features.split(",") if f],
+    )
+    logger.info(
+        "Training final model on %d rows (%d seasons), %d features (fp %s)",
+        len(df), df["season"].nunique(), len(feats), feature_fingerprint(feats),
+    )
+    models = train_final_model(df, feats)
+    save_checkpoint(models, args.out, features=feats)
     return 0
 
 

@@ -1,0 +1,165 @@
+{
+  "context": "chronological hold-out: calibrators fit on OOS seasons 2013-2020, evaluated on seasons 2021-2025",
+  "deployed": [],
+  "targets": {
+    "scored": {
+      "brier_raw": 0.15365815645904798,
+      "brier_calibrated": 0.1560428459625617,
+      "delta": 0.002384689503513726,
+      "deployed": false,
+      "reliability": [
+        {
+          "mean_pred": 0.045,
+          "observed": 0.077,
+          "n": 260
+        },
+        {
+          "mean_pred": 0.162,
+          "observed": 0.091,
+          "n": 252
+        },
+        {
+          "mean_pred": 0.276,
+          "observed": 0.179,
+          "n": 145
+        },
+        {
+          "mean_pred": 0.374,
+          "observed": 0.337,
+          "n": 362
+        },
+        {
+          "mean_pred": 0.482,
+          "observed": 0.467,
+          "n": 15
+        },
+        {
+          "mean_pred": 0.525,
+          "observed": 0.526,
+          "n": 194
+        },
+        {
+          "mean_pred": 0.649,
+          "observed": 0.576,
+          "n": 132
+        },
+        {
+          "mean_pred": 0.743,
+          "observed": 0.759,
+          "n": 303
+        },
+        {
+          "mean_pred": 0.841,
+          "observed": 0.868,
+          "n": 589
+        },
+        {
+          "mean_pred": 0.93,
+          "observed": 0.885,
+          "n": 26
+        }
+      ]
+    },
+    "top3": {
+      "brier_raw": 0.06816635967525835,
+      "brier_calibrated": 0.06860466712834296,
+      "delta": 0.0004383074530846104,
+      "deployed": false,
+      "reliability": [
+        {
+          "mean_pred": 0.015,
+          "observed": 0.012,
+          "n": 1520
+        },
+        {
+          "mean_pred": 0.194,
+          "observed": 0.131,
+          "n": 236
+        },
+        {
+          "mean_pred": 0.276,
+          "observed": 0.265,
+          "n": 98
+        },
+        {
+          "mean_pred": 0.369,
+          "observed": 0.416,
+          "n": 125
+        },
+        {
+          "mean_pred": 0.474,
+          "observed": 0.656,
+          "n": 61
+        },
+        {
+          "mean_pred": 0.633,
+          "observed": 0.672,
+          "n": 134
+        },
+        {
+          "mean_pred": 0.785,
+          "observed": 0.789,
+          "n": 57
+        },
+        {
+          "mean_pred": 0.827,
+          "observed": 0.854,
+          "n": 41
+        },
+        {
+          "mean_pred": 0.98,
+          "observed": 0.833,
+          "n": 6
+        }
+      ]
+    },
+    "win": {
+      "brier_raw": 0.030464821781851878,
+      "brier_calibrated": 0.030644463464928655,
+      "delta": 0.00017964168307677691,
+      "deployed": false,
+      "reliability": [
+        {
+          "mean_pred": 0.014,
+          "observed": 0.008,
+          "n": 1979
+        },
+        {
+          "mean_pred": 0.12,
+          "observed": 0.154,
+          "n": 169
+        },
+        {
+          "mean_pred": 0.23,
+          "observed": 1.0,
+          "n": 1
+        },
+        {
+          "mean_pred": 0.322,
+          "observed": 0.378,
+          "n": 37
+        },
+        {
+          "mean_pred": 0.414,
+          "observed": 0.5,
+          "n": 18
+        },
+        {
+          "mean_pred": 0.443,
+          "observed": 0.645,
+          "n": 31
+        },
+        {
+          "mean_pred": 0.627,
+          "observed": 0.634,
+          "n": 41
+        },
+        {
+          "mean_pred": 0.833,
+          "observed": 1.0,
+          "n": 2
+        }
+      ]
+    }
+  }
+}
