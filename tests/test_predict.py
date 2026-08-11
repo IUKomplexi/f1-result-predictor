@@ -385,6 +385,8 @@ def test_prediction_cache_key_distinguishes_season_round_fingerprint_params():
 
 
 def test_prediction_cache_roundtrip_rebuilds_result(tmp_path):
+    import json
+
     from f1core.predict import (
         _pred_from_payload,
         load_cached_prediction,
@@ -404,22 +406,26 @@ def test_prediction_cache_roundtrip_rebuilds_result(tmp_path):
     )
     pred = {
         "result": result,
-        "meta": {"race_name": "R1", "circuit_id": "c1", "date": "2024-03-01"},
+        "meta": {"race_name": "R1", "circuit_id": "c1", "date": pd.Timestamp("2024-03-01")},
         "season": 2024, "round": 1, "synthetic": False, "verified": True,
         "calibrated": False, "checkpoint": "c", "features": ["grid"],
     }
     key = prediction_cache_key(2024, 1, "fp", "ph")
-    save_cached_prediction(tmp_path, key, prediction_payload(pred))
+    payload = prediction_payload(pred)
+    # The cache writer uses raw json.dumps (not FastAPI's encoder), so the
+    # payload must be plain-JSON even when meta carries a Timestamp date.
+    json.dumps(payload)
+    save_cached_prediction(tmp_path, key, payload)
 
     cached = load_cached_prediction(tmp_path, key)
     assert cached is not None
     assert cached["season"] == 2024 and cached["round"] == 1
-    assert cached["race"] == pred["meta"]
+    assert cached["race"]["date"] == "2024-03-01T00:00:00"
     assert cached["drivers"][0]["driver_id"] == "a"
 
     rebuilt = _pred_from_payload(cached)
     pd.testing.assert_frame_equal(rebuilt["result"], result)
-    assert rebuilt["meta"] == pred["meta"]
+    assert rebuilt["meta"] == {"race_name": "R1", "circuit_id": "c1", "date": "2024-03-01T00:00:00"}
     assert rebuilt["verified"] is True
 
 

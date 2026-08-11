@@ -19,6 +19,7 @@ values natively) unless supplied via ``--grid``.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -302,6 +303,30 @@ def read_grid_csv(path: str | Path) -> dict[str, int]:
 DEFAULT_PREDICTION_CACHE = "data/predictions"
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively make a value JSON-serializable (pandas/numpy aware).
+
+    The prediction ``meta`` carries a ``date`` that may be a ``pd.Timestamp``
+    (and rows may hold numpy scalars). These serialize fine through FastAPI's
+    ``jsonable_encoder`` but not through raw ``json.dumps`` (the disk cache),
+    so normalize them here.
+    """
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
+    if isinstance(value, (np.generic, np.ndarray)):
+        try:
+            return value.item()
+        except (ValueError, AttributeError):
+            return float(value)
+    return value
+
+
 def prediction_payload(pred: dict) -> dict:
     """JSON-safe representation of a prediction dict (drivers as records).
 
@@ -313,7 +338,7 @@ def prediction_payload(pred: dict) -> dict:
     return {
         "season": pred["season"],
         "round": pred["round"],
-        "race": pred["meta"],
+        "race": _json_safe(pred["meta"]),
         "synthetic": pred["synthetic"],
         "verified": pred["verified"],
         "calibrated": pred["calibrated"],
