@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import argparse
 import json
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -267,42 +265,3 @@ def run(
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--start", type=int, default=2010)
-    parser.add_argument("--end", type=int, default=2025)
-    parser.add_argument("--refresh", action="store_true")
-    parser.add_argument("--cache-dir", default="data/raw")
-    parser.add_argument("--dataset", default="data/features.parquet")
-    parser.add_argument("--out", default="reports/backtest.md")
-    parser.add_argument("--out-json", default="reports/backtest.json",
-                        help="JSON snapshot for the web dashboard")
-    parser.add_argument("--no-quantize", action="store_true",
-                        help="keep continuous expected points (deployed output is quantized)")
-    parser.add_argument(
-        "--enable-features", default="",
-        help="comma-separated features to enable on top of config",
-    )
-    parser.add_argument(
-        "--disable-features", default="",
-        help="comma-separated features to disable on top of config",
-    )
-    args = parser.parse_args()
-
-    result = run(
-        start=args.start, end=args.end, refresh=args.refresh,
-        cache_dir=args.cache_dir, dataset=args.dataset,
-        out=args.out, out_json=args.out_json, quantize=not args.no_quantize,
-        enable_features=[f for f in args.enable_features.split(",") if f],
-        disable_features=[f for f in args.disable_features.split(",") if f],
-        log=lambda msg: print(msg, flush=True),
-    )
-    overall = pd.DataFrame(result["overall"]).T
-    print(f"Features ({result['n_features']}, fp {result['fingerprint']}): "
-          f"{', '.join(result['features'])}")
-    print(overall.to_string())
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

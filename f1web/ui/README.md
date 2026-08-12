@@ -22,7 +22,7 @@ The FastAPI backend serves the built SPA at `/` and `/dashboard` (see
 `f1web/app.py`), so after `npm run build` just start the backend:
 
 ```sh
-f1-web --port 8080   # http://127.0.0.1:8080/
+f1 web --port 8080   # http://127.0.0.1:8080/
 ```
 
 ## Layout

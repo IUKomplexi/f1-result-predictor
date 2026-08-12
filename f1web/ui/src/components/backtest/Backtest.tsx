@@ -1,19 +1,9 @@
 import { useState } from 'react'
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { getBacktest, type Backtest, type BacktestMetricRow } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
+import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { JobRunner } from '../ui/JobRunner'
 import './Backtest.css'
@@ -217,8 +207,8 @@ function MetricChart({
   seasons: number[]
   bySeason: Record<string, Record<string, BacktestMetricRow>>
 }) {
-  const data = seasons.map((season) => {
-    const row: Record<string, number | string | undefined> = {
+  const data: ChartDatum[] = seasons.map((season) => {
+    const row: ChartDatum = {
       season: String(season),
     }
     for (const baseline of BASELINES) {
@@ -226,46 +216,14 @@ function MetricChart({
     }
     return row
   })
-
+  const series: ChartSeries[] = BASELINES.map((baseline) => ({
+    key: baseline,
+    name: BASELINE_LABEL[baseline],
+    color: BASELINE_COLOR[baseline],
+    strokeWidth: baseline === 'model' ? 2.5 : 1.5,
+  }))
   return (
-    <div className="chart">
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-          <CartesianGrid stroke="#2e2e3a" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="season"
-            tick={{ fill: '#a8a8b5', fontSize: 11 }}
-            stroke="#2e2e3a"
-          />
-          <YAxis
-            tick={{ fill: '#a8a8b5', fontSize: 11 }}
-            stroke="#2e2e3a"
-            domain={['auto', 'auto']}
-          />
-          <Tooltip
-            contentStyle={{
-              background: '#23232e',
-              border: '1px solid #2e2e3a',
-              borderRadius: 8,
-              color: '#f2f2f5',
-            }}
-          />
-          <Legend wrapperStyle={{ fontSize: 12, color: '#a8a8b5' }} />
-          {BASELINES.map((baseline) => (
-            <Line
-              key={baseline}
-              type="linear"
-              dataKey={baseline}
-              name={BASELINE_LABEL[baseline]}
-              stroke={BASELINE_COLOR[baseline]}
-              strokeWidth={baseline === 'model' ? 2.5 : 1.5}
-              dot={false}
-              connectNulls={false}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <Chart data={data} xKey="season" series={series} valueFormat={(v) => fmtNumber(v, 3)} />
   )
 }
 
@@ -295,7 +253,7 @@ function MetricEdgeChart({
   seasons: number[]
   bySeason: Record<string, Record<string, BacktestMetricRow>>
 }) {
-  const data = seasons.map((season) => {
+  const data: ChartDatum[] = seasons.map((season) => {
     const s = String(season)
     return {
       season: s,
@@ -307,56 +265,17 @@ function MetricEdgeChart({
       ),
     }
   })
+  const series: ChartSeries[] = [
+    { key: 'vsGrid', name: 'vs grid', color: '#4a7fd6', strokeWidth: 2 },
+    { key: 'vsChamp', name: 'vs championship', color: '#d9a514', strokeWidth: 2 },
+  ]
   return (
-    <div className="chart">
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-          <CartesianGrid stroke="#2e2e3a" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="season"
-            tick={{ fill: '#a8a8b5', fontSize: 11 }}
-            stroke="#2e2e3a"
-          />
-          <YAxis
-            tick={{ fill: '#a8a8b5', fontSize: 11 }}
-            stroke="#2e2e3a"
-            domain={['auto', 'auto']}
-          />
-          <Tooltip
-            contentStyle={{
-              background: '#23232e',
-              border: '1px solid #2e2e3a',
-              borderRadius: 8,
-              color: '#f2f2f5',
-            }}
-          />
-          <Legend wrapperStyle={{ fontSize: 12, color: '#a8a8b5' }} />
-          <ReferenceLine
-            y={0}
-            stroke="#6f6f7d"
-            strokeDasharray="4 4"
-            label={{ value: 'even', position: 'insideTopRight', fill: '#6f6f7d', fontSize: 10 }}
-          />
-          <Line
-            type="linear"
-            dataKey="vsGrid"
-            name="vs grid"
-            stroke="#4a7fd6"
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-          />
-          <Line
-            type="linear"
-            dataKey="vsChamp"
-            name="vs championship"
-            stroke="#d9a514"
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <Chart
+      data={data}
+      xKey="season"
+      series={series}
+      referenceLine={{ y: 0, label: 'even' }}
+      valueFormat={(v) => fmtNumber(v, 3)}
+    />
   )
 }

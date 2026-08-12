@@ -1,18 +1,9 @@
 import { useState } from 'react'
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { getCalibration, type Calibration, type CalibrationTarget } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
+import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { JobRunner } from '../ui/JobRunner'
 import './Calibration.css'
@@ -167,54 +158,23 @@ function CalibrationView({ calibration }: { calibration: Calibration }) {
 }
 
 function ReliabilityChart({ target }: { target: CalibrationTarget }) {
-  const data = target.reliability.map((bin) => ({
+  const data: ChartDatum[] = target.reliability.map((bin) => ({
     predicted: bin.mean_pred,
     observed: bin.observed,
   }))
+  const series: ChartSeries[] = [
+    { key: 'observed', name: 'Observed', color: '#e10600', strokeWidth: 2, dot: true },
+  ]
   return (
-    <div className="chart">
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-          <CartesianGrid stroke="#2e2e3a" strokeDasharray="3 3" />
-          <XAxis
-            type="number"
-            dataKey="predicted"
-            domain={[0, 1]}
-            tick={{ fill: '#a8a8b5', fontSize: 11 }}
-            stroke="#2e2e3a"
-          />
-          <YAxis
-            type="number"
-            domain={[0, 1]}
-            tick={{ fill: '#a8a8b5', fontSize: 11 }}
-            stroke="#2e2e3a"
-          />
-          <Tooltip
-            contentStyle={{
-              background: '#23232e',
-              border: '1px solid #2e2e3a',
-              borderRadius: 8,
-              color: '#f2f2f5',
-            }}
-          />
-          <ReferenceLine
-            segment={[
-              { x: 0, y: 0 },
-              { x: 1, y: 1 },
-            ]}
-            stroke="#6f6f7d"
-            strokeDasharray="4 4"
-          />
-          <Line
-            type="linear"
-            dataKey="observed"
-            name="Observed"
-            stroke="#e10600"
-            strokeWidth={2}
-            dot={{ r: 3, fill: '#e10600' }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <Chart
+      data={data}
+      xKey="predicted"
+      xType="number"
+      xDomain={[0, 1]}
+      yDomain={[0, 1]}
+      series={series}
+      referenceLine={{ from: [0, 0], to: [1, 1] }}
+      valueFormat={(v) => fmtNumber(v, 4)}
+    />
   )
 }

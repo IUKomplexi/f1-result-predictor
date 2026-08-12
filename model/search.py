@@ -16,8 +16,6 @@ representative window). The best configuration is printed; paste it into
 
 from __future__ import annotations
 
-import argparse
-import sys
 from collections.abc import Sequence
 from typing import Any
 
@@ -164,41 +162,3 @@ def run(
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--n", type=int, default=16, help="configs to sample")
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--max-test-season", type=int, default=2019,
-                        help="latest test season in the search window")
-    parser.add_argument("--start", type=int, default=2010)
-    parser.add_argument("--end", type=int, default=2025)
-    parser.add_argument("--refresh", action="store_true")
-    parser.add_argument("--cache-dir", default="data/raw")
-    parser.add_argument("--dataset", default="data/features.parquet")
-    parser.add_argument(
-        "--enable-features", default="",
-        help="comma-separated features to enable on top of config",
-    )
-    parser.add_argument(
-        "--disable-features", default="",
-        help="comma-separated features to disable on top of config",
-    )
-    args = parser.parse_args()
-
-    result = run(
-        n=args.n, seed=args.seed, max_test_season=args.max_test_season,
-        start=args.start, end=args.end, refresh=args.refresh,
-        cache_dir=args.cache_dir, dataset=args.dataset,
-        enable_features=[f for f in args.enable_features.split(",") if f],
-        disable_features=[f for f in args.disable_features.split(",") if f],
-        log=lambda msg: print(msg, flush=True),
-    )
-    print(f"Walk-forward search (test seasons <= {args.max_test_season}):")
-    print(pd.DataFrame(result["results"]).to_string(index=False))
-    print("\nBest configuration (write to config [model.params] or DEFAULT_PARAMS):")
-    print(result["best"])
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -176,7 +176,8 @@ def test_api_backtest_missing_is_404(client, monkeypatch):
     monkeypatch.setattr(app_module, "BACKTEST_JSON", Path("does/not/exist.json"))
     resp = client.get("/api/backtest")
     assert resp.status_code == 404
-    assert "f1-backtest" in resp.json()["error"]
+    assert "f1-backtest" not in resp.json()["error"]
+    assert "run `f1 backtest` first" in resp.json()["error"]
 
 
 def test_api_calibration_snapshot(client, tmp_path, monkeypatch):
@@ -195,7 +196,8 @@ def test_api_calibration_missing_is_404(client, monkeypatch):
     monkeypatch.setattr(app_module, "CALIBRATION_JSON", Path("does/not/exist.json"))
     resp = client.get("/api/calibration")
     assert resp.status_code == 404
-    assert "f1-calibrate" in resp.json()["error"]
+    assert "f1-calibrate" not in resp.json()["error"]
+    assert "run `f1 calibrate` first" in resp.json()["error"]
 
 
 def test_api_calendar(client, monkeypatch):

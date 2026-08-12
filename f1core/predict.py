@@ -2,12 +2,12 @@
 
 Usage::
 
-    f1-predict                               # next race (latest season's next round)
-    f1-predict --season 2024 --round 22      # any race; past races are verified vs actuals
-    f1-predict --grid qual.csv               # supply a qualifying grid
+    f1 predict                               # next race (latest season's next round)
+    f1 predict --season 2024 --round 22      # any race; past races are verified vs actuals
+    f1 predict --grid qual.csv               # supply a qualifying grid
                                              # (driver_id,grid) for an upcoming race
 
-Requires a trained checkpoint (``f1-train``) and cached raw data
+Requires a trained checkpoint (``f1 train``) and cached raw data
 (``python scripts/fetch_all.py``). Output: the ranked grid with expected
 points and win/podium probabilities, saved to ``reports/prediction.md``.
 
@@ -18,7 +18,6 @@ values natively) unless supplied via ``--grid``.
 
 from __future__ import annotations
 
-import argparse
 import datetime
 import hashlib
 import json
@@ -595,6 +594,34 @@ def format_report(
     return "\n".join(lines)
 
 
+def format_console(
+    result: pd.DataFrame,
+    meta: dict,
+    season: int,
+    round_: int,
+) -> str:
+    """Compact ranked-grid console output for the `f1 predict` CLI."""
+    console = result[
+        [
+            "pred_rank", "driver_id", "constructor_id", "expected_points",
+            "p_scored", "p_top3", "p_win",
+        ]
+    ].copy()
+    console["expected_points"] = console["expected_points"].round(2)
+    console["p_scored"] = (console["p_scored"] * 100).round(1)
+    console["p_top3"] = (console["p_top3"] * 100).round(1)
+    console["p_win"] = (console["p_win"] * 100).round(1)
+    console = console.rename(
+        columns={"p_scored": "p_scored%", "p_top3": "p_top3%", "p_win": "p_win%"}
+    )
+    header = (
+        f"Prediction: {meta.get('race_name', f'Round {round_}')} "
+        f"({season} R{round_}) - {meta.get('circuit_id', '?')} "
+        f"{meta.get('date', '')}".rstrip()
+    )
+    return f"{header}\n{console.to_string(index=False)}"
+
+
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
@@ -735,71 +762,3 @@ def predict_season(
             save_cached_prediction(cache_dir, key, prediction_payload(pred))
         preds.append(pred)
     return preds
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--season", type=int, help="target season (default: next race)")
-    parser.add_argument("--round", type=int, help="target round (required with --season)")
-    parser.add_argument("--grid", help="CSV with 'driver_id,grid' for an upcoming race")
-    parser.add_argument(
-        "--model", help="model checkpoint path (default: config [model] checkpoint)"
-    )
-    parser.add_argument("--out", help="report path (default: reports/prediction.md)")
-    parser.add_argument("--refresh", action="store_true", help="ignore the raw-data cache")
-    parser.add_argument(
-        "--enable-features", default="",
-        help="comma-separated features to enable on top of config",
-    )
-    parser.add_argument(
-        "--disable-features", default="",
-        help="comma-separated features to disable on top of config",
-    )
-    args = parser.parse_args()
-
-    cfg = load_config()
-    try:
-        pred = get_prediction(
-            season=args.season,
-            round_=args.round,
-            grid_csv=args.grid,
-            refresh=args.refresh,
-            cfg=cfg,
-            model_path=args.model,
-            enable_features=[f for f in args.enable_features.split(",") if f],
-            disable_features=[f for f in args.disable_features.split(",") if f],
-        )
-    except ValueError as exc:
-        # get_prediction raises ValueError for bad arguments (e.g. --season
-        # without --round); keep the CLI error clean, without a traceback.
-        raise SystemExit(str(exc)) from None
-    result, meta = pred["result"], pred["meta"]
-    target_season, target_round = pred["season"], pred["round"]
-
-    report = format_report(result, target_season, target_round, meta,
-                           verified=pred["verified"], checkpoint=pred["checkpoint"],
-                           calibrated=pred["calibrated"])
-    out = Path(args.out or cfg["report"]["prediction"])
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(report, encoding="utf-8")
-
-    # Console: compact ranked grid.
-    console = result[["pred_rank", "driver_id", "constructor_id", "expected_points",
-                      "p_scored", "p_top3", "p_win"]].copy()
-    console["expected_points"] = console["expected_points"].round(2)
-    console["p_scored"] = (console["p_scored"] * 100).round(1)
-    console["p_top3"] = (console["p_top3"] * 100).round(1)
-    console["p_win"] = (console["p_win"] * 100).round(1)
-    console = console.rename(
-        columns={"p_scored": "p_scored%", "p_top3": "p_top3%", "p_win": "p_win%"}
-    )
-    print(f"Prediction: {meta.get('race_name', f'Round {target_round}')} "
-          f"({target_season} R{target_round}) - {meta.get('circuit_id', '?')} "
-          f"{meta.get('date', '')}".rstrip())
-    print(console.to_string(index=False))
-    print(f"\nWrote {out}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

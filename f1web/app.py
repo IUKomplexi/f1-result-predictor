@@ -1,11 +1,11 @@
 """JSON API + SPA host for the F1 result predictor (FastAPI).
 
-Serves the JSON API consumed by the React dashboard (``f1web/ui``) and the
+Serves the JSON API consumed by the Preact dashboard (``f1web/ui``) and the
 built SPA itself. There is no server-rendered HTML frontend; the dashboard is
 the single UI. Usage::
 
-    f1-web --port 8080              # serve http://127.0.0.1:8080/
-    f1-web --host 0.0.0.0           # listen on all interfaces
+    f1 web --port 8080              # serve http://127.0.0.1:8080/
+    f1 web --host 0.0.0.0           # listen on all interfaces
 
 Endpoints::
 
@@ -38,10 +38,8 @@ lifetime. This is a local tool, not a high-concurrency service.
 
 from __future__ import annotations
 
-import argparse
 import copy
 import json
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -374,14 +372,14 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
     def backtest_api():
         data = _read_json(BACKTEST_JSON)
         if data is None:
-            return _error(f"{BACKTEST_JSON} not found - run `f1-backtest` first", 404)
+            return _error(f"{BACKTEST_JSON} not found - run `f1 backtest` first", 404)
         return data
 
     @app.get("/api/calibration")
     def calibration_api():
         data = _read_json(CALIBRATION_JSON)
         if data is None:
-            return _error(f"{CALIBRATION_JSON} not found - run `f1-calibrate` first", 404)
+            return _error(f"{CALIBRATION_JSON} not found - run `f1 calibrate` first", 404)
         return data
 
     @app.get("/api/calendar")
@@ -438,18 +436,3 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
     return app
 
 
-def main() -> int:
-    import uvicorn
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--debug", action="store_true")
-    args = parser.parse_args()
-    level = "debug" if args.debug else "info"
-    uvicorn.run(create_app(), host=args.host, port=args.port, log_level=level)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

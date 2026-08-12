@@ -343,18 +343,19 @@ def test_predict_race_ranking_agrees_with_backtest_rank_by():
 
 
 def test_main_clean_error_without_round(monkeypatch):
-    """predict.main() turns get_prediction's ValueError into a clean SystemExit."""
+    """`f1 predict` turns get_prediction's ValueError into a clean SystemExit."""
     import sys
 
+    import f1core.cli as cli
     import f1core.predict as predict_module
 
     def boom(**kw):
         raise ValueError("round_ is required when season is given")
 
     monkeypatch.setattr(predict_module, "get_prediction", boom)
-    monkeypatch.setattr(sys, "argv", ["predict.py", "--season", "2024"])
+    monkeypatch.setattr(sys, "argv", ["f1", "predict", "--season", "2024"])
     with pytest.raises(SystemExit) as exc:
-        predict_module.main()
+        cli.main()
     assert "round_ is required" in str(exc.value)
 
 

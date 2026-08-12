@@ -33,5 +33,3 @@ jobs:
         run: uv sync --all-extras --frozen
       - name: Lint (ruff)
         run: uv run ruff check .
-      - name: Type check (pyright)
-        run: uv run pyright

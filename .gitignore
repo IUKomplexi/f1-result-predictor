@@ -19,3 +19,5 @@ data/predictions/
 ruff_errors.txt
 pyright_errors.json
 data/weather/
+
+docs/planning

@@ -197,5 +197,5 @@ python scripts/feature_audit.py --skip-audit --ablate-noise   # ablation only
 The registry (`features/registry.py`) holds the resulting categories and the
 per-feature impact summary; `config.toml` `[features] enabled` mirrors the
 core defaults. Toggle features on the CLI with `--enable-features` /
-`--disable-features` on `f1-train`, `f1-backtest`, `f1-predict`,
-`f1-calibrate`, and `f1-search`.
+`--disable-features` on `f1 train`, `f1 backtest`, `f1 predict`,
+`f1 calibrate`, and `f1 search`.
