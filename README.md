@@ -22,7 +22,7 @@ Dockerized.
 
 ```bash
 uv sync --all-extras     # install project + test/lint/web deps into .venv (Python 3.12)
-uv run scripts/fetch_all.py      # fetch + cache 2010-2026 (one-time)
+f1 fetch                         # fetch + cache the configured season range (one-time)
 uv run pytest -q                 # run the test suite
 ```
 
@@ -43,7 +43,7 @@ paths).
 
 | Command | What it does |
 | --- | --- |
-| `uv run scripts/fetch_all.py [--start 2010] [--end 2026]` | fetch and cache raw API data |
+| `f1 fetch [--start 2010] [--end 2026]` | fetch and cache raw API data |
 | `f1 train` | train the final model → `data/model/hurdle.joblib` |
 | `f1 calibrate` | fit isotonic probability calibrators → `data/model/calibrators.joblib` (run after every `f1 train`) |
 | `f1 backtest [--no-quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` + `.json` (quantized by default) |
@@ -79,7 +79,7 @@ installs the app, and bakes in the cached raw data, the dataset and the model
 checkpoints (`data/`), so everything runs offline. Generated snapshots
 (`reports/backtest.json`, `reports/calibration.json`) live in a named `reports`
 volume and survive rebuilds; the baked-in data is refreshed only by rebuilding
-the image (e.g. after `scripts/fetch_all.py` or `f1 train`):
+the image (e.g. after `f1 fetch` or `f1 train`):
 
 ```bash
 docker compose exec web f1 backtest          # refresh /api/backtest
@@ -173,13 +173,15 @@ Open the dashboard in a normal browser at a **concrete** address:
 
 ## Configuration
 
-`config.toml` (optional; built-in defaults match it): API base URL /
-User-Agent, cache paths, season range, model checkpoint, report paths, the
-feature selection (`[features] enabled`), and the HGB hyperparameters
-(`[model.params]`, read by train before the code defaults). CLI flags override
-config values. The file is the single source of truth: the dashboard writes it
-back in place (`PUT /api/config`) so the CLI and web always read the same
-settings; per-race prediction overrides are ephemeral (in-memory only).
+`config.toml` (optional — a minimal overrides-only file by default): the
+built-in defaults live in `f1core/config.py` `DEFAULTS` and every CLI/pipeline
+step resolves its paths, season range, API sleep, and HGB hyperparameters from
+them; `config.toml` overrides any of: API base URL / User-Agent, cache paths,
+season range, model checkpoint, report paths, the feature selection
+(`[features] enabled`), and `[model.params]`. CLI flags override config
+values. The dashboard's Settings tab writes the full effective config back in
+place (`PUT /api/config` + `save_config`) so the CLI and web always read the
+same settings; per-race prediction overrides are ephemeral (in-memory only).
 
 ## Repository map
 
@@ -191,11 +193,11 @@ settings; per-race prediction overrides are ephemeral (in-memory only).
 | `model/` | Hurdle model (HGB classifier + regressor), walk-forward backtest, isotonic calibration, hyperparameter search, feature-ablation evaluation | `train_final_model`, `run_backtest`, `fit_calibrators`, `search`, `features_eval` |
 | `f1core/` | Shared core: prediction pipeline, config loader **+ writer**, markdown/ranking helpers, HTTP base class, and the `f1` CLI | `predict_race`, `get_prediction` (`predict.py`), `load_config`/`save_config`/`validate_config` (`config.py`), `to_md`/`rank_by` (`reporting.py`), `main` + subcommand handlers (`cli.py`) |
 | `f1web/` | FastAPI JSON API + host for the built React SPA, plus an in-process async job runner for pipeline steps | `create_app` (`app.py`), `JobManager` + `run_*` handlers (`jobs.py`), `f1web/ui/` (Preact + Vite + TS) |
-| `scripts/` | One-off fetch / tooling scripts | `fetch_all.py` (data), `fetch_weather.py` (weather), `feature_audit.py`, `download_fixtures.py` (test fixtures) |
+| `scripts/` | One-off fetch / tooling scripts | `fetch_weather.py` (weather), `feature_audit.py`, `download_fixtures.py` (test fixtures) |
 | `tests/` | Fully offline test suite (recorded fixtures) incl. full-pipeline e2e | `test_e2e.py`, `test_features.py`, `helpers.py`, `fixtures/` |
 | `data/` | Regenerable caches (gitignored): raw API JSON, dataset, model checkpoints, prediction cache | `raw/`, `features.parquet`, `model/`, `predictions/`, `weather/` |
 | `reports/` | Generated snapshots (refresh with the CLI: `f1 backtest`, `f1 calibrate`, `f1 predict`) | `backtest.md`/`.json`, `prediction.md`, `calibration.json` (written on demand), `features.md`, `weather.md` |
-| `config.toml` | Runtime config — the **single source of truth** (built-in defaults in `f1core/config.py` match it). The dashboard writes it back in place (`PUT /api/config`) | — |
+| `config.toml` | Runtime config **overrides** — the built-in defaults in `f1core/config.py` (`DEFAULTS`) are the baseline; the dashboard writes the full effective config back in place (`PUT /api/config`) | — |
 | `Dockerfile`, `docker-compose.yml` | Self-contained dashboard image (builds SPA, bakes data, named `reports` volume) | — |
 | `.github/workflows/ci.yml` | CI: pytest matrix (3.12/3.13) + ruff lint job | — |
 | `pyproject.toml` | Packaging, console scripts, ruff/pytest config | console script: `f1 = f1core.cli:main` |
@@ -203,7 +205,7 @@ settings; per-race prediction overrides are ephemeral (in-memory only).
 ## System architecture
 
 ```
-scripts/fetch_all.py   ->  data/raw/*.json            (cached API responses)
+f1 fetch             ->  data/raw/*.json            (cached API responses)
 f1data/                     polite cached client + normalized fetchers
 f1weather/                  weather data layer (evaluated, not adopted)
 f1core/                     shared core: predict, config, reporting, httpclient, cli
@@ -245,7 +247,7 @@ adopted path; its plumbing stays by decision (see
 
 ```mermaid
 flowchart LR
-    JOL["Jolpica F1 API"] -->|"scripts/fetch_all.py · one-time"| RAW[("data/raw/ · cached JSON")]
+    JOL["Jolpica F1 API"] -->|"f1 fetch · one-time"| RAW[("data/raw/ · cached JSON")]
     RAW -->|"build_dataset"| FE[["features/build.py"]]
     FE --> DS[("data/features.parquet · staleness-validated")]
     DS --> TR[["model/train.py"]]
@@ -300,9 +302,9 @@ flowchart LR
     API -->|"get_prediction"| CP[("model checkpoints")]
     API -->|"_read_json"| RP[("reports/backtest.json · calibration.json")]
     API -->|"f1data fetchers"| RAW[("data/raw/ · live fetch when uncached")]
-    API -->|"PUT /api/config · save_config"| CT[("config.toml · single source of truth")]
+    API -->|"PUT /api/config · save_config"| CT[("config.toml · overrides")]
     API -->|"POST /api/jobs · JobManager"| JOBS[["f1web/jobs.py · worker thread"]]
-    JOBS -->|"run_* wrappers"| PL[["model/… + scripts/fetch_all.py"]]
+    JOBS -->|"run_* wrappers"| PL[["model/… + f1data/fetch.py"]]
     PL --> RP
     PL --> CP
 ```
@@ -338,8 +340,9 @@ audit (`scripts/feature_audit.py`, documented in `reports/features.md`):
 | `selectable` | low impact; kept for experiments | off |
 | `cut` | removal improved the backtest ≥1 SE (ablation gate) | off |
 
-The default enabled set is the 14 core features (`config.toml` `[features]
-enabled`). Every feature is still computed; only the enabled subset enters the
+The default enabled set is the 14 core features (registry defaults; override
+via `[features] enabled` in `config.toml`). Every feature is still computed;
+only the enabled subset enters the
 training matrix. Toggle per run with `--enable-features`/`--disable-features`
 on `f1 train`, `f1 backtest`, `f1 predict`, `f1 calibrate`, `f1 search`;
 toggling changes the model-checkpoint fingerprint, so stale checkpoints are

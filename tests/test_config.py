@@ -88,3 +88,46 @@ def test_config_to_toml_writes_model_params_subtable():
     assert "[model.params]" in text
     assert "learning_rate = 0.03" in text
     assert "[api]" in text and "[weather]" in text  # section order preserved
+
+
+# --------------------------------------------------------------------------
+# run_* wrappers resolve their path/season defaults from config (no explicit
+# args) — config.toml is the single source of truth for the pipeline.
+# --------------------------------------------------------------------------
+
+
+def test_run_fetch_resolves_defaults_from_config(monkeypatch):
+    import f1data.fetch as fetch_module
+
+    cfg = {
+        "api": {"user_agent": "test", "sleep_seconds": 0.5},
+        "data": {"cache_dir": "custom/raw", "start_season": 2011, "end_season": 2012},
+    }
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            captured.update(kw)
+
+    monkeypatch.setattr(fetch_module, "F1Client", FakeClient)
+    monkeypatch.setattr(
+        fetch_module, "fetch_season",
+        lambda client, season: {"calendar": [], "results": {}, "sprints": []},
+    )
+    result = fetch_module.run(cfg=cfg)  # every run arg left at its None default
+
+    assert captured["cache_dir"] == "custom/raw"
+    assert captured["sleep_seconds"] == 0.5
+    assert result["start"] == 2011 and result["end"] == 2012
+
+
+def test_model_params_reads_config_only():
+    from f1core.config import load_config
+    from model.train import model_params
+
+    params = model_params(load_config())  # repo defaults
+    assert params["max_iter"] == DEFAULTS["model"]["params"]["max_iter"]
+    overridden = {
+        "model": {"params": {"max_iter": 123}},
+    }
+    assert model_params(overridden)["max_iter"] == 123

@@ -1,11 +1,12 @@
 """The single ``f1`` command-line interface.
 
 Consolidates the six old console scripts (``f1-predict``, ``f1-train``,
-``f1-backtest``, ``f1-calibrate``, ``f1-search``, ``f1-web``) into one
-``f1`` entry point with argparse subcommands. Every subcommand delegates to the
-shared keyword-only ``run_*`` wrappers so the CLI and the web job runner stay
-on one code path (parity invariant). Per-module ``main()`` delegators were
-removed when this file was introduced.
+``f1-backtest``, ``f1-calibrate``, ``f1-search``, ``f1-web``) — plus the
+former ``scripts/fetch_all.py`` shim, now the ``f1 fetch`` subcommand — into
+one ``f1`` entry point with argparse subcommands. Every subcommand delegates
+to the shared keyword-only ``run_*`` wrappers so the CLI and the web job
+runner stay on one code path (parity invariant). Per-module ``main()``
+delegators were removed when this file was introduced.
 """
 
 from __future__ import annotations
@@ -141,8 +142,20 @@ def _search(args: argparse.Namespace) -> int:
     )
     print(f"Walk-forward search (test seasons <= {args.max_test_season}):")
     print(pd.DataFrame(result["results"]).to_string(index=False))
-    print("\nBest configuration (write to config [model.params] or DEFAULT_PARAMS):")
+    print("\nBest configuration (write to [model.params] in config.toml):")
     print(result["best"])
+    return 0
+
+
+def _fetch(args: argparse.Namespace) -> int:
+    from f1data.fetch import run as run_fetch
+
+    result = run_fetch(
+        start=args.start, end=args.end, refresh=args.refresh,
+        cache_dir=args.cache_dir, sleep=args.sleep,
+        log=lambda msg: print(msg, flush=True),
+    )
+    print(f"Fetched {result['start']}-{result['end']} in {result['elapsed_s']}s")
     return 0
 
 
@@ -176,39 +189,48 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(p)
     p.set_defaults(func=_predict)
 
+    p = sub.add_parser("fetch", help="fetch + cache raw race data (data/raw)")
+    p.add_argument("--start", type=int, default=None, help="default: config [data] start_season")
+    p.add_argument("--end", type=int, default=None, help="default: config [data] end_season")
+    p.add_argument("--refresh", action="store_true", help="refetch even if cached")
+    p.add_argument("--cache-dir", default=None, help="default: config [data] cache_dir")
+    p.add_argument("--sleep", type=float, default=None,
+                   help="default: config [api] sleep_seconds")
+    p.set_defaults(func=_fetch)
+
     p = sub.add_parser("train", help="train the final model")
-    p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2026)
+    p.add_argument("--start", type=int, default=None, help="default: config [data] start_season")
+    p.add_argument("--end", type=int, default=None, help="default: config [data] end_season")
     p.add_argument("--refresh", action="store_true")
-    p.add_argument("--cache-dir", default="data/raw")
-    p.add_argument("--dataset", default="data/features.parquet")
-    p.add_argument("--out", default="data/model/hurdle.joblib")
+    p.add_argument("--cache-dir", default=None, help="default: config [data] cache_dir")
+    p.add_argument("--dataset", default=None, help="default: config [data] dataset")
+    p.add_argument("--out", default=None, help="default: config [model] checkpoint")
     _add_common(p)
     p.set_defaults(func=_train)
 
     p = sub.add_parser("backtest", help="walk-forward backtest vs baselines")
-    p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2026)
+    p.add_argument("--start", type=int, default=None, help="default: config [data] start_season")
+    p.add_argument("--end", type=int, default=None, help="default: config [data] end_season")
     p.add_argument("--refresh", action="store_true")
-    p.add_argument("--cache-dir", default="data/raw")
-    p.add_argument("--dataset", default="data/features.parquet")
-    p.add_argument("--out", default="reports/backtest.md")
-    p.add_argument("--out-json", default="reports/backtest.json",
-                   help="JSON snapshot for the web dashboard")
+    p.add_argument("--cache-dir", default=None, help="default: config [data] cache_dir")
+    p.add_argument("--dataset", default=None, help="default: config [data] dataset")
+    p.add_argument("--out", default=None, help="default: config [report] backtest")
+    p.add_argument("--out-json", default=None,
+                   help="JSON snapshot for the web dashboard (default: --out with .json)")
     p.add_argument("--no-quantize", action="store_true",
                    help="keep continuous expected points (deployed output is quantized)")
     _add_common(p)
     p.set_defaults(func=_backtest)
 
     p = sub.add_parser("calibrate", help="fit + deploy isotonic probability calibrators")
-    p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2026)
+    p.add_argument("--start", type=int, default=None, help="default: config [data] start_season")
+    p.add_argument("--end", type=int, default=None, help="default: config [data] end_season")
     p.add_argument("--refresh", action="store_true")
-    p.add_argument("--cache-dir", default="data/raw")
-    p.add_argument("--dataset", default="data/features.parquet")
-    p.add_argument("--out", default="data/model/calibrators.joblib")
-    p.add_argument("--out-json", default="reports/calibration.json",
-                   help="JSON snapshot for the web dashboard")
+    p.add_argument("--cache-dir", default=None, help="default: config [data] cache_dir")
+    p.add_argument("--dataset", default=None, help="default: config [data] dataset")
+    p.add_argument("--out", default=None, help="default: config [model] calibrators")
+    p.add_argument("--out-json", default=None,
+                   help="JSON snapshot for the web dashboard (default: reports/calibration.json)")
     p.add_argument("--fit-through", dest="fit_through", type=int, default=None,
                    help="latest season to fit calibrators on (default: all but eval window)")
     p.add_argument("--eval-from", dest="eval_from", type=int, default=None,
@@ -221,11 +243,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--max-test-season", type=int, default=2019,
                    help="latest test season in the search window")
-    p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2026)
+    p.add_argument("--start", type=int, default=None, help="default: config [data] start_season")
+    p.add_argument("--end", type=int, default=None, help="default: config [data] end_season")
     p.add_argument("--refresh", action="store_true")
-    p.add_argument("--cache-dir", default="data/raw")
-    p.add_argument("--dataset", default="data/features.parquet")
+    p.add_argument("--cache-dir", default=None, help="default: config [data] cache_dir")
+    p.add_argument("--dataset", default=None, help="default: config [data] dataset")
     _add_common(p)
     p.set_defaults(func=_search)
 

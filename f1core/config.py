@@ -1,9 +1,11 @@
 """Configuration loader + writer (stdlib ``tomllib``/``os.replace``; no third-party dependency).
 
-Reads ``config.toml`` at the repo root and merges it over built-in defaults,
-so every CLI works out of the box even without a config file present. The file
-is the single source of truth: :func:`save_config` writes it back in place
-(atomically) so the CLI and the web dashboard always read the same settings.
+Reads ``config.toml`` at the repo root and merges it over the built-in
+:data:`DEFAULTS`, so every CLI works out of the box even without a config
+file present. The code defaults are the baseline; ``config.toml`` holds only
+overrides (a trimmed file by default) and the dashboard's Settings tab writes
+the full effective config back in place via :func:`save_config` (atomically),
+so the CLI and the web always read the same settings.
 """
 
 from __future__ import annotations
@@ -36,8 +38,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "checkpoint": "data/model/hurdle.joblib",
         "calibrators": "data/model/calibrators.joblib",
         "seed": 42,
-        # HGB hyperparameters (see model/search.py to tune). Train reads these
-        # from config first; model/train.DEFAULT_PARAMS is the code fallback.
+        # HGB hyperparameters (see model/search.py to tune). This is the
+        # single source of truth for the defaults; config.toml overrides.
         "params": {
             "max_iter": 400,
             "learning_rate": 0.03,
@@ -95,54 +97,83 @@ def load_config(path: str | Path = "config.toml") -> dict[str, dict[str, Any]]:
 # Schema + validation (used by GET/PUT /api/config and save_config)
 # --------------------------------------------------------------------------
 
-# JSON-serializable field descriptors for the UI form generator. ``type`` is
-# one of str / int / float / bool / list[str] / params / features.
-SCHEMA: list[dict[str, Any]] = [
-    {"section": "api", "key": "base_url", "type": "str",
-     "help": "Jolpica (Ergast-compatible) API base URL"},
-    {"section": "api", "key": "user_agent", "type": "str",
-     "help": "HTTP User-Agent (Jolpica terms require a descriptive one)"},
-    {"section": "api", "key": "sleep_seconds", "type": "float",
-     "min": 0.0, "max": 60.0, "help": "Seconds between API requests"},
-    {"section": "api", "key": "timeout", "type": "float",
-     "min": 1.0, "max": 300.0, "help": "Request timeout (seconds)"},
-    {"section": "api", "key": "max_retries", "type": "int",
-     "min": 0, "max": 20, "help": "Request retries before failing"},
+# Field type inference from the DEFAULTS values: str / int / float / bool /
+# list[str] / params (dict) / features (None).
+def _infer_type(value: Any) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, list):
+        return "list[str]"
+    if isinstance(value, dict):
+        return "params"
+    if value is None:
+        return "features"
+    return "str"
 
-    {"section": "data", "key": "cache_dir", "type": "str",
-     "help": "Directory for cached raw API responses"},
-    {"section": "data", "key": "dataset", "type": "str",
-     "help": "Path to the featured parquet dataset"},
-    {"section": "data", "key": "start_season", "type": "int",
-     "min": SEASON_MIN, "max": SEASON_MAX,
-     "help": "First training season. The dashboard clamps pipeline runs to "
-             "the modern era (2014+)."},
-    {"section": "data", "key": "end_season", "type": "int",
-     "min": SEASON_MIN, "max": SEASON_MAX,
-     "help": "Last training season. The live data ends here; the dashboard "
-             "clamps pipeline runs to the latest season with fetched data."},
 
-    {"section": "model", "key": "checkpoint", "type": "str",
-     "help": "Model checkpoint path"},
-    {"section": "model", "key": "calibrators", "type": "str",
-     "help": "Calibrator checkpoint path"},
-    {"section": "model", "key": "seed", "type": "int",
-     "min": 0, "max": 2**31 - 1, "help": "Random seed for model fitting"},
-    {"section": "model", "key": "params", "type": "params",
-     "help": "HGB hyperparameters (max_iter, learning_rate, max_depth, "
-             "l2_regularization, min_samples_leaf)"},
+# Per-key help text and numeric ranges for the UI form generator. Types are
+# inferred from DEFAULTS, so adding a config field is a single edit in
+# DEFAULTS (plus an optional hint here).
+_SCHEMA_HINTS: dict[tuple[str, str], dict[str, Any]] = {
+    ("api", "base_url"): {"help": "Jolpica (Ergast-compatible) API base URL"},
+    ("api", "user_agent"): {"help": "HTTP User-Agent (Jolpica terms require a descriptive one)"},
+    ("api", "sleep_seconds"): {
+        "min": 0.0, "max": 60.0, "help": "Seconds between API requests",
+    },
+    ("api", "timeout"): {
+        "min": 1.0, "max": 300.0, "help": "Request timeout (seconds)",
+    },
+    ("api", "max_retries"): {
+        "min": 0, "max": 20, "help": "Request retries before failing",
+    },
+    ("data", "cache_dir"): {"help": "Directory for cached raw API responses"},
+    ("data", "dataset"): {"help": "Path to the featured parquet dataset"},
+    ("data", "start_season"): {
+        "min": SEASON_MIN, "max": SEASON_MAX,
+        "help": "First training season. The dashboard clamps pipeline runs to "
+                "the modern era (2014+).",
+    },
+    ("data", "end_season"): {
+        "min": SEASON_MIN, "max": SEASON_MAX,
+        "help": "Last training season. The live data ends here; the dashboard "
+                "clamps pipeline runs to the latest season with fetched data.",
+    },
+    ("model", "checkpoint"): {"help": "Model checkpoint path"},
+    ("model", "calibrators"): {"help": "Calibrator checkpoint path"},
+    ("model", "seed"): {
+        "min": 0, "max": 2**31 - 1, "help": "Random seed for model fitting",
+    },
+    ("model", "params"): {
+        "help": "HGB hyperparameters (max_iter, learning_rate, max_depth, "
+                "l2_regularization, min_samples_leaf)",
+    },
+    ("report", "backtest"): {"help": "Backtest markdown report path"},
+    ("report", "prediction"): {"help": "Prediction markdown report path"},
+    ("features", "enabled"): {
+        "help": "Explicit feature selection; empty falls back to registry defaults",
+    },
+    ("weather", "cache_dir"): {"help": "Directory for cached weather data"},
+}
 
-    {"section": "report", "key": "backtest", "type": "str",
-     "help": "Backtest markdown report path"},
-    {"section": "report", "key": "prediction", "type": "str",
-     "help": "Prediction markdown report path"},
 
-    {"section": "features", "key": "enabled", "type": "features",
-     "help": "Explicit feature selection; empty falls back to registry defaults"},
+def _build_schema() -> list[dict[str, Any]]:
+    """JSON-serializable field descriptors derived from DEFAULTS + hints."""
+    schema: list[dict[str, Any]] = []
+    for section, values in DEFAULTS.items():
+        for key, value in values.items():
+            desc: dict[str, Any] = {"section": section, "key": key, "type": _infer_type(value)}
+            desc.update(_SCHEMA_HINTS.get((section, key), {}))
+            schema.append(desc)
+    return schema
 
-    {"section": "weather", "key": "cache_dir", "type": "str",
-     "help": "Directory for cached weather data"},
-]
+
+SCHEMA: list[dict[str, Any]] = _build_schema()
 
 
 def _as_number(value: Any, kind: type) -> tuple[Any, str | None]:

@@ -236,7 +236,6 @@ def _train_handler(payload: dict, log) -> dict:
     checkpoint = _checkpoint_path(cfg, payload.get("name"))
     result = run_train(
         start=start, end=end, refresh=bool(payload.get("refresh", False)),
-        cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
         out=checkpoint,
         enable_features=enable, disable_features=disable,
         cfg=cfg, log=log,
@@ -248,7 +247,6 @@ def _train_handler(payload: dict, log) -> dict:
     # on walk-forward out-of-sample scores.
     cal_kwargs = {
         "start": start, "end": end, "refresh": bool(payload.get("refresh", False)),
-        "cache_dir": cfg["data"]["cache_dir"], "dataset": cfg["data"]["dataset"],
         "out": cfg["model"]["calibrators"],
         "enable_features": enable, "disable_features": disable,
         "cfg": cfg, "log": log,
@@ -277,7 +275,6 @@ def _calibrate_handler(payload: dict, log) -> dict:
     enable, disable = _feature_toggles(payload)
     return run_calibrate(
         start=start, end=end, refresh=bool(payload.get("refresh", False)),
-        cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
         out=cfg["model"]["calibrators"],
         enable_features=enable, disable_features=disable,
         cfg=cfg, log=log,
@@ -313,7 +310,6 @@ def _backtest_handler(payload: dict, log) -> dict:
     model_paths = [p for p in (payload.get("model_paths") or []) if isinstance(p, str)]
     return run_backtest(
         start=start, end=end,
-        cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
         quantize=bool(payload.get("quantize", True)),
         use_checkpoint=bool(payload.get("use_checkpoint", False)),
         model_path=_str_or_none(payload.get("model_path")),

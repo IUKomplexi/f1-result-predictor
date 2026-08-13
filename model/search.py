@@ -10,8 +10,8 @@ Usage::
 
 ``--max-test-season`` caps the latest test season (the default 2019 validates
 on 2018-2019 with training on everything before, which is a fast but
-representative window). The best configuration is printed; paste it into
-``model/train.py``'s ``DEFAULT_PARAMS`` to ship it.
+representative window). The best configuration is printed; write it to
+``[model.params]`` in ``config.toml`` (or f1core/config.py DEFAULTS) to ship it.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from features.registry import enabled_features
 from model.evaluate import race_metrics
 from model.train import (
     HurdleModels,
+    model_params,
     prepare,
     quantize_points,
     walk_forward_seasons,
@@ -78,7 +79,11 @@ def evaluate_config(
     for train, test, season in walk_forward_seasons(df):
         if max_test_season is not None and season > max_test_season:
             break
-        model = HurdleModels(seed=42, params=params).fit(*prepare(train, features))
+        # Empty/None params mean the configured [model.params] (same default
+        # run_backtest uses), so the two aggregations stay comparable.
+        model = HurdleModels(seed=42, params=params or model_params()).fit(
+            *prepare(train, features)
+        )
         X_test, _ = prepare(test, features)
         test = test.copy()
         test["pred_points"] = quantize_points(model.predict_expected_points(X_test))
@@ -114,11 +119,11 @@ def run(
     n: int = 16,
     seed: int = 0,
     max_test_season: int = 2019,
-    start: int = 2010,
-    end: int = 2026,
+    start: int | None = None,
+    end: int | None = None,
     refresh: bool = False,
-    cache_dir: str = "data/raw",
-    dataset: str = "data/features.parquet",
+    cache_dir: str | None = None,
+    dataset: str | None = None,
     enable_features: Sequence[str] = (),
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
@@ -129,9 +134,20 @@ def run(
     ``log`` is an optional progress callback (web job runner). The returned
     dict carries the full ranked result table plus the ``best`` configuration
     (ready to be written to ``[model.params]`` by the dashboard).
+
+    Every path/season argument defaults to ``None`` and resolves from the
+    config (``[data]`` seasons/cache/dataset).
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    if start is None:
+        start = cfg["data"]["start_season"]
+    if end is None:
+        end = cfg["data"]["end_season"]
+    if cache_dir is None:
+        cache_dir = cfg["data"]["cache_dir"]
+    if dataset is None:
+        dataset = cfg["data"]["dataset"]
     if end < start:
         raise ValueError(f"search: end season {end} is before start season {start}")
     n_seasons = end - start + 1

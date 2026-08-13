@@ -249,13 +249,13 @@ def _fixed_model_backtest(
 
 def run(
     *,
-    start: int = 2010,
-    end: int = 2026,
+    start: int | None = None,
+    end: int | None = None,
     refresh: bool = False,
-    cache_dir: str = "data/raw",
-    dataset: str = "data/features.parquet",
-    out: str = "reports/backtest.md",
-    out_json: str = "reports/backtest.json",
+    cache_dir: str | None = None,
+    dataset: str | None = None,
+    out: str | None = None,
+    out_json: str | None = None,
     quantize: bool = True,
     use_checkpoint: bool = False,
     model_path: str | None = None,
@@ -282,9 +282,25 @@ def run(
     each is scored with its own feature set, the snapshot gains a
     ``"models"`` key (``{checkpoint stem: {overall, by_season}}``), and the
     primary ``overall``/``by_season`` tables come from the first checkpoint.
+
+    Every path/season argument defaults to ``None`` and resolves from the
+    config (``[data]`` seasons/cache/dataset, ``[report] backtest``); the JSON
+    snapshot defaults to the report path with a ``.json`` suffix.
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    if start is None:
+        start = cfg["data"]["start_season"]
+    if end is None:
+        end = cfg["data"]["end_season"]
+    if cache_dir is None:
+        cache_dir = cfg["data"]["cache_dir"]
+    if dataset is None:
+        dataset = cfg["data"]["dataset"]
+    if out is None:
+        out = cfg["report"]["backtest"]
+    if out_json is None:
+        out_json = str(Path(out).with_suffix(".json"))
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
     log(f"Building dataset {start}-{end} ...")
     df = build_dataset(client, range(start, end + 1), cache_path=dataset)

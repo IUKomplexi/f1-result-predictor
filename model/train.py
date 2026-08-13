@@ -59,30 +59,21 @@ def quantize_points(values) -> np.ndarray:
     return QUANTIZED_POINTS[idx]
 
 
-# Default gradient-boosting hyperparameters (see model/search.py to tune).
-# Chosen by walk-forward-validated search (model/search.py, test seasons
-# <= 2019) with the full feature set incl. teammate-relative features.
-# These are the *code fallback*: train reads ``[model.params]`` from config
-# (config.py DEFAULTS) first, so the dashboard can tune them without a code
-# change. Search results are applied by writing ``[model.params]``.
-DEFAULT_PARAMS = {
-    "max_iter": 400,
-    "learning_rate": 0.03,
-    "max_depth": 3,
-    "l2_regularization": 1.0,
-    "min_samples_leaf": 20,
-}
+# Default gradient-boosting hyperparameters live in ``[model.params]``
+# (f1core/config.py DEFAULTS) — the single source of truth. They were chosen
+# by walk-forward-validated search (model/search.py, test seasons <= 2019)
+# with the full feature set incl. teammate-relative features. The dashboard
+# tunes them by writing ``[model.params]``; see :func:`model_params`.
 
 
 def model_params(cfg: dict | None = None) -> dict[str, Any]:
-    """Effective HGB hyperparameters: ``[model.params]`` from config, else code defaults."""
+    """Effective HGB hyperparameters: ``[model.params]`` from config."""
     cfg = cfg or load_config()
-    params = (cfg.get("model") or {}).get("params")
-    return {**DEFAULT_PARAMS, **(params or {})}
+    return dict((cfg.get("model") or {}).get("params") or {})
 
 
 def _clf(seed: int, params: dict[str, Any] | None = None) -> HistGradientBoostingClassifier:
-    p = {**DEFAULT_PARAMS, **(params or {})}
+    p = dict(params or {})
     return HistGradientBoostingClassifier(
         categorical_features="from_dtype",
         random_state=seed,
@@ -91,7 +82,7 @@ def _clf(seed: int, params: dict[str, Any] | None = None) -> HistGradientBoostin
 
 
 def _reg(seed: int, params: dict[str, Any] | None = None) -> HistGradientBoostingRegressor:
-    p = {**DEFAULT_PARAMS, **(params or {})}
+    p = dict(params or {})
     return HistGradientBoostingRegressor(
         categorical_features="from_dtype",
         random_state=seed,
@@ -402,12 +393,12 @@ def load_checkpoint(
 
 def run(
     *,
-    start: int = 2010,
-    end: int = 2026,
+    start: int | None = None,
+    end: int | None = None,
     refresh: bool = False,
-    cache_dir: str = "data/raw",
-    dataset: str = "data/features.parquet",
-    out: str = "data/model/hurdle.joblib",
+    cache_dir: str | None = None,
+    dataset: str | None = None,
+    out: str | None = None,
     enable_features: Sequence[str] = (),
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
@@ -418,9 +409,23 @@ def run(
     ``log`` is an optional callable receiving progress lines (used by the web
     job runner to stream output); it defaults to module logging. All arguments
     are keyword-only so the web job runner and the CLI share one code path.
+
+    Every path/season argument defaults to ``None`` and resolves from the
+    config (``[data] start_season/end_season/cache_dir/dataset``,
+    ``[model] checkpoint``) so ``config.toml`` is the single source of truth.
     """
     log = log or (lambda msg: logger.info(msg))
     cfg = cfg or load_config()
+    if start is None:
+        start = cfg["data"]["start_season"]
+    if end is None:
+        end = cfg["data"]["end_season"]
+    if cache_dir is None:
+        cache_dir = cfg["data"]["cache_dir"]
+    if dataset is None:
+        dataset = cfg["data"]["dataset"]
+    if out is None:
+        out = cfg["model"]["checkpoint"]
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
     log(f"Building dataset {start}-{end} ...")
     df = build_dataset(client, range(start, end + 1), cache_path=dataset)

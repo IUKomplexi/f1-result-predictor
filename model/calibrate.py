@@ -303,13 +303,13 @@ def _holdout_split(
 
 def run(
     *,
-    start: int = 2010,
-    end: int = 2026,
+    start: int | None = None,
+    end: int | None = None,
     refresh: bool = False,
-    cache_dir: str = "data/raw",
-    dataset: str = "data/features.parquet",
-    out: str = "data/model/calibrators.joblib",
-    out_json: str = "reports/calibration.json",
+    cache_dir: str | None = None,
+    dataset: str | None = None,
+    out: str | None = None,
+    out_json: str | None = None,
     enable_features: Sequence[str] = (),
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
@@ -340,9 +340,26 @@ def run(
     ``eval_from_season``. Deployment calibrators are always fit on all OOS
     scores. When omitted, the default chronological two-thirds split is used.
     This is a configuration choice, not new model behavior.
+
+    Every path/season argument defaults to ``None`` and resolves from the
+    config (``[data]`` seasons/cache/dataset, ``[model] calibrators``); the
+    JSON snapshot defaults to ``reports/calibration.json`` (the dashboard
+    reads that fixed path).
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    if start is None:
+        start = cfg["data"]["start_season"]
+    if end is None:
+        end = cfg["data"]["end_season"]
+    if cache_dir is None:
+        cache_dir = cfg["data"]["cache_dir"]
+    if dataset is None:
+        dataset = cfg["data"]["dataset"]
+    if out is None:
+        out = cfg["model"]["calibrators"]
+    if out_json is None:
+        out_json = "reports/calibration.json"
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
     log(f"Building dataset {start}-{end} ...")
     df = build_dataset(client, range(start, end + 1), cache_path=dataset)

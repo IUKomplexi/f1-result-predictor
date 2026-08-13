@@ -1,51 +1,23 @@
-# f1-result-predictor configuration.
-# Every value here is optional: the built-in defaults in config.py already
-# match this file. CLI flags override config values.
-
-[api]
-base_url = "https://api.jolpi.ca/ergast/f1"
-# The Jolpica API terms of use require a descriptive User-Agent.
-user_agent = "f1-result-predictor/0.1.0 (https://github.com/example/f1-result-predictor; contact: dev@example.com)"
-sleep_seconds = 0.25
-timeout = 30.0
-max_retries = 3
-
-[data]
-cache_dir = "data/raw"
-dataset = "data/features.parquet"
-start_season = 2010
-end_season = 2026
-
-[model]
-checkpoint = "data/model/hurdle.joblib"
-calibrators = "data/model/calibrators.joblib"
-seed = 42
-
-# HGB hyperparameters (see model/search.py). Train reads these first; the
-# code defaults in model/train.DEFAULT_PARAMS are the fallback. Search results
-# are applied here from the dashboard (Pipeline page) or by hand.
-[model.params]
-max_iter = 400
-learning_rate = 0.03
-max_depth = 3
-l2_regularization = 1.0
-min_samples_leaf = 20
-
-[report]
-backtest = "reports/backtest.md"
-prediction = "reports/prediction.md"
+# f1-result-predictor configuration — everything here is an OVERRIDE.
+#
+# The built-in defaults live in f1core/config.py (DEFAULTS); load_config
+# merges this file over them, so an absent key falls back to the code
+# default. CLI flags override config values, and the dashboard's Settings
+# tab writes the full effective config back here via save_config.
+#
+# Overridable sections: [api] [data] [model] [model.params] [report]
+# [features] [weather]. Examples:
+#
+#   [data]
+#   start_season = 2012
+#   end_season = 2025
+#
+#   [model.params]
+#   max_iter = 600
 
 [features]
 # Feature selection (see features/registry.py + reports/features.md).
-# The explicit list below mirrors the registry defaults (core features on,
-# selectable/cut off). Remove the line to fall back to registry defaults, or
-# edit the list to override; CLI flags --enable-features/--disable-features
-# apply on top.
-enabled = ["grid", "qual_pos", "grid_qual_gap", "driver_prev_points_mean",
-           "driver_prev_points_sum", "team_prev_points_mean", "team_wins_prior",
-           "champ_points_entering", "constructor_champ_pos_entering",
-           "season_driver_pts_per_race", "season_team_pts_per_race",
-           "driver_id", "constructor_id", "circuit_id"]
-
-[weather]
-cache_dir = "data/weather"
+# The registry defaults (core features on, selectable/cut off) apply when
+# this is absent. Uncomment + edit the list to override; CLI flags
+# --enable-features/--disable-features apply on top.
+# enabled = ["grid", "qual_pos", "driver_id", "constructor_id", "circuit_id"]

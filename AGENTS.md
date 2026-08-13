@@ -6,8 +6,8 @@ Predicts **points per driver** for an F1 race from strictly pre-race info (grid,
 
 ```bash
 uv sync --all-extras          # install + test/lint/web extras into .venv
-uv run scripts/fetch_all.py   # one-time API fetch → data/raw/ (offline afterwards)
-uv run pytest -q              # test suite — 151 tests, fully offline (recorded fixtures)
+f1 fetch                      # one-time API fetch → data/raw/ (offline afterwards)
+uv run pytest -q              # test suite — fully offline (recorded fixtures)
 uv run ruff check .           # lint (0 errors expected)
 f1 predict [--season S --round R] [--grid qual.csv]   # next race → reports/prediction.md
 f1 train                      # train → data/model/hurdle.joblib
@@ -32,7 +32,7 @@ Single-direction deps, all packages import shared helpers from `f1core` (no sys.
 - `model/` — `train.py` (hurdle: HGB classifier + regressor), `evaluate.py` (walk-forward backtest vs grid/championship/zero), `calibrate.py` (isotonic, per-target, deployed only where it improves hold-out Brier), `search.py` (walk-forward-validated tuning). Each exposes a keyword-only `run_* -> dict` wrapper called by the `f1` CLI and the web job runner.
 - `f1web/` — `app.py` (`create_app`, JSON API + built-SPA host), `jobs.py` (`JobManager`, threading worker + single-job queue + `reports/jobs/*.json` history) and Preact SPA in `f1web/ui/` (Vite + TS; `@preact/preset-vite` + `preact/compat`); tabs: Status, Race, Race History, Data, Train, Backtest, Settings. Pipeline steps each run from their own tab via the shared `ui/JobRunner` (including a Precompute race history job that warms the season cache under `data/predictions`); the Train job also calibrates. No UI *unit* suite (known gap; `npm run build`/`npm run lint` are the UI checks)
 - `f1weather/` — Open-Meteo layer, **evaluated but NOT adopted** (kept deliberately; see `reports/weather.md`)
-- `scripts/` — `fetch_all.py`, `fetch_weather.py`, `download_fixtures.py`
+- `scripts/` — `fetch_weather.py`, `download_fixtures.py`, `feature_audit.py`
 - `tests/` — offline suite, recorded fixtures (`tests/fixtures/`), `test_e2e.py` runs the full pipeline
 
 Data flow: `data/raw/*.json` → `data/features.parquet` → `data/model/*.joblib`. All `data/` caches are gitignored and regenerable; model checkpoints carry feature-set fingerprints.
@@ -44,10 +44,10 @@ Data flow: `data/raw/*.json` → `data/features.parquet` → `data/model/*.jobli
 - Ruff: line-length 100, `select = E,W,F,I,UP,B,RUF,PIE,ISC,BLE`. No type-check gate; pandas is untyped — scoped `# type: ignore[reportX]` comments are kept as documentation (inert to ruff).
 - Tests must stay offline; suite enforces `filterwarnings = ["error::DeprecationWarning"]` — deprecation suppression lives only at checkpoint I/O in `model/train.py`.
 - API errors are uniformly `{"error": ...}` (incl. 422 and the `/assets` path-traversal guard).
-- `config.toml` is the **single source of truth** (mirrors `f1core/config.py` `DEFAULTS`); the dashboard writes it back via `save_config` (atomic). CLI flags override config. Per-request prediction overrides (`POST /api/predict`) are **ephemeral** — applied in memory only, never written to disk.
-- Adding a config field: add to `DEFAULTS` + a `SCHEMA` descriptor + a `validate_config` check in `f1core/config.py`; the Settings form and TOML writer pick it up automatically.
+- `config.toml` holds **overrides**; the built-in defaults in `f1core/config.py` `DEFAULTS` are the baseline, and every `run_*` wrapper + CLI flag resolves from config when not explicitly passed. The dashboard writes the full effective config back via `save_config` (atomic). CLI flags override config. Per-request prediction overrides (`POST /api/predict`) are **ephemeral** — applied in memory only, never written to disk.
+- Adding a config field: add it to `DEFAULTS` in `f1core/config.py` (the field type is inferred from the value; add a `_SCHEMA_HINTS` entry for help/min/max); the Settings form, TOML writer, and validation pick it up automatically.
 - Pipeline steps expose a keyword-only `run_* -> dict` (JSON-safe) that the `f1` subcommands and web job runner call; a web job wraps it via a handler registered in `f1web/jobs.py`. Jobs are async/threaded, one at a time, results + log recorded in memory + `reports/jobs/*.json`.
-- The model's HGB hyperparameters are config-driven: train reads `[model.params]` (fallback `DEFAULT_PARAMS`); a params change silently requires retrain (surfaced as a "retrain needed" hint in the UI). Feature-list edits change the checkpoint fingerprint (existing behavior).
+- The model's HGB hyperparameters are config-driven: train reads `[model.params]` (defaults in `f1core/config.py` `DEFAULTS`); a params change silently requires retrain (surfaced as a "retrain needed" hint in the UI). Feature-list edits change the checkpoint fingerprint (existing behavior).
 - Add a pre-race feature: helper in `features/build.py` + register in `NUMERIC_FEATURES`/`CATEGORICAL_FEATURES` + test in `tests/test_features.py`; bump the dataset cache version on schema change.
 - UI checks: `npm run build` (`tsc -b && vite build`) and `npm run lint` (oxlint) in `f1web/ui` must stay clean; the built `f1web/ui/dist` is gitignored and rebuilt by the Dockerfile.
 - CI (`.github/workflows/ci.yml`): pytest on 3.12/3.13 + ruff on push to `main` and PRs.

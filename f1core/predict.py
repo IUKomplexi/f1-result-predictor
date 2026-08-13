@@ -8,7 +8,7 @@ Usage::
                                              # (driver_id,grid) for an upcoming race
 
 Requires a trained checkpoint (``f1 train``) and cached raw data
-(``python scripts/fetch_all.py``). Output: the ranked grid with expected
+(``f1 fetch``). Output: the ranked grid with expected
 points and win/podium probabilities, saved to ``reports/prediction.md``.
 
 For an upcoming race the grid/qualifying result is not known yet: grid and
