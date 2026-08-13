@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import warnings
+from collections import OrderedDict
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -273,12 +274,34 @@ def _joblib_dump(obj: Any, path: Path) -> None:
 
 
 def _joblib_load(path: Path) -> Any:
-    """``joblib.load`` with the same joblib/numpy 2.5 suppression as dump."""
+    """``joblib.load`` with the same joblib/numpy 2.5 suppression as dump.
+
+    Results are memoized per file (resolved path + mtime) so a checkpoint or
+    calibrator file is decoded once per process; the fingerprint checks in
+    :func:`load_checkpoint` / ``load_calibrators`` still run on every call.
+    """
+    key = (str(path.resolve()), path.stat().st_mtime_ns)
+    hit = _JOBLIB_CACHE.get(key)
+    if hit is not None:
+        _JOBLIB_CACHE.move_to_end(key)
+        return hit
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", category=DeprecationWarning, module="joblib"
         )
-        return joblib.load(path)
+        payload = joblib.load(path)
+    _JOBLIB_CACHE[key] = payload
+    if len(_JOBLIB_CACHE) > _JOBLIB_CACHE_MAX:
+        _JOBLIB_CACHE.popitem(last=False)
+    return payload
+
+
+# In-process joblib cache: keyed on (resolved path, mtime_ns) with a small cap,
+# so repeat predictions (grid/model overrides on the Race tab, whole-season
+# batches) skip the multi-hundred-ms checkpoint decode. Retraining writes a new
+# file with a new mtime, which bypasses (and replaces) the stale entry.
+_JOBLIB_CACHE: OrderedDict[tuple[str, int], Any] = OrderedDict()
+_JOBLIB_CACHE_MAX = 4
 
 
 def save_checkpoint(
