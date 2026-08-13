@@ -43,6 +43,8 @@ interface ChartProps {
   height?: number
   referenceLine?: ReferenceLineSpec
   valueFormat?: (value: number) => string
+  /** Accessible description of what the chart plots (SVG role="img"). */
+  ariaLabel?: string
 }
 
 const PAD = { top: 10, right: 14, bottom: 26, left: 44 }
@@ -57,6 +59,7 @@ export function Chart({
   height = 220,
   referenceLine,
   valueFormat = (v) => v.toFixed(3),
+  ariaLabel,
 }: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -196,6 +199,7 @@ export function Chart({
             height={height}
             className="chart-svg"
             role="img"
+            aria-label={ariaLabel}
             onMouseMove={onMouseMove}
             onMouseLeave={() => setHover(null)}
             onTouchStart={onTouchMove}

@@ -12,6 +12,18 @@ import {
 } from './lib'
 import { ModelComparison } from './ModelComparison'
 
+/** Plain-language meaning of each metric (shown under the mean table). */
+const METRIC_HELP: Record<string, string> = {
+  winner_hit: 'how often the predicted winner actually won',
+  top3_overlap: 'share of the actual podium the model named',
+  spearman: 'rank correlation of predicted vs actual points order',
+  mae: 'mean absolute error of predicted points',
+}
+
+function metricLabel(metric: keyof BacktestMetricRow): string {
+  return METRICS.find((m) => m.key === metric)?.label ?? String(metric)
+}
+
 /** The persisted backtest report: mean table, model comparison, trend + edge charts. */
 export function BacktestView({ backtest, reference }: { backtest: Backtest; reference: string | null }) {
   const seasons = allSeasons(backtest.by_season)
@@ -52,6 +64,14 @@ export function BacktestView({ backtest, reference }: { backtest: Backtest; refe
             </tbody>
           </table>
         </div>
+        <dl className="metric-glossary">
+          {METRICS.map((metric) => (
+            <div key={metric.key} className="glossary-item">
+              <dt>{metric.label}</dt>
+              <dd>{METRIC_HELP[metric.key]}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       {backtest.models && Object.keys(backtest.models).length > 1 ? (
@@ -123,7 +143,15 @@ function MetricChart({
     strokeWidth: baseline === 'model' ? 2.5 : 1.5,
   }))
   return (
-    <Chart data={data} xKey="season" series={series} valueFormat={(v) => fmtNumber(v, 3)} />
+    <Chart
+      data={data}
+      xKey="season"
+      series={series}
+      ariaLabel={`${metricLabel(metric)} by season, for ${BASELINES.map(
+        (b) => BASELINE_LABEL[b],
+      ).join(', ')}`}
+      valueFormat={(v) => fmtNumber(v, 3)}
+    />
   )
 }
 
@@ -153,6 +181,7 @@ function MetricEdgeChart({
       data={data}
       xKey="season"
       series={series}
+      ariaLabel={`${metricLabel(metric)} edge vs grid and championship, by season`}
       referenceLine={{ y: 0, label: 'even' }}
       valueFormat={(v) => fmtNumber(v, 3)}
     />
