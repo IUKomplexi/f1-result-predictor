@@ -33,3 +33,24 @@ jobs:
         run: uv sync --all-extras --frozen
       - name: Lint (ruff)
         run: uv run ruff check .
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: f1web/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: f1web/ui/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Test (vitest)
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Lint (oxlint)
+        run: npm run lint

@@ -10,6 +10,7 @@ With the FastAPI backend running on port 8080:
 ```sh
 npm install
 npm run dev        # http://localhost:5173 — /api is proxied to :8080
+npm test           # vitest component + lib tests (offline, jsdom)
 ```
 
 ## Production build
@@ -31,4 +32,4 @@ f1 web --port 8080   # http://127.0.0.1:8080/
 - `src/theme/tokens.css` — F1-themed design tokens (colors, spacing, type).
 - `src/App.tsx` — app shell (Status / Race / Race History / Data / Train /
   Backtest / Settings tabs).
-- Pinned to stable releases (React 18, Vite 5, TypeScript 5.5, Recharts 2).
+- Pinned to stable releases (Preact 10, Vite 5, TypeScript 5.5, Vitest 2).
