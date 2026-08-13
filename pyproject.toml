@@ -28,7 +28,7 @@ lint = ["ruff>=0.8"]
 f1 = "f1core.cli:main"
 
 [tool.setuptools]
-packages = ["f1core", "f1data", "features", "model", "f1web", "f1weather"]
+packages = ["f1core", "f1data", "features", "model", "f1web"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

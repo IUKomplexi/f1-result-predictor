@@ -15,8 +15,7 @@ drop-column ablation, 2013-2025 test windows):
 * ``core`` — high impact (survived BH-FDR at q=0.05 in at least one hurdle
   component); on by default.
 * ``selectable`` — low impact (noise in both components); kept for experiments
-  but off by default (the ``reports/weather.md`` "evaluated, not adopted"
-  precedent).
+  but off by default.
 * ``cut`` — removal significantly improved the backtest (the ±1 SE ablation
   gate passed); kept in the registry so it can be re-enabled.
 

@@ -57,9 +57,6 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # selectable/cut off. An explicit list overrides the defaults.
         "enabled": None,
     },
-    "weather": {
-        "cache_dir": "data/weather",
-    },
 }
 
 # Season bounds for validation / the UI season pickers.
@@ -158,7 +155,6 @@ _SCHEMA_HINTS: dict[tuple[str, str], dict[str, Any]] = {
     ("features", "enabled"): {
         "help": "Explicit feature selection; empty falls back to registry defaults",
     },
-    ("weather", "cache_dir"): {"help": "Directory for cached weather data"},
 }
 
 
@@ -288,7 +284,7 @@ def _format_value(value: Any) -> str | None:
     raise TypeError(f"cannot serialize {value!r} to TOML")
 
 
-_SECTION_ORDER = ["api", "data", "model", "report", "features", "weather"]
+_SECTION_ORDER = ["api", "data", "model", "report", "features"]
 
 
 def config_to_toml(cfg: dict) -> str:

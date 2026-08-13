@@ -98,67 +98,6 @@ def find_next_race(client: F1Client, df: pd.DataFrame, seasons: Sequence[int]) -
 # Entry list for an upcoming race
 # --------------------------------------------------------------------------
 
-def _apply_target_weather(
-    df: pd.DataFrame,
-    client: F1Client,
-    season_datas: Sequence[dict],
-    seasons: list[int],
-    target_season: int,
-    target_round: int,
-    synthetic: bool,
-    cache_dir: str | Path,
-) -> pd.DataFrame:
-    """Merge the target race's weather onto its rows (best-effort).
-
-    Past races load the cached ERA5 actuals; an upcoming race (``synthetic``)
-    requests the live forecast. Any failure keeps the weather columns NaN, so
-    prediction never breaks on missing weather.
-
-    The weather imports are lazy: this helper is plumbing for a future
-    adoption (the shipped model does not use weather), so `predict` must not
-    depend on the ``f1weather`` package at import time.
-    """
-    from f1weather import load_race_weather, weather_frame  # lazy: plumbing only
-    from features.build import merge_weather
-
-    row = _target_calendar_row(client, season_datas, seasons, target_season, target_round)
-    weather = None
-    if row and row.get("circuit_lat") and row.get("circuit_long"):
-        weather = load_race_weather(
-            cache_dir,
-            target_season,
-            target_round,
-            str(row["date"]),
-            float(row["circuit_lat"]),
-            float(row["circuit_long"]),
-            forecast=synthetic,
-        )
-    if weather:
-        df = merge_weather(df, weather_frame([weather]))
-    return df
-
-
-def _target_calendar_row(
-    client: F1Client,
-    season_datas: Sequence[dict],
-    seasons: list[int],
-    target_season: int,
-    target_round: int,
-) -> dict | None:
-    """Calendar row for (target_season, target_round), for weather lookups.
-
-    Uses the already-fetched season data when the season is in range (offline),
-    otherwise fetches the season's calendar (needed for an upcoming season).
-    """
-    if seasons[0] <= target_season <= seasons[-1]:
-        calendar = season_datas[target_season - seasons[0]].get("calendar", [])
-    else:
-        calendar = fetch_calendar(client, target_season)
-    return next(
-        (r for r in calendar if int(r["round"]) == target_round), None
-    )
-
-
 def _latest_teams_from_df(df: pd.DataFrame) -> dict[str, str]:
     """driver -> constructor from each driver's most recent cached race."""
     latest = df.sort_values("date").drop_duplicates("driver_id", keep="last")
@@ -710,11 +649,6 @@ def get_prediction(
     df, synthetic = _target_frame(
         client, base_df, season_datas, seasons, target_season, target_round, grid_csv, quiet
     )
-
-    # Weather is not adopted (see reports/weather.md): the shipped model does
-    # not use weather features, so no forecast is fetched at predict time.
-    # The plumbing (_apply_target_weather / merge_weather) stays available
-    # for a future re-evaluation.
 
     checkpoint, model, calibrators = _load_models(cfg, model_path, feats)
     result = predict_race(df, model, target_season, target_round, calibrators, feats)

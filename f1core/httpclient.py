@@ -1,13 +1,12 @@
 """Shared plumbing for the project's polite cached HTTP clients.
 
-``f1data.F1Client`` and ``f1weather.WeatherClient`` wrap different JSON
-APIs with the same discipline: a descriptive ``User-Agent``, polite rate
-limiting, retry/backoff on 429/5xx, and transparent on-disk caching of raw
-responses. The identical pieces — request setup, cache keying/read/write,
-backoff, and the jittered request itself — live here; each client keeps its
-own ``get_json`` because they genuinely differ (URL resolution,
-``Retry-After`` handling, error types, and per-request cache bypass for
-forecasts).
+``f1data.F1Client`` wraps the Jolpica API with a disciplined request
+pattern: a descriptive ``User-Agent``, polite rate limiting, retry/backoff
+on 429/5xx, and transparent on-disk caching of raw responses. The identical
+pieces — request setup, cache keying/read/write, backoff, and the jittered
+request itself — live here; the client keeps its own ``get_json`` because
+URL resolution, ``Retry-After`` handling, error types, and per-request
+cache bypass genuinely differ per API.
 """
 
 from __future__ import annotations

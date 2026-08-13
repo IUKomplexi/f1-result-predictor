@@ -204,10 +204,3 @@ def test_dataset_cache_fingerprint_roundtrip(tmp_path):
         assert monkeypatch_seen == [2020, 2020]
     finally:
         monkeypatch.undo()
-
-
-def test_weather_columns_not_in_registry():
-    """Weather is not a registered feature (evaluated, not adopted)."""
-    from features.build import WEATHER_FEATURES
-
-    assert not (set(WEATHER_FEATURES) & set(all_feature_ids()))

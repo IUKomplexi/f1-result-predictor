@@ -59,21 +59,6 @@ NUMERIC_FEATURES = [
 
 CATEGORICAL_FEATURES = ["driver_id", "constructor_id", "circuit_id", "points_era"]
 
-# Race-level weather columns (NaN when no weather data is available for a
-# race, e.g. before scripts/fetch_weather.py has run). Present in every
-# dataset so the model schema is stable; an all-NaN column is dropped as
-# constant by HurdleModels.fit, so a dataset without weather behaves
-# exactly like the pre-weather model.
-WEATHER_FEATURES = [
-    "temperature_max",
-    "temperature_min",
-    "precipitation_sum",
-    "wind_max",
-    "humidity_mean",
-    "cloud_cover_mean",
-    "wet",
-]
-
 META_COLUMNS = [
     "season",
     "round",
@@ -367,20 +352,11 @@ def _add_championship(out: pd.DataFrame) -> pd.DataFrame:
 
 
 def _add_era_and_targets(out: pd.DataFrame) -> pd.DataFrame:
-    """Points era, target columns, and weather-schema columns."""
+    """Points era and target columns."""
     out["points_era"] = np.where(out["season"] >= 2019, "post2019", "pre2019")
     out["scored"] = out["points"] > 0
     out["top3"] = out["position"].between(1, 3)
     out["win"] = out["position"].eq(1)
-
-    # Weather columns: always present in the schema; NaN until weather data
-    # is merged in (build_dataset(weather=...) for training, predict.py for
-    # the target race). An all-NaN weather column is dropped as constant at
-    # fit, so datasets without weather behave exactly like the pre-weather
-    # model.
-    for col in WEATHER_FEATURES:
-        if col not in out.columns:
-            out[col] = np.nan
     return out
 
 
@@ -429,14 +405,11 @@ def build_dataset(
     seasons: Iterable[int],
     cache_path: str | Path = "data/features.parquet",
     refresh: bool = False,
-    weather: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Fetch (or load cached) features for a range of seasons.
 
     The assembled+featured dataset is cached as parquet at ``cache_path``;
-    pass ``refresh=True`` to rebuild from the API. ``weather`` is an optional
-    (season, round, weather...) frame merged into the result (race-level;
-    weather columns for races not in it stay NaN).
+    pass ``refresh=True`` to rebuild from the API.
     """
     seasons = list(seasons)
     cache = Path(cache_path)
@@ -473,7 +446,7 @@ def build_dataset(
             df = _build_fresh(client, seasons, cache, fingerprint)
     else:
         df = _build_fresh(client, seasons, cache, fingerprint)
-    return merge_weather(df, weather)
+    return df
 
 
 def _build_fresh(
@@ -488,28 +461,3 @@ def _build_fresh(
     except OSError:
         logger.warning("Could not write dataset cache %s", cache)
     return df
-
-
-def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFrame:
-    """Join race-level weather onto the dataset by (season, round).
-
-    Rows for races without weather keep NaN weather columns; the weather
-    columns are always present in ``df`` (added by ``add_features``).
-    """
-    if weather is None or weather.empty:
-        return df
-    # Only merge the weather columns the frame actually carries: a frame may
-    # legitimately lack some (e.g. when the API had no values for a date),
-    # in which case the dataset keeps NaN for those columns.
-    weather_cols = [c for c in WEATHER_FEATURES if c in weather.columns]
-    out = df.merge(
-        weather[["season", "round", *weather_cols]],
-        on=["season", "round"],
-        how="left",
-        suffixes=("", "_w"),
-    )
-    for col in weather_cols:
-        if f"{col}_w" in out.columns:
-            out[col] = out[f"{col}_w"]
-            out = out.drop(columns=f"{col}_w")
-    return out
