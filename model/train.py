@@ -61,9 +61,9 @@ def quantize_points(values) -> np.ndarray:
 
 # Default gradient-boosting hyperparameters live in ``[model.params]``
 # (f1core/config.py DEFAULTS) — the single source of truth. They were chosen
-# by walk-forward-validated search (model/search.py, test seasons <= 2019)
-# with the full feature set incl. teammate-relative features. The dashboard
-# tunes them by writing ``[model.params]``; see :func:`model_params`.
+# by walk-forward validation with the full feature set incl. teammate-relative
+# features. The dashboard tunes them by writing ``[model.params]``; see
+# :func:`model_params`.
 
 
 def model_params(cfg: dict | None = None) -> dict[str, Any]:

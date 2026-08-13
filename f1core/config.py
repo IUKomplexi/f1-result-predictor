@@ -38,8 +38,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "checkpoint": "data/model/hurdle.joblib",
         "calibrators": "data/model/calibrators.joblib",
         "seed": 42,
-        # HGB hyperparameters (see model/search.py to tune). This is the
-        # single source of truth for the defaults; config.toml overrides.
+        # HGB hyperparameters (tune via the dashboard's Settings tab). This is
+        # the single source of truth for the defaults; config.toml overrides.
         "params": {
             "max_iter": 400,
             "learning_rate": 0.03,

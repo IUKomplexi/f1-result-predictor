@@ -8,9 +8,8 @@ the *enabled subset* — resolved by :func:`enabled_features` from the registry
 defaults, ``config.toml`` ``[features] enabled``, and CLI overrides — is what
 ``model/train.prepare`` assembles into the training matrix.
 
-Categories (assigned by the audit in ``reports/features.md``; all 31 features
-were measured with seeded permutation importance per walk-forward window and
-drop-column ablation, 2013-2025 test windows):
+Categories (assigned by a seeded permutation-importance audit with drop-column
+ablation, 2013-2025 test windows; all 31 features were measured):
 
 * ``core`` — high impact (survived BH-FDR at q=0.05 in at least one hurdle
   component); on by default.
@@ -69,7 +68,7 @@ class FeatureSpec:
 
 # --------------------------------------------------------------------------
 # The registry (27 numeric + 4 categorical).
-# Categories: core / selectable / cut — see reports/features.md.
+# Categories: core / selectable / cut (see the docstring above).
 # --------------------------------------------------------------------------
 
 _REGISTRY: list[FeatureSpec] = [

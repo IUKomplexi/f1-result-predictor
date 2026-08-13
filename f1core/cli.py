@@ -1,7 +1,7 @@
 """The single ``f1`` command-line interface.
 
 Consolidates the six old console scripts (``f1-predict``, ``f1-train``,
-``f1-backtest``, ``f1-calibrate``, ``f1-search``, ``f1-web``) — plus the
+``f1-backtest``, ``f1-calibrate``, ``f1-web``) — plus the
 former ``scripts/fetch_all.py`` shim, now the ``f1 fetch`` subcommand — into
 one ``f1`` entry point with argparse subcommands. Every subcommand delegates
 to the shared keyword-only ``run_*`` wrappers so the CLI and the web job
@@ -129,24 +129,6 @@ def _calibrate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _search(args: argparse.Namespace) -> int:
-    from model.search import run as run_search
-
-    result = run_search(
-        n=args.n, seed=args.seed, max_test_season=args.max_test_season,
-        start=args.start, end=args.end, refresh=args.refresh,
-        cache_dir=args.cache_dir, dataset=args.dataset,
-        enable_features=_split_features(args.enable_features),
-        disable_features=_split_features(args.disable_features),
-        log=lambda msg: print(msg, flush=True),
-    )
-    print(f"Walk-forward search (test seasons <= {args.max_test_season}):")
-    print(pd.DataFrame(result["results"]).to_string(index=False))
-    print("\nBest configuration (write to [model.params] in config.toml):")
-    print(result["best"])
-    return 0
-
-
 def _fetch(args: argparse.Namespace) -> int:
     from f1data.fetch import run as run_fetch
 
@@ -237,19 +219,6 @@ def build_parser() -> argparse.ArgumentParser:
                    help="first season to evaluate hold-out Brier on (default: none)")
     _add_common(p)
     p.set_defaults(func=_calibrate)
-
-    p = sub.add_parser("search", help="walk-forward hyperparameter search")
-    p.add_argument("--n", type=int, default=16, help="configs to sample")
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--max-test-season", type=int, default=2019,
-                   help="latest test season in the search window")
-    p.add_argument("--start", type=int, default=None, help="default: config [data] start_season")
-    p.add_argument("--end", type=int, default=None, help="default: config [data] end_season")
-    p.add_argument("--refresh", action="store_true")
-    p.add_argument("--cache-dir", default=None, help="default: config [data] cache_dir")
-    p.add_argument("--dataset", default=None, help="default: config [data] dataset")
-    _add_common(p)
-    p.set_defaults(func=_search)
 
     p = sub.add_parser("web", help="run the FastAPI app + dashboard")
     p.add_argument("--host", default="127.0.0.1")
