@@ -118,13 +118,30 @@ opens are instant); the **Settings** tab edits every `config.toml` value
 (including the HGB hyperparameters under `[model.params]` and the feature
 selection) and writes them back in place.
 
+Every tab is **deep-linkable** via a URL hash (`#/race`, `#/backtest`, …) —
+refresh, the browser back button, and shared links restore the tab. Race
+History rows link straight into the Race tab for that round, the Race pager
+names the GP and offers a **Next race** quick-jump, and the header carries the
+global orientation: a **running-job pill** (`Running: <job> · <elapsed>`) and a
+**Pipeline not ready → Open Status** alert whenever the readiness check fails.
+Settings uses human-friendly labels with a sticky save bar and an
+**unsaved-changes guard** (leaving the tab with pending edits asks first). The
+Backtest mean table comes with a plain-language metric glossary and all charts
+carry screen-reader labels.
+
 Pipeline steps run as async background jobs (one at a time, the rest queued)
 with live logs and results rendered inline. Every result-affecting option of
 the core steps is available from the tabs: season range (`--start/--end` — the
 pickers are clamped to the modern era, 2014+, up to the latest season with
 fetched data; the Data tab's end ceiling is the configured `[data] end_season`
-so new seasons can still be fetched), a refresh toggle (`--refresh`), and the
-backtest quantize toggle (`--no-quantize`). Train accepts a **model name** —
+so new seasons can still be fetched), the backtest quantize toggle
+(`--no-quantize`), and two cache overrides: **Data**'s "Re-fetch from API
+(ignore cache)" re-downloads raw Jolpica responses, and **Race History**'s
+"Recompute all races (ignore prediction cache)" clears the prediction
+snapshots. Train and Backtest need no such toggle: the featured dataset
+rebuilds automatically whenever the raw cache is newer than the parquet (see
+[Data & artifact pipeline](#data--artifact-pipeline)). Train accepts a
+**model name** —
 blank overwrites the configured checkpoint, a name saves a separate
 `data/model/<name>.joblib` recorded in `data/model/index.json` (with its
 feature list, fingerprint, params and training season range) — and then fits
@@ -255,8 +272,10 @@ flowchart LR
 ```
 
 Everything after the one-time fetch runs **offline**: raw responses are cached
-under `data/raw/`, the dataset cache rebuilds only when its schema/version
-changes, and model checkpoints carry feature-set fingerprints.
+under `data/raw/`, and model checkpoints carry feature-set fingerprints. The
+dataset cache (`data/features.parquet`) rebuilds automatically when its schema
+changes **or when the raw cache is newer** (file mtimes) — so after a re-fetch,
+`f1 train` / `f1 backtest` pick up the new data with no extra flags.
 
 ## Walk-forward backtest
 
