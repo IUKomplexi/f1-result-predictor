@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
-import { getCalendar, getPrediction, getStatus, type Prediction } from '../../api/client'
+import {
+  getCalendar,
+  getPrediction,
+  getStatus,
+  type Prediction,
+} from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { ProbabilityBar } from '../ui/ProbabilityBar'
+import { RaceScoreboard } from './RaceScoreboard'
 import './Race.css'
 
 /**
@@ -191,6 +197,8 @@ function RaceTable({ prediction }: { prediction: Prediction }) {
         </div>
       </section>
 
+      {verified ? <RaceScoreboard drivers={drivers} /> : null}
+
       <section className="card">
         <h2 className="card-title">Ranked grid</h2>
         <div className="table-wrap">
@@ -206,6 +214,7 @@ function RaceTable({ prediction }: { prediction: Prediction }) {
                 <th scope="col" className="num">P top 3</th>
                 <th scope="col" className="num">P win</th>
                 {verified ? <th scope="col" className="num">Actual</th> : null}
+                {verified ? <th scope="col" className="num">Δ pts</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -231,12 +240,36 @@ function RaceTable({ prediction }: { prediction: Prediction }) {
                       {fmtPoints(row.actual_points)}
                     </td>
                   ) : null}
+                  {verified ? (
+                    <td className="num">
+                      <PointsDelta expected={row.expected_points} actual={row.actual_points} />
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {verified ? (
+          <p className="muted delta-legend">
+            Δ pts = actual − expected · green: model under-predicted, amber: over-predicted.
+          </p>
+        ) : null}
       </section>
     </>
+  )
+}
+
+/** Colored actual − expected points delta (green under-predicted / amber over-predicted). */
+function PointsDelta({ expected, actual }: { expected: number; actual: number | null }) {
+  if (actual === null || actual === undefined) return <span className="muted">–</span>
+  const delta = actual - expected
+  const cls =
+    Math.abs(delta) < 0.05 ? 'delta-zero' : delta > 0 ? 'delta-pos' : 'delta-neg'
+  return (
+    <span className={cls} title="actual − expected points">
+      {delta > 0 ? '+' : ''}
+      {fmtPoints(delta)}
+    </span>
   )
 }
