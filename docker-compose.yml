@@ -16,6 +16,12 @@ services:
       # Runtime-generated snapshots (backtest/calibration JSON) survive
       # rebuilds; the baked-in reports/ files initialize this on first use.
       - reports:/app/reports
+    logging:
+      # Bound the container's log growth (uvicorn access logs can be chatty).
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   data:

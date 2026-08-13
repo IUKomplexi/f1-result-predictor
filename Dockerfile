@@ -13,7 +13,9 @@
 FROM node:22-slim AS ui
 WORKDIR /build
 COPY f1web/ui/package.json f1web/ui/package-lock.json ./
-RUN npm ci
+# npm cache persists across builds via the BuildKit cache mount (and never
+# lands in an image layer), so `npm ci` re-runs are download-free.
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY f1web/ui/ ./
 RUN npm run build
 
@@ -33,20 +35,20 @@ WORKDIR /app
 # Copy the project sources and install editable (uv sync installs the current
 # project editable into /app/.venv), so the app resolves data/, reports/ and
 # config.toml from /app at runtime.
+#
+# Only the Python modules are copied before `uv sync`; the SPA sources
+# (f1web/ui) are build-time only and never enter the runtime image (the built
+# dist is copied from stage 1 below). This keeps UI edits from busting the
+# expensive uv layer, and keeps the image free of node sources.
 COPY pyproject.toml uv.lock ./
 COPY f1core/ f1core/
 COPY f1data/ f1data/
 COPY features/ features/
 COPY model/ model/
-# scripts/ holds one-off tooling (download_fixtures); data fetching is the
-# `f1 fetch` CLI subcommand (the shared logic lives in the installed
-# f1data.fetch package).
-COPY scripts/ scripts/
-# Bare COPY is safe: .dockerignore excludes f1web/ui/node_modules and
-# f1web/ui/dist (ui/ is built in stage 1 and copied as dist below), so new
-# f1web modules no longer need to be listed here.
-COPY f1web/ f1web/
-RUN uv sync --frozen --no-dev --extra web
+COPY f1web/*.py f1web/
+# The uv cache lives in a BuildKit cache mount: it persists across rebuilds
+# (download-free re-runs) but never lands in an image layer.
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --extra web
 
 # Bake the cached raw API + dataset + model checkpoints and the reports.
 # config.toml is optional (code defaults match it); copied so overrides stick.
@@ -57,8 +59,11 @@ COPY config.toml ./
 # Built SPA from the ui stage (app.py serves it from f1web/ui/dist).
 COPY --from=ui /build/dist f1web/ui/dist/
 
-# Run unprivileged; /app/reports stays writable for generated snapshots.
-RUN useradd --create-home --uid 10001 app && chown -R app:app /app
+# Run unprivileged; only data/ and reports/ are written at runtime (dataset
+# builds, prediction cache, job snapshots) — .venv and the sources stay
+# root-owned read-only, so the chown layer stays small instead of duplicating
+# the whole virtualenv (a `chown -R /app` layer would be ~0.5GB).
+RUN useradd --create-home --uid 10001 app && chown -R app:app /app/data /app/reports
 USER app
 
 EXPOSE 8080

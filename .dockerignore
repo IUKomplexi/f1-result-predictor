@@ -12,6 +12,12 @@ pyright_errors.json
 f1web/ui/node_modules/
 f1web/ui/dist/
 
+# Not needed in the build context (runtime image only gets what the
+# Dockerfile explicitly copies; README.md stays — setuptools reads it).
+tests/
+docs/
+f1weather/
+
 # Git + tooling state
 .git/
 .github/
