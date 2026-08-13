@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -40,6 +41,11 @@ export interface NavState {
 export interface TabProps {
   onNavigate?: (tabId: string, state?: NavState) => void
   navState?: NavState | null
+  /** A tab can veto navigation (e.g. Settings with unsaved edits). The guard
+   *  returns false to block; the component retries via onNavigate itself. */
+  setNavigateGuard?: (
+    guard: ((tabId: string, state?: NavState) => boolean) | null,
+  ) => void
 }
 
 interface TabEntry {
@@ -74,6 +80,7 @@ export default function App() {
   const [tab, setTab] = useState<TabId>(() => initialHash.current ?? 'race')
   const [navState, setNavState] = useState<NavState | null>(null)
   const userChose = useRef(initialHash.current !== null)
+  const navigateGuard = useRef<((tabId: string, state?: NavState) => boolean) | null>(null)
   const Active = TABS.find((entry) => entry.id === tab)?.component ?? TABS[0].component
 
   useEffect(() => {
@@ -108,6 +115,7 @@ export default function App() {
   }, [])
 
   function selectTab(id: TabId, state?: NavState) {
+    if (navigateGuard.current && !navigateGuard.current(id, state)) return
     userChose.current = true
     setTab(id)
     setNavState(state ?? null)
@@ -117,6 +125,13 @@ export default function App() {
       window.location.hash = `/${id}`
     }
   }
+
+  const setNavigateGuard = useCallback(
+    (guard: ((tabId: string, state?: NavState) => boolean) | null) => {
+      navigateGuard.current = guard
+    },
+    [],
+  )
 
   function moveFocus(event: KeyboardEvent, index: number) {
     let next: number | null = null
@@ -163,7 +178,7 @@ export default function App() {
       >
         <ErrorBoundary>
           <Suspense fallback={<Skeleton rows={6} />}>
-            <Active onNavigate={selectTab} navState={navState} />
+            <Active onNavigate={selectTab} navState={navState} setNavigateGuard={setNavigateGuard} />
           </Suspense>
         </ErrorBoundary>
       </main>

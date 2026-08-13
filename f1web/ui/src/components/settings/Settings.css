@@ -120,14 +120,28 @@
   accent-color: var(--accent);
 }
 
-.save-row {
+/* Sticky save bar: stays visible while scrolling the (long) config form so
+   the save state and button are never out of view. */
+.save-bar {
+  position: sticky;
+  bottom: var(--space-3);
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-4);
   margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.save-bar .save-status {
+  flex: 1;
+  font-size: var(--text-sm);
 }
 
 .save-status {
-  margin-top: var(--space-4);
+  margin-top: 0;
   font-size: var(--text-sm);
 }
 
@@ -137,6 +151,22 @@
 
 .save-status.error {
   color: var(--danger);
+}
+
+/* Raw [section] key shown next to the human label. */
+.field-key {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.section-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 .field .link-button + .link-button {

@@ -6,12 +6,43 @@ import {
   type ConfigField,
   type ConfigResponse,
 } from '../../api/client'
+import type { NavState, TabProps } from '../../App'
 import { useApi } from '../../hooks/useApi'
 import { debounce, type Debounced } from '../../lib/debounce'
+import { Badge } from '../ui/Badge'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import './Settings.css'
 
 type ConfigMap = Record<string, Record<string, unknown>>
+
+/** Human-friendly labels for the raw [section]/key config identifiers. */
+const SECTION_LABELS: Record<string, string> = {
+  api: 'API',
+  data: 'Data',
+  model: 'Model',
+  report: 'Reports',
+  features: 'Features',
+}
+
+const KEY_LABELS: Record<string, string> = {
+  base_url: 'Base URL',
+  user_agent: 'User-Agent',
+  sleep_seconds: 'Request spacing (seconds)',
+  timeout: 'Timeout (seconds)',
+  max_retries: 'Max retries',
+  cache_dir: 'Raw cache directory',
+  dataset: 'Dataset path',
+  start_season: 'First season',
+  end_season: 'Last season',
+  checkpoint: 'Checkpoint path',
+  calibrators: 'Calibrators path',
+  seed: 'Random seed',
+  params: 'Model hyperparameters',
+  backtest: 'Backtest report path',
+  prediction: 'Prediction report path',
+  enabled: 'Feature selection',
+}
 
 /** A local editable copy of the effective config + registry metadata. */
 interface Editor {
@@ -25,11 +56,11 @@ interface Editor {
   paramsKeys: string[]
 }
 
-export function Settings() {
+export function Settings(props: TabProps) {
   const { state, retry } = useApi('config', getConfig)
   if (state.phase === 'loading') return <Skeleton rows={6} />
   if (state.phase === 'error') return <ErrorState message={state.message} onRetry={retry} />
-  return <SettingsForm data={state.data} />
+  return <SettingsForm data={state.data} {...props} />
 }
 
 type EditorAction =
@@ -77,18 +108,42 @@ function editorReducer(editor: Editor, action: EditorAction): Editor {
   }
 }
 
-function SettingsForm({ data }: { data: ConfigResponse }) {
+function SettingsForm({
+  data,
+  onNavigate,
+  setNavigateGuard,
+}: { data: ConfigResponse } & TabProps) {
   const [editor, dispatch] = useReducer(editorReducer, data, fromResponse)
   const [status, setStatus] = useState<
     { kind: 'ok'; text: string } | { kind: 'error'; text: string } | null
   >(null)
   const [saving, setSaving] = useState(false)
+  const [savedCfg, setSavedCfg] = useState<ConfigMap>(() => structuredClone(data.config) as ConfigMap)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const pendingNav = useRef<{ id: string; state?: NavState } | null>(null)
   const editorRef = useRef(editor)
   editorRef.current = editor
 
   useEffect(() => {
     dispatch({ type: 'sync', data })
   }, [data])
+
+  const dirty = JSON.stringify(editor.cfg) !== JSON.stringify(savedCfg)
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+
+  // Veto tab switches while edits are unsaved; the confirm dialog retries the
+  // pending navigation through onNavigate after the user discards. Navigating
+  // back to Settings itself is always allowed (nothing is lost).
+  useEffect(() => {
+    setNavigateGuard?.((id) => {
+      if (id === 'settings' || !dirtyRef.current) return true
+      pendingNav.current = { id }
+      setConfirmOpen(true)
+      return false
+    })
+    return () => setNavigateGuard?.(null)
+  }, [setNavigateGuard])
 
   const setValue = (section: string, key: string, value: unknown) => {
     dispatch({ type: 'set-value', section, key, value })
@@ -130,6 +185,7 @@ function SettingsForm({ data }: { data: ConfigResponse }) {
       // everything the user typed.
       await new Promise((resolve) => setTimeout(resolve, 0))
       await putConfig(editorRef.current.cfg)
+      setSavedCfg(structuredClone(editorRef.current.cfg) as ConfigMap)
       setStatus({ kind: 'ok', text: 'Saved to config.toml. Retrain the model if features/params changed.' })
     } catch (error) {
       const message = error instanceof ApiError ? error.message : String(error)
@@ -171,17 +227,51 @@ function SettingsForm({ data }: { data: ConfigResponse }) {
               ))}
           </SectionGroup>
         ))}
-        {status ? (
-          <p className={status.kind === 'ok' ? 'save-status ok' : 'save-status error'} role="status">
-            {status.text}
-          </p>
-        ) : null}
-        <div className="save-row">
-          <button type="button" className="button" onClick={save} disabled={saving}>
+        <div className="save-bar">
+          {dirty ? (
+            <Badge variant="warn">Unsaved changes</Badge>
+          ) : (
+            <span className="muted">All changes saved</span>
+          )}
+          {status ? (
+            <p className={status.kind === 'ok' ? 'save-status ok' : 'save-status error'} role="status">
+              {status.text}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="button primary"
+            onClick={save}
+            disabled={saving || !dirty}
+          >
             {saving ? 'Saving…' : 'Save configuration'}
           </button>
         </div>
       </section>
+      {confirmOpen ? (
+        <ConfirmDialog
+          title="Discard unsaved changes?"
+          body="Your configuration edits have not been saved. Leaving the Settings tab discards them."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          onConfirm={() => {
+            setConfirmOpen(false)
+            const pending = pendingNav.current
+            pendingNav.current = null
+            // Release the guard first so the retry navigation is not vetoed
+            // again (the editor state becomes irrelevant: the tab unmounts).
+            dirtyRef.current = false
+            if (pending) onNavigate?.(pending.id)
+          }}
+          onCancel={() => {
+            setConfirmOpen(false)
+            pendingNav.current = null
+            // Browser back/forward may already have moved the hash; snap it
+            // back without pushing another history entry.
+            history.replaceState(null, '', '#/settings')
+          }}
+        />
+      ) : null}
     </>
   )
 }
@@ -202,10 +292,17 @@ function fromResponse(data: ConfigResponse): Editor {
 function SectionGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <fieldset className="config-section">
-      <legend>{title}</legend>
+      <legend>
+        {SECTION_LABELS[title] ?? title}{' '}
+        <code className="section-key">[{title}]</code>
+      </legend>
       <div className="field-grid">{children}</div>
     </fieldset>
   )
+}
+
+function fieldLabel(field: ConfigField): string {
+  return KEY_LABELS[field.key] ?? field.key
 }
 
 function Field({
@@ -295,8 +392,9 @@ function Field({
     return (
       <div className="field">
         <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
-          {field.key}
+          {fieldLabel(field)}
         </label>
+        <code className="field-key">[{field.section}] {field.key}</code>
         <input
           id={`${field.section}-${field.key}`}
           type="number"
@@ -314,8 +412,9 @@ function Field({
   return (
     <div className="field">
       <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
-        {field.key}
+        {fieldLabel(field)}
       </label>
+      <code className="field-key">[{field.section}] {field.key}</code>
       <input
         id={`${field.section}-${field.key}`}
         type="text"
