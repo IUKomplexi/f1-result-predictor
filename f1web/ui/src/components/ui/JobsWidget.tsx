@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { type JobSummary } from '../../api/client'
 import { useJob, useJobs } from '../../hooks/useJob'
 import { fmtElapsed } from '../../lib/format'
@@ -31,11 +31,20 @@ export function JobsWidget() {
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const widgetRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [announcement, setAnnouncement] = useState('')
+  const prevStatuses = useRef<Record<string, JobSummary['status']>>({})
 
   const running = jobs.find((j) => j.status === 'running') ?? null
   const activeCount = jobs.filter((j) => j.status === 'running' || j.status === 'queued').length
   const selected = selectedId ?? running?.id ?? null
   const job = useJob(selected)
+  const elapsed =
+    running !== null && running.started_at !== null
+      ? (now - running.started_at * 1000) / 1000
+      : 0
 
   // Tick once per second while something is running (or the panel is open) so
   // elapsed times move.
@@ -44,6 +53,50 @@ export function JobsWidget() {
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [running?.id, open])
+
+  // Announce status transitions (started/finished/failed) to screen readers.
+  useEffect(() => {
+    for (const entry of jobs) {
+      const prev = prevStatuses.current[entry.id]
+      if (prev !== undefined && prev !== entry.status) {
+        setAnnouncement(`${entry.label}: ${STATUS_LABEL[entry.status]}`)
+      }
+      prevStatuses.current[entry.id] = entry.status
+    }
+  }, [jobs])
+
+  // Dialog behavior while open: focus the panel, Escape closes (and restores
+  // focus to the trigger), and a click outside closes the panel.
+  useEffect(() => {
+    if (!open) return
+    panelRef.current?.focus()
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closePanel()
+      }
+    }
+    function onMouseDown(event: MouseEvent) {
+      if (
+        widgetRef.current &&
+        event.target instanceof Node &&
+        !widgetRef.current.contains(event.target)
+      ) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('mousedown', onMouseDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('mousedown', onMouseDown)
+    }
+  }, [open])
+
+  function closePanel() {
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
 
   const copyLog = async () => {
     if (!job) return
@@ -55,22 +108,39 @@ export function JobsWidget() {
   }
 
   return (
-    <div className="jobs-widget">
+    <div className="jobs-widget" ref={widgetRef}>
+      <span className="sr-only" aria-live="polite">
+        {announcement}
+      </span>
+      {running ? (
+        <span className="jobs-running-pill">
+          Running: {running.label} · {fmtElapsed(elapsed)}
+        </span>
+      ) : activeCount > 0 ? (
+        <span className="jobs-running-pill">Queued · {activeCount}</span>
+      ) : null}
       <button
+        ref={triggerRef}
         type="button"
         className={`jobs-trigger${activeCount > 0 ? ' has-active' : ''}`}
         aria-expanded={open}
         aria-haspopup="dialog"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => (open ? closePanel() : setOpen(true))}
       >
         <span className="jobs-dot" aria-hidden="true" />
         Jobs{activeCount > 0 ? ` · ${activeCount}` : ''}
       </button>
       {open ? (
-        <div className="jobs-panel" role="dialog" aria-label="Job queue">
+        <div
+          ref={panelRef}
+          tabIndex={-1}
+          className="jobs-panel"
+          role="dialog"
+          aria-label="Job queue"
+        >
           <div className="jobs-panel-head">
             <h2 className="card-title">Job queue</h2>
-            <button type="button" className="link-button" onClick={() => setOpen(false)}>
+            <button type="button" className="link-button" onClick={closePanel}>
               Close
             </button>
           </div>

@@ -15,6 +15,7 @@ import { Status } from './components/status/Status'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Skeleton } from './components/ui/DataState'
 import { JobsWidget } from './components/ui/JobsWidget'
+import { Badge } from './components/ui/Badge'
 
 // Chart-heavy views are lazy so Recharts isn't part of the initial bundle.
 const Backtest = lazy(() =>
@@ -79,6 +80,7 @@ export default function App() {
   const initialHash = useRef(tabFromHash())
   const [tab, setTab] = useState<TabId>(() => initialHash.current ?? 'race')
   const [navState, setNavState] = useState<NavState | null>(null)
+  const [pipelineReady, setPipelineReady] = useState<boolean | null>(null)
   const userChose = useRef(initialHash.current !== null)
   const navigateGuard = useRef<((tabId: string, state?: NavState) => boolean) | null>(null)
   const Active = TABS.find((entry) => entry.id === tab)?.component ?? TABS[0].component
@@ -87,13 +89,14 @@ export default function App() {
     let cancelled = false
     getStatus()
       .then((status) => {
-        if (cancelled || userChose.current) return
+        if (cancelled) return
         const ready =
           status.data.has_raw_cache &&
           status.model.has_checkpoint &&
           status.model.has_calibrators &&
           status.reports.has_backtest
-        if (!ready) selectTab('status')
+        setPipelineReady(ready)
+        if (!userChose.current && !ready) selectTab('status')
       })
       .catch(() => {
         // Status unavailable (e.g. backend not built): keep the Race default.
@@ -150,6 +153,18 @@ export default function App() {
       <header className="site-header">
         <h1 className="brand">F1 Result Predictor</h1>
         <p className="brand-sub">Internal predictor dashboard</p>
+        {pipelineReady === false ? (
+          <span className="header-alert" role="status">
+            <Badge variant="warn">Pipeline not ready</Badge>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => selectTab('status')}
+            >
+              Open Status
+            </button>
+          </span>
+        ) : null}
         <JobsWidget />
       </header>
       <nav className="tabs" role="tablist" aria-label="Dashboard sections">
