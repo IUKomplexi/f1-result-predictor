@@ -1,0 +1,72 @@
+# Reasonix agent configuration for this repository.
+#
+# This file is the persistent instruction surface for the Reasonix agent.
+# There is no separate "hook" executable in Reasonix — automation like
+# "commit + push + verify CI after finishing implementation" is encoded here
+# as a mandatory post-implementation checklist that the agent runs at the end
+# of every implementation phase.
+#
+# See AGENTS.md "Notes" for the conventional-commit + GH CLI convention this
+# checklist enforces.
+
+# ---------------------------------------------------------------------------
+# Post-implementation hook: CI + GH commit.
+# Runs after the agent finishes any implementation phase (not in plan mode,
+# not for pure planning/doc-only-untracked edits without code changes).
+# ---------------------------------------------------------------------------
+hooks:
+  # Run after a goal turn reports completion ("complete") that changed code.
+  on_goal_complete:
+    enabled: true
+    steps: &post_impl
+      - name: Commit
+        run: |
+          # Stage the intended changes and commit with a Conventional Commit
+          # message using the GitHub CLI (gh). Never stage the untracked
+          # planning docs unless the user asks. Never commit nothing: if
+          # there are no staged changes, skip this step.
+          git add <changed sources>
+          gh commit --message "<type>(<scope>): <imperative summary>" \
+                    --body "<optional context>"
+      - name: Push
+        run: |
+          # Push the commit(s) to the remote so CI runs against the actual
+          # branch (origin/main or the current PR branch).
+          git push origin HEAD
+      - name: Verify CI
+        run: |
+          # Poll the GitHub Actions run for the pushed HEAD until it passes
+          # or fails, and surface the result in the final answer. The local
+          # suite (uv run pytest -q, uv run ruff check ., uv run pyright, and
+          # npm run build + npm run lint in f1web/ui) must already be green
+          # BEFORE committing.
+          gh run watch --exit-status            # blocks until CI finishes
+          gh run list --workflow=ci.yml --limit=1   # log the latest result
+
+# ---------------------------------------------------------------------------
+# Standing gate before any commit is made.
+# ---------------------------------------------------------------------------
+quality_gates:
+  - name: Local verification is green before committing
+    require:
+      - "uv run pytest -q"            # offline test suite must pass
+      - "uv run ruff check ."          # lint must be 0 errors
+      - "uv run pyright"               # type check must be 0 errors
+  - name: UI checks pass before committing web changes
+    require:
+      - "cd f1web/ui && npm run build" # tsc -b && vite build
+      - "cd f1web/ui && npm run lint"  # oxlint, 0 errors
+  - name: No uncommitted changes remain after the hook
+    verify: "git status --porcelain"   # must be clean (except gitignored artifacts)
+
+# ---------------------------------------------------------------------------
+# Commit message convention (Conventional Commits), enforced by the hook.
+# ---------------------------------------------------------------------------
+commit_convention:
+  types: [feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert]
+  format: "<type>(<scope>)[!]: <description>"
+  breaking_footer: "BREAKING CHANGE: <description>"
+  note: >
+    Scope is an optional noun for the module (e.g. fix(features): ...).
+    Body/footers are separated from the header by a single blank line.
+    Commit via `gh`, then wait for CI and verify the result (AGENTS.md Notes).
