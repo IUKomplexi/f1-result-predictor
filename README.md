@@ -47,7 +47,6 @@ paths).
 | `f1 train` | train the final model → `data/model/hurdle.joblib` |
 | `f1 calibrate` | fit isotonic probability calibrators → `data/model/calibrators.joblib` (run after every `f1 train`) |
 | `f1 backtest [--no-quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` + `.json` (quantized by default) |
-| `f1 search --n 16 --max-test-season 2019` | walk-forward hyperparameter tuning |
 | `f1 predict` | predict the **next race** → `reports/prediction.md` |
 | `f1 predict --season 2024 --round 22` | predict any race; past races are verified vs actuals |
 | `f1 predict --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
@@ -63,7 +62,6 @@ Examples:
 f1 predict                                          # Dutch GP 2026 (next race)
 f1 predict --season 2024 --round 22                 # dry run: Las Vegas 2024 + verification
 f1 predict --grid qual.csv                          # with known grid for the next race
-f1 search --n 16 --max-test-season 2019             # re-tune hyperparameters
 ```
 
 ## Web UI
@@ -148,9 +146,8 @@ per model plus the baselines, and a delta table against the deployed model
 `--out`, `--out-json`) stay config-managed: edit them in the Settings tab and
 web jobs honour the configured paths.
 
-The hyperparameter search and calibration review remain CLI-only
-(`f1 search`, `f1 calibrate`) for occasional use; the dashboard no longer
-carries tabs for them. `POST /api/predict` still
+Calibration review remains CLI-only (`f1 calibrate`) for occasional use; the
+dashboard no longer carries a tab for it. `POST /api/predict` still
 accepts *ephemeral* overrides (season/round, a grid CSV, model checkpoint,
 refresh, and optionally writing the same `reports/prediction.md` the CLI
 produces) that are merged over the config in memory only — nothing is written
@@ -188,15 +185,14 @@ same settings; per-race prediction overrides are ephemeral (in-memory only).
 | Path | Role | Key entry points |
 | --- | --- | --- |
 | `f1data/` | Polite, cached Jolpica API client + normalized fetchers | `F1Client` (`client.py`), `fetch_season`, `fetch_calendar`, `fetch_*` (`fetchers.py`) |
-| `f1weather/` | Open-Meteo weather layer — **evaluated, not adopted** (kept deliberately) | `WeatherClient`, `load_race_weather`, `weather_frame` |
 | `features/` | Feature engineering: per-start dataset with strictly pre-race features + points target, plus the declarative feature registry | `build_dataset`, `add_features`, `assemble` (`build.py`); `REGISTRY`, `enabled_features`, `feature_fingerprint` (`registry.py`) |
-| `model/` | Hurdle model (HGB classifier + regressor), walk-forward backtest, isotonic calibration, hyperparameter search, feature-ablation evaluation | `train_final_model`, `run_backtest`, `fit_calibrators`, `search`, `features_eval` |
+| `model/` | Hurdle model (HGB classifier + regressor), walk-forward backtest, isotonic calibration | `train_final_model`, `run_backtest`, `fit_calibrators` |
 | `f1core/` | Shared core: prediction pipeline, config loader **+ writer**, markdown/ranking helpers, HTTP base class, and the `f1` CLI | `predict_race`, `get_prediction` (`predict.py`), `load_config`/`save_config`/`validate_config` (`config.py`), `to_md`/`rank_by` (`reporting.py`), `main` + subcommand handlers (`cli.py`) |
 | `f1web/` | FastAPI JSON API + host for the built React SPA, plus an in-process async job runner for pipeline steps | `create_app` (`app.py`), `JobManager` + `run_*` handlers (`jobs.py`), `f1web/ui/` (Preact + Vite + TS) |
-| `scripts/` | One-off fetch / tooling scripts | `fetch_weather.py` (weather), `feature_audit.py`, `download_fixtures.py` (test fixtures) |
+| `scripts/` | One-off tooling | `download_fixtures.py` (regenerates the tracked test fixtures) |
 | `tests/` | Fully offline test suite (recorded fixtures) incl. full-pipeline e2e | `test_e2e.py`, `test_features.py`, `helpers.py`, `fixtures/` |
-| `data/` | Regenerable caches (gitignored): raw API JSON, dataset, model checkpoints, prediction cache | `raw/`, `features.parquet`, `model/`, `predictions/`, `weather/` |
-| `reports/` | Generated snapshots (refresh with the CLI: `f1 backtest`, `f1 calibrate`, `f1 predict`) | `backtest.md`/`.json`, `prediction.md`, `calibration.json` (written on demand), `features.md`, `weather.md` |
+| `data/` | Regenerable caches (gitignored): raw API JSON, dataset, model checkpoints, prediction cache | `raw/`, `features.parquet`, `model/`, `predictions/` |
+| `reports/` | Generated snapshots (refresh with the CLI: `f1 backtest`, `f1 calibrate`, `f1 predict`) | `backtest.md`/`.json`, `prediction.md`, `calibration.json` (written on demand) |
 | `config.toml` | Runtime config **overrides** — the built-in defaults in `f1core/config.py` (`DEFAULTS`) are the baseline; the dashboard writes the full effective config back in place (`PUT /api/config`) | — |
 | `Dockerfile`, `docker-compose.yml` | Self-contained dashboard image (builds SPA, bakes data, named `reports` volume) | — |
 | `.github/workflows/ci.yml` | CI: pytest matrix (3.12/3.13) + ruff lint job | — |
@@ -207,14 +203,12 @@ same settings; per-race prediction overrides are ephemeral (in-memory only).
 ```
 f1 fetch             ->  data/raw/*.json            (cached API responses)
 f1data/                     polite cached client + normalized fetchers
-f1weather/                  weather data layer (evaluated, not adopted)
 f1core/                     shared core: predict, config, reporting, httpclient, cli
 features/build.py           per-start dataset: strictly pre-race features,
                             points target, leakage-tested
 features/registry.py        declarative feature registry (id, category,
                             default, builder, rationale) + selection helpers
 model/train.py              hurdle model (HGB classifier + regressor)
-model/search.py             walk-forward-validated hyperparameter search
 model/calibrate.py          isotonic probability calibration (per-target)
 model/evaluate.py           walk-forward backtest vs grid/championship/zero
 f1web/app.py                FastAPI JSON API + built-SPA host
@@ -225,23 +219,19 @@ flowchart TB
     subgraph Backend["Backend packages (single-direction dependencies)"]
         FD["f1data/ — Jolpica client + fetchers"]
         FE["features/ — pre-race feature engineering"]
-        MD["model/ — train · backtest · calibrate · search"]
+        MD["model/ — train · backtest · calibrate"]
         CR["f1core/ — predict · config · reporting · httpclient · cli"]
         WB["f1web/ — FastAPI + built SPA"]
-        WX["f1weather/ — Open-Meteo · dormant"]
     end
     FD --> FE
     FD --> CR
     FE --> MD
     MD --> CR
     CR --> WB
-    WX -.->|"merge_weather (not adopted)"| FE
 ```
 
 Every package imports shared helpers (`f1core`) from a single installable
-package — no `sys.path` hacks. `f1weather` is the only layer not in the
-adopted path; its plumbing stays by decision (see
-[Weather](#weather-evaluated-not-adopted)).
+package — no `sys.path` hacks.
 
 ## Data & artifact pipeline
 
@@ -253,7 +243,6 @@ flowchart LR
     DS --> TR[["model/train.py"]]
     DS --> EV[["model/evaluate.py"]]
     DS --> CA[["model/calibrate.py"]]
-    DS --> SE[["model/search.py · tuning"]]
     TR --> CP[("data/model/hurdle.joblib")]
     CA --> CC[("data/model/calibrators.joblib")]
     CP --> PR[["f1core/predict.py"]]
@@ -332,7 +321,7 @@ durable history.
 All 31 features (27 numeric + 4 categorical) are registered in
 `features/registry.py` — the single source of truth for id, category, default,
 builder, and rationale — and classified by a walk-forward permutation-importance
-audit (`scripts/feature_audit.py`, documented in `reports/features.md`):
+audit with drop-column ablation:
 
 | category | meaning | default |
 | --- | --- | --- |
@@ -344,7 +333,7 @@ The default enabled set is the 14 core features (registry defaults; override
 via `[features] enabled` in `config.toml`). Every feature is still computed;
 only the enabled subset enters the
 training matrix. Toggle per run with `--enable-features`/`--disable-features`
-on `f1 train`, `f1 backtest`, `f1 predict`, `f1 calibrate`, `f1 search`;
+on `f1 train`, `f1 backtest`, `f1 predict`, `f1 calibrate`;
 toggling changes the model-checkpoint fingerprint, so stale checkpoints are
 rejected instead of silently reused.
 
@@ -376,7 +365,7 @@ saved calibrators automatically.
 Walk-forward backtest, train on all seasons strictly before the test season,
 evaluate 2013–2025 (mean per race). Model = hurdle on the 14 **core**
 registry features (see [Feature registry & selection](#feature-registry--selection)),
-tuned hyperparameters (`f1 search`), and expected points **quantized to
+tuned hyperparameters, and expected points **quantized to
 the points table** (adopted because it improved walk-forward
 MAE/top-3/Spearman):
 
@@ -393,7 +382,7 @@ edges it on top-3 (0.659 vs 0.686) and MAE (2.92 vs 2.83 — the grid baseline
 predicts the exact points-table value whenever the pole sitter wins, which no
 probabilistic model can match). The feature audit cut 17 low-impact/redundant
 features (kept off by default): winner_hit rose from 0.539 to 0.550 with no
-metric moving beyond the fold-to-fold noise floor (`reports/features.md`).
+metric moving beyond the fold-to-fold noise floor.
 
 Dry run (Las Vegas 2024, predicted from pre-race info only): winner hit ✓,
 top-3 overlap 0.67, Spearman 0.79, MAE 1.95 points.
@@ -415,32 +404,20 @@ The Jolpica API asks clients to send a descriptive `User-Agent` (configured in
 `config.toml`) and to cache responses — both are handled by `F1Client`
 (polite rate limiting, retry/backoff, on-disk cache).
 
-## Weather (evaluated, not adopted)
-
-Race-day weather (Open-Meteo: ERA5 actuals for history, live forecast for
-the next race) was implemented and evaluated as a feature set — **it is not
-adopted**: the walk-forward gate failed (1 of 3 primary metrics improved,
-2 regressed, all within noise). The data layer (`f1weather/`,
-`scripts/fetch_weather.py`, `data/weather/`) and feature plumbing
-(`WEATHER_FEATURES`, `build_dataset(weather=...)`, `merge_weather`) remain
-available for future re-evaluation. See `reports/weather.md` for the full
-comparison and how to re-run it.
-
 ## Key invariants (don't break these)
 
 - **Strictly pre-race data.** Every rolling/cumulative feature uses `shift(1)`;
   teammate gaps are computed within a race and rolled over *prior* races only;
   walk-forward trains on strictly earlier seasons. Enforced by unit tests
   (`test_no_leakage_rolling_features_use_prior_races_only`,
-  `test_no_leakage_future_changes_do_not_affect_features`,
-  `test_weather_is_strictly_pre_race_no_forward_leak`).
+  `test_no_leakage_future_changes_do_not_affect_features`).
 - **Offline after fetch.** Raw JSON → parquet dataset → joblib checkpoints;
   each layer is a cache with staleness/version validation.
 - **Uniform error shape.** The API returns `{"error": ...}` for every failure,
   incl. 422 validation and a path-traversal guard on `/assets`.
 - **Shared discipline.** `CachedHTTPClient` (polite UA, rate limit, retry,
-  on-disk cache) is the base of both `F1Client` and `WeatherClient`; ranking
-  and markdown rendering are shared (`f1core/reporting.py`).
+  on-disk cache) is the base of `F1Client`; ranking and markdown rendering
+  are shared (`f1core/reporting.py`).
 - **CLI ⇄ web parity.** Every pipeline step exposes a keyword-only
   `run_* -> dict` wrapper; both the `f1` subcommands and the web job runner
   call those, never a divergent path.
@@ -453,21 +430,20 @@ comparison and how to re-run it.
 | You want to… | Go here |
 | --- | --- |
 | Add a pre-race feature | `features/build.py` → `add_features` + a `_add_*` helper; register in `NUMERIC_FEATURES`/`CATEGORICAL_FEATURES` **and** in `features/registry.py` (id, category, default, builder, rationale); test in `tests/test_features.py` + `tests/test_registry.py`; bump the dataset cache version in `build_dataset` if the schema changes |
-| Toggle features / audit the set | `config.toml` `[features] enabled`, CLI `--enable-features`/`--disable-features`, or `scripts/feature_audit.py` (`reports/features.md`) |
-| Try a model change | `model/train.py` (`HurdleModels`), tune via `f1 search`, measure via `f1 backtest`; re-run `f1 calibrate` after retraining |
+| Toggle features / audit the set | `config.toml` `[features] enabled`, CLI `--enable-features`/`--disable-features` |
+| Try a model change | `model/train.py` (`HurdleModels`), measure via `f1 backtest`; re-run `f1 calibrate` after retraining |
 | Add an API endpoint | route in `f1web/app.py` + typed function in `f1web/ui/src/api/client.ts` + component; errors must be `{"error": ...}` |
 | Add a config field | `f1core/config.py`: add to `DEFAULTS`, a `SCHEMA` field descriptor, and a check in `validate_config`; the Settings form and the TOML writer pick it up automatically |
 | Add a pipeline step (job) | add a `run_* -> dict` wrapper in the relevant module (each `f1` subcommand delegates to it), register a handler + payload keys in `f1web/jobs.py`, and surface it on its dedicated tab (via the shared `JobRunner`) |
 | Add a dashboard tab | new component under `f1web/ui/src/components/<tab>/`, wire in `App.tsx`; reuse `useApi`/`useJob` and `lib/format` |
 | Add a CLI subcommand | handler in `f1core/cli.py` calling the shared `run_*` wrapper (or `get_prediction`), wired into `build_parser()` |
-| Re-run the weather experiment | `reports/weather.md` has the full recipe and the gate result |
 | Change the data source / season range | `config.toml` (`[api]`, `[data]`) — defaults live in `f1core/config.py` |
 | Add tests | offline fixtures via `tests/fixtures/` + `scripts/download_fixtures.py`; full-chain behavior goes in `tests/test_e2e.py` |
 
 ## Audit appendix (dead-code round)
 
 Scope agreed with the maintainer: **remove dead code only** — no renames,
-moves, or refactors; the weather layer stays.
+moves, or refactors.
 
 - **Removed.** `coverage_report` (`features/build.py`) — a per-season coverage
   utility with zero consumers outside its own re-export (`features/__init__.py`)
@@ -475,10 +451,12 @@ moves, or refactors; the weather layer stays.
   and `tests/test_features.py`.
 - **Examined and kept.** `f1web/ui/src/components/ui/DataState.tsx`
   (`ErrorState`/`Skeleton`/`ProgressState` — imported by all five tabs; an
-  initial "dead" claim was a grep artifact), the `f1weather` layer (user
-  decision; README + `reports/weather.md` document the rejected experiment),
-  `model/search.py` (live `f1 search` dev tool), `scripts/download_fixtures.py`
-  (regenerates the tracked test fixtures), and every fetcher/helper/fixture.
+  initial "dead" claim was a grep artifact) and `scripts/download_fixtures.py`
+  (regenerates the tracked test fixtures), plus every fetcher/helper/fixture.
+- **Removed later (debloat round).** The `f1weather` layer (evaluated, not
+  adopted — see the removal commit) and `model/search.py` / the `f1 search`
+  dev tool, together with the feature-audit pipeline
+  (`model/features_eval.py`, `scripts/feature_audit.py`) and their reports.
 - **Since resolved.** `f1core/predict.py` was a ~23 KB monolith mixing
   prediction, report formatting (`format_report`) and the CLI (`main`). The
   CLI has since been split out into `f1core/cli.py` (one `f1` command with
@@ -490,16 +468,12 @@ moves, or refactors; the weather layer stays.
 
 - **Headline edge is thin.** The model beats grid order on winner hit-rate
   (0.550 vs 0.535) and Spearman (0.656 vs 0.623) but grid still wins
-  top-3 overlap (0.686) and MAE (2.83). The feature audit (2026-08,
-  `reports/features.md`) cut 17 low-impact/redundant features (off by
-  default; winner_hit 0.539 → 0.550, everything else within noise). What
-  feature could actually move top-3/MAE — per-circuit setup, strategy data,
-  2026-regs data?
+  top-3 overlap (0.686) and MAE (2.83). The feature audit cut 17
+  low-impact/redundant features (off by default; winner_hit 0.539 → 0.550,
+  everything else within noise). What feature could actually move
+  top-3/MAE — per-circuit setup, strategy data, 2026-regs data?
 - **2026 regulation change** is an imminent transfer-risk event for a model
   trained on 2010–2026 (the `points_era` split only covers pre/post-2019).
-- **Weather re-evaluation** plumbing is ready (`f1weather/`); the first attempt
-  failed 1-of-3 metrics, all within noise — finer granularity is the obvious
-  retry.
 - **No UI test suite** exists (only an `oxlint` config) — vitest coverage of
   `f1web/ui` is the largest test gap.
 - **Consider serving distributions** of race outcomes rather than point

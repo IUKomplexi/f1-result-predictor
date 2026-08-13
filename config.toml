@@ -6,7 +6,7 @@
 # tab writes the full effective config back here via save_config.
 #
 # Overridable sections: [api] [data] [model] [model.params] [report]
-# [features] [weather]. Examples:
+# [features]. Examples:
 #
 #   [data]
 #   start_season = 2012
@@ -16,7 +16,7 @@
 #   max_iter = 600
 
 [features]
-# Feature selection (see features/registry.py + reports/features.md).
+# Feature selection (see features/registry.py).
 # The registry defaults (core features on, selectable/cut off) apply when
 # this is absent. Uncomment + edit the list to override; CLI flags
 # --enable-features/--disable-features apply on top.

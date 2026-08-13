@@ -13,7 +13,6 @@ f1 predict [--season S --round R] [--grid qual.csv]   # next race → reports/pr
 f1 train                      # train → data/model/hurdle.joblib
 f1 calibrate                  # fit isotonic calibrators (run after every f1 train)
 f1 backtest [--no-quantize]   # walk-forward backtest → reports/backtest.md/.json
-f1 search --n 16 --max-test-season 2019   # hyperparameter tuning
 f1 web [--port 8080]          # FastAPI + dashboard (needs web extra)
 docker compose up --build     # self-contained dashboard on :8080
 ```
@@ -29,10 +28,9 @@ Single-direction deps, all packages import shared helpers from `f1core` (no sys.
 - `f1data/` — polite cached Jolpica client (`F1Client`) + normalized fetchers (`fetch_season`, `fetch_calendar`, …)
 - `f1core/` — shared core: `predict.py` (`predict_race`, `get_prediction`, `format_report`, `format_console`), `config.py` (`DEFAULTS`, `load_config`, **`save_config`/`validate_config`/`SCHEMA`** TOML writer), `httpclient.py` (`CachedHTTPClient` base), `reporting.py` (`to_md`, `rank_by`), `cli.py` (the single `f1` CLI + subcommand handlers)
 - `features/build.py` — per-start dataset: `build_dataset`, `add_features`, `assemble`; strictly pre-race features + points target
-- `model/` — `train.py` (hurdle: HGB classifier + regressor), `evaluate.py` (walk-forward backtest vs grid/championship/zero), `calibrate.py` (isotonic, per-target, deployed only where it improves hold-out Brier), `search.py` (walk-forward-validated tuning). Each exposes a keyword-only `run_* -> dict` wrapper called by the `f1` CLI and the web job runner.
+- `model/` — `train.py` (hurdle: HGB classifier + regressor), `evaluate.py` (walk-forward backtest vs grid/championship/zero), `calibrate.py` (isotonic, per-target, deployed only where it improves hold-out Brier). Each exposes a keyword-only `run_* -> dict` wrapper called by the `f1` CLI and the web job runner.
 - `f1web/` — `app.py` (`create_app`, JSON API + built-SPA host), `jobs.py` (`JobManager`, threading worker + single-job queue + `reports/jobs/*.json` history) and Preact SPA in `f1web/ui/` (Vite + TS; `@preact/preset-vite` + `preact/compat`); tabs: Status, Race, Race History, Data, Train, Backtest, Settings. Pipeline steps each run from their own tab via the shared `ui/JobRunner` (including a Precompute race history job that warms the season cache under `data/predictions`); the Train job also calibrates. No UI *unit* suite (known gap; `npm run build`/`npm run lint` are the UI checks)
-- `f1weather/` — Open-Meteo layer, **evaluated but NOT adopted** (kept deliberately; see `reports/weather.md`)
-- `scripts/` — `fetch_weather.py`, `download_fixtures.py`, `feature_audit.py`
+- `scripts/` — `download_fixtures.py` (regenerates the tracked test fixtures)
 - `tests/` — offline suite, recorded fixtures (`tests/fixtures/`), `test_e2e.py` runs the full pipeline
 
 Data flow: `data/raw/*.json` → `data/features.parquet` → `data/model/*.joblib`. All `data/` caches are gitignored and regenerable; model checkpoints carry feature-set fingerprints.
