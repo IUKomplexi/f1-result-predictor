@@ -114,6 +114,25 @@ a {
   color: var(--text-muted);
 }
 
+/* ------------------------------------------------------------------ shared controls */
+
+/* Inline text button (used by Race History rows, Settings, JobRunner…). */
+.link-button {
+  background: none;
+  border: none;
+  color: var(--info);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 0;
+  align-self: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
 /* ------------------------------------------------------------------ tabs */
 
 .tabs {

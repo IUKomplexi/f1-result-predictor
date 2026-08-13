@@ -60,7 +60,11 @@
 }
 
 .pager-label {
-  min-width: 6rem;
+  min-width: 10rem;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: center;
   font-weight: 600;
   color: var(--text-primary);

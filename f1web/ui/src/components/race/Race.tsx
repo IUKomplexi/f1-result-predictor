@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { getPrediction, getStatus, type Prediction } from '../../api/client'
+import type { TabProps } from '../../App'
 import { useApi } from '../../hooks/useApi'
 import { useRaceCalendar } from '../../hooks/useRaceCalendar'
 import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
@@ -12,12 +13,23 @@ import './Race.css'
 /**
  * Race view: one race's prediction at a time, with a season selector and
  * prev/next round navigation. Defaults to the upcoming "next race"; prior
- * completed rounds show their verified prediction.
+ * completed rounds show their verified prediction. Accepts a cross-tab
+ * navigation state (e.g. from Race History's "open this race").
  */
-export function Race() {
+export function Race({ navState }: TabProps) {
   const status = useApi('status', () => getStatus())
-  const { season, round, rounds, selected, seasons, selectSeason, setRound } =
-    useRaceCalendar(status.state)
+  const {
+    season,
+    round,
+    rounds,
+    roundNames,
+    nextRace,
+    selected,
+    seasons,
+    selectSeason,
+    setRound,
+    goToNextRace,
+  } = useRaceCalendar(status.state, navState)
 
   if (status.state.phase === 'loading') return <Skeleton rows={8} />
   if (status.state.phase === 'error') {
@@ -27,6 +39,9 @@ export function Race() {
   const idx = round !== null ? rounds.indexOf(round) : -1
   const canPrev = idx > 0
   const canNext = idx >= 0 && idx < rounds.length - 1
+  const isNextRace =
+    nextRace !== null && nextRace.season === season && nextRace.round === round
+  const gpName = round !== null ? roundNames.get(round) : undefined
 
   return (
     <>
@@ -55,7 +70,11 @@ export function Race() {
             >
               ‹ Prev
             </button>
-            <span className="pager-label">{round !== null ? `Round ${round}` : '—'}</span>
+            <span className="pager-label">
+              {round !== null
+                ? `${gpName ?? 'Race'} · Round ${round}`
+                : '—'}
+            </span>
             <button
               type="button"
               className="button"
@@ -64,6 +83,23 @@ export function Race() {
             >
               Next ›
             </button>
+            {isNextRace ? (
+              <Badge variant="info">Upcoming</Badge>
+            ) : (
+              <button
+                type="button"
+                className="button"
+                disabled={nextRace === null}
+                onClick={goToNextRace}
+                title={
+                  nextRace !== null
+                    ? `Jump to the next race (round ${nextRace.round})`
+                    : undefined
+                }
+              >
+                Next race
+              </button>
+            )}
           </div>
         </div>
       </section>

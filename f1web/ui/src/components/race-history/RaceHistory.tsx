@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, getSeasonPredictions, getStatus, type Job } from '../../api/client'
+import type { TabProps } from '../../App'
 import { useApi } from '../../hooks/useApi'
 import { analyzeRace, type RaceResult } from '../../lib/analysis'
 import { driverLabel, fmtDate } from '../../lib/format'
@@ -60,7 +61,7 @@ function useSeasonResults(season: number | null): {
   return { state, retry: () => setAttempt((n) => n + 1) }
 }
 
-export function RaceHistory() {
+export function RaceHistory({ onNavigate }: TabProps) {
   const status = useApi('status', () => getStatus())
   const [season, setSeason] = useState<number | null>(null)
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
@@ -142,7 +143,10 @@ export function RaceHistory() {
         <ErrorState message={state.message} onRetry={retry} />
       ) : null}
       {state.phase === 'ready' ? (
-        <RaceHistoryTable races={state.races} />
+        <RaceHistoryTable
+          races={state.races}
+          onOpenRace={(round) => onNavigate?.('race', { season: selected, round })}
+        />
       ) : null}
     </>
   )
@@ -173,7 +177,13 @@ function HistoryRunResult({ job }: { job: Job }) {
   )
 }
 
-function RaceHistoryTable({ races }: { races: RaceResult[] }) {
+function RaceHistoryTable({
+  races,
+  onOpenRace,
+}: {
+  races: RaceResult[]
+  onOpenRace: (round: number) => void
+}) {
   const raced = races.filter((race) => race.hasActuals)
   const hits = raced.filter((race) => race.winnerHit).length
   const avgOverlap =
@@ -224,7 +234,16 @@ function RaceHistoryTable({ races }: { races: RaceResult[] }) {
               {races.map((race) => (
                 <tr key={race.round}>
                   <td className="num">{race.round}</td>
-                  <td>{race.raceName}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="link-button race-link"
+                      title={`Open the round ${race.round} prediction in the Race tab`}
+                      onClick={() => onOpenRace(race.round)}
+                    >
+                      {race.raceName}
+                    </button>
+                  </td>
                   <td className="muted hide-narrow">{fmtDate(race.date)}</td>
                   <td>{driverLabel(race.predictedWinner)}</td>
                   <td className={race.winnerHit === false ? 'miss-text' : undefined}>

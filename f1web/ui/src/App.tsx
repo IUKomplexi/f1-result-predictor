@@ -31,10 +31,21 @@ const Settings = lazy(() =>
 
 type TabId = 'status' | 'race' | 'history' | 'data' | 'train' | 'backtest' | 'settings'
 
+/** Cross-tab navigation payload (e.g. Race History → a specific race). */
+export interface NavState {
+  season?: number
+  round?: number
+}
+
+export interface TabProps {
+  onNavigate?: (tabId: string, state?: NavState) => void
+  navState?: NavState | null
+}
+
 interface TabEntry {
   id: TabId
   label: string
-  component: ComponentType<{ onNavigate?: (tabId: string) => void }>
+  component: ComponentType<TabProps>
 }
 
 const TABS: TabEntry[] = [
@@ -47,11 +58,22 @@ const TABS: TabEntry[] = [
   { id: 'settings', label: 'Settings', component: Settings },
 ]
 
+const TAB_IDS = new Set<string>(TABS.map((entry) => entry.id))
+
+/** The tab encoded in the URL hash (`#/backtest`), or null when absent/unknown. */
+function tabFromHash(): TabId | null {
+  const hash = window.location.hash.replace(/^#\/?/, '')
+  return TAB_IDS.has(hash) ? (hash as TabId) : null
+}
+
 export default function App() {
   // Race is the default once the pipeline is ready; a first-run setup that
   // has missing artifacts lands on Status instead (see the effect below).
-  const [tab, setTab] = useState<TabId>('race')
-  const userChose = useRef(false)
+  // A deep link (e.g. #/backtest) wins: it counts as a user choice.
+  const initialHash = useRef(tabFromHash())
+  const [tab, setTab] = useState<TabId>(() => initialHash.current ?? 'race')
+  const [navState, setNavState] = useState<NavState | null>(null)
+  const userChose = useRef(initialHash.current !== null)
   const Active = TABS.find((entry) => entry.id === tab)?.component ?? TABS[0].component
 
   useEffect(() => {
@@ -64,7 +86,7 @@ export default function App() {
           status.model.has_checkpoint &&
           status.model.has_calibrators &&
           status.reports.has_backtest
-        if (!ready) setTab('status')
+        if (!ready) selectTab('status')
       })
       .catch(() => {
         // Status unavailable (e.g. backend not built): keep the Race default.
@@ -74,18 +96,36 @@ export default function App() {
     }
   }, [])
 
-  function selectTab(id: TabId) {
+  // Keep the tab in sync with the URL hash: browser back/forward and
+  // middle-click open (open in new tab) both work via hashchange.
+  useEffect(() => {
+    function onHashChange() {
+      const fromHash = tabFromHash()
+      if (fromHash !== null) selectTab(fromHash)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  function selectTab(id: TabId, state?: NavState) {
     userChose.current = true
     setTab(id)
+    setNavState(state ?? null)
+    if (tabFromHash() !== id) {
+      // Push a history entry; the hashchange listener above picks it up
+      // (and no-ops, since state already matches).
+      window.location.hash = `/${id}`
+    }
   }
 
   function moveFocus(event: KeyboardEvent, index: number) {
-    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+    let next: number | null = null
+    if (event.key === 'ArrowRight') next = (index + 1) % TABS.length
+    else if (event.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = TABS.length - 1
+    if (next === null) return
     event.preventDefault()
-    const next =
-      event.key === 'ArrowRight'
-        ? (index + 1) % TABS.length
-        : (index - 1 + TABS.length) % TABS.length
     selectTab(TABS[next].id)
     document.getElementById(`tab-${TABS[next].id}`)?.focus()
   }
@@ -106,6 +146,7 @@ export default function App() {
             id={`tab-${entry.id}`}
             aria-selected={tab === entry.id}
             aria-controls="dashboard-panel"
+            tabIndex={tab === entry.id ? 0 : -1}
             className={`tab${tab === entry.id ? ' active' : ''}`}
             onClick={() => selectTab(entry.id)}
             onKeyDown={(event) => moveFocus(event, index)}
@@ -122,7 +163,7 @@ export default function App() {
       >
         <ErrorBoundary>
           <Suspense fallback={<Skeleton rows={6} />}>
-            <Active onNavigate={(id) => selectTab(id as TabId)} />
+            <Active onNavigate={selectTab} navState={navState} />
           </Suspense>
         </ErrorBoundary>
       </main>

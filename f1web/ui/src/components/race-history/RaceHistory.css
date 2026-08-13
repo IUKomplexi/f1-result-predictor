@@ -56,3 +56,9 @@
   background: var(--accent);
   transition: width 0.2s ease;
 }
+
+/* Race-name link inside the results table: the global .link-button carries
+   a margin for standalone use; reset it so rows stay aligned. */
+.race-link {
+  margin-bottom: 0;
+}
