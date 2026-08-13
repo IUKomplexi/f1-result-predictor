@@ -85,6 +85,91 @@
   accent-color: var(--accent);
 }
 
+/* --------------------------------------------------- race override controls */
+
+.race-controls-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.race-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.race-controls .check-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.race-controls .check-line input {
+  accent-color: var(--accent);
+}
+
+.race-apply-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.race-apply-row .button {
+  margin-left: auto;
+}
+
+.model-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs);
+}
+
+/* --------------------------------------------------------- grid editor */
+
+.grid-editor-table {
+  max-height: 18rem;
+  overflow: auto;
+  margin-top: var(--space-3);
+}
+
+.grid-editor-table table {
+  margin: 0;
+}
+
+.grid-input {
+  width: 4.5rem;
+  text-align: center;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.grid-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.grid-input.invalid {
+  border-color: var(--danger, #e10600);
+  outline: 2px solid var(--danger, #e10600);
+  outline-offset: 0;
+}
+
 /* ------------------------------------------------------- race scoreboard */
 
 .scoreboard-head {

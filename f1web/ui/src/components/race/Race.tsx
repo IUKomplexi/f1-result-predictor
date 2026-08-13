@@ -1,12 +1,23 @@
-import { useState } from 'react'
-import { getPrediction, getStatus, type Prediction } from '../../api/client'
+import { useEffect, useRef, useState } from 'react'
+import {
+  getModels,
+  getStatus,
+  postPrediction,
+  type ModelsResponse,
+  type Prediction,
+} from '../../api/client'
 import type { TabProps } from '../../App'
 import { useApi } from '../../hooks/useApi'
 import { useRaceCalendar } from '../../hooks/useRaceCalendar'
 import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
+import { deployedName } from '../backtest/lib'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { ProbabilityBar } from '../ui/ProbabilityBar'
+import { GridEditor } from './GridEditor'
+import { ModelPicker, RACE_DEFAULT_MODEL } from './ModelPicker'
+import { racePredictBody } from './lib'
 import { RaceScoreboard } from './RaceScoreboard'
 import './Race.css'
 
@@ -113,36 +124,172 @@ export function Race({ navState }: TabProps) {
   )
 }
 
+/**
+ * One race's prediction via POST /api/predict so every per-request CLI
+ * override is available: model checkpoint, feature toggles, a qualifying
+ * grid, refresh and report writing. Edits are local until "Apply changes";
+ * the request is cached server-side per override combination.
+ */
 function RacePanel({ season, round }: { season: number; round: number }) {
   const [refresh, setRefresh] = useState(false)
+  const [model, setModel] = useState<string>(RACE_DEFAULT_MODEL)
+  const [defaultModel, setDefaultModel] = useState<string>(RACE_DEFAULT_MODEL)
+  const [modelTouched, setModelTouched] = useState(false)
+  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
+  const [writeReport, setWriteReport] = useState(false)
+  const [gridRows, setGridRows] = useState<Record<string, string> | null>(null)
+  const [applyError, setApplyError] = useState<string | null>(null)
+  const [applied, setApplied] = useState(0)
+  const modelsState = useApi<ModelsResponse>('models', getModels)
+  const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
+
+  // Preselect the deployed model once the index loads; never clobber a choice
+  // the user already made. defaultModel is the baseline the "pending
+  // overrides" badge compares against.
+  useEffect(() => {
+    if (modelTouched || models === null) return
+    const deployed = deployedName(models) ?? RACE_DEFAULT_MODEL
+    setDefaultModel(deployed)
+    setModel(deployed)
+  }, [models, modelTouched])
+
+  // The qualifying grid belongs to one race; switching races drops the edits.
+  useEffect(() => {
+    setGridRows(null)
+  }, [season, round])
+
   const { state, retry } = useApi(
-    `race-${season}-${round}-${refresh}`,
-    () => getPrediction(season, round, refresh),
+    `race-${season}-${round}-${applied}-${refresh}`,
+    () => {
+      const { body } = racePredictBody(models, {
+        season,
+        round,
+        refresh,
+        model,
+        features,
+        gridRows,
+        writeReport,
+      })
+      return postPrediction(body)
+    },
   )
-  if (state.phase === 'loading') return <Skeleton rows={10} />
-  if (state.phase === 'error') return <ErrorState message={state.message} onRetry={retry} />
+
+  // The grid editor seeds from the latest ready prediction, so it stays
+  // populated while a re-request is in flight.
+  const lastRef = useRef<Prediction | null>(null)
+  if (state.phase === 'ready') lastRef.current = state.data
+  const last = lastRef.current
+
+  const apply = () => {
+    const { error } = racePredictBody(models, {
+      season,
+      round,
+      refresh,
+      model,
+      features,
+      gridRows,
+      writeReport,
+    })
+    if (error !== null) {
+      setApplyError(error)
+      return
+    }
+    setApplyError(null)
+    setApplied((n) => n + 1)
+  }
+
+  const pendingOverrides = model !== defaultModel || gridRows !== null
+
   return (
     <>
-      <section className="card race-refresh-row">
-        <label
-          className="check-line"
-          title="Re-download raw data from Jolpica instead of reusing the cached data/raw files (CLI --refresh)."
-        >
-          <input
-            type="checkbox"
-            checked={refresh}
-            onChange={(e) => setRefresh(e.target.checked)}
+      <section className="card race-controls">
+        <div className="race-controls-row">
+          <ModelPicker
+            models={models}
+            value={model}
+            onChange={(value) => {
+              setModelTouched(true)
+              setModel(value)
+            }}
           />
-          Re-fetch from API (ignore cache)
-        </label>
+          <div className="race-toggles">
+            <label
+              className="check-line"
+              title="Re-download raw data from Jolpica instead of reusing the cached data/raw files (CLI --refresh)."
+            >
+              <input
+                type="checkbox"
+                checked={refresh}
+                onChange={(e) => setRefresh(e.target.checked)}
+              />
+              Re-fetch from API (ignore cache)
+            </label>
+            <label
+              className="check-line"
+              title="Write the same Markdown report the CLI produces to the configured [report] prediction path (CLI --out)."
+            >
+              <input
+                type="checkbox"
+                checked={writeReport}
+                onChange={(e) => setWriteReport(e.target.checked)}
+              />
+              Write report
+            </label>
+          </div>
+        </div>
+        <details className="advanced-options">
+          <summary>Advanced</summary>
+          <div className="job-options-inner">
+            <FeatureToggles value={features} onChange={setFeatures} />
+            {last !== null && !last.verified ? (
+              <GridEditor
+                drivers={last.drivers}
+                values={gridRows}
+                onChange={setGridRows}
+                onReset={() => setGridRows(null)}
+              />
+            ) : null}
+          </div>
+        </details>
+        <div className="race-apply-row">
+          {pendingOverrides ? (
+            <Badge variant="warn">
+              {gridRows !== null && model !== defaultModel
+                ? 'Grid + model overrides pending'
+                : gridRows !== null
+                  ? 'Grid override pending'
+                  : 'Model override pending'}
+            </Badge>
+          ) : (
+            <span className="muted">Config defaults</span>
+          )}
+          {applyError ? (
+            <p className="save-status error" role="alert">
+              {applyError}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="button primary"
+            onClick={apply}
+            disabled={state.phase === 'loading'}
+          >
+            Apply changes
+          </button>
+        </div>
       </section>
-      <RaceTable prediction={state.data} />
+      {state.phase === 'loading' ? <Skeleton rows={10} /> : null}
+      {state.phase === 'error' ? (
+        <ErrorState message={state.message} onRetry={retry} />
+      ) : null}
+      {state.phase === 'ready' ? <RaceTable prediction={state.data} /> : null}
     </>
   )
 }
 
 function RaceTable({ prediction }: { prediction: Prediction }) {
-  const { race, drivers, synthetic, verified, calibrated } = prediction
+  const { race, drivers, synthetic, verified, calibrated, checkpoint } = prediction
+  const modelStem = checkpoint.split(/[\\/]/).pop()?.replace(/\.joblib$/, '') ?? checkpoint
   return (
     <>
       <section className="card">
@@ -166,6 +313,9 @@ function RaceTable({ prediction }: { prediction: Prediction }) {
             </p>
           </div>
           <div className="badge-row">
+            <span className="model-chip" title={checkpoint}>
+              {modelStem}
+            </span>
             {synthetic ? (
               <Badge variant="warn">Unverified · synthetic grid</Badge>
             ) : null}
