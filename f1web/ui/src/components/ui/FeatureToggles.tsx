@@ -13,14 +13,6 @@ export const NO_FEATURE_OVERRIDES: FeatureOverride = { enable: [], disable: [] }
 
 type Mode = 'default' | 'enable' | 'disable'
 
-const CATEGORY_ORDER = ['core', 'selectable', 'cut'] as const
-
-const CATEGORY_LABEL: Record<string, string> = {
-  core: 'Core — on by default',
-  selectable: 'Selectable — off by default',
-  cut: 'Cut — removal improved the backtest',
-}
-
 /**
  * Per-run feature override control (CLI --enable-features / --disable-features):
  * every registered feature can stay at its config default or be forced on/off
@@ -50,7 +42,17 @@ export function FeatureToggles({
       </div>
     )
   }
-  const { registry, categories, defaults } = state.data.features
+  const { registry, categories, defaults, category_meta } = state.data.features
+  // Groups come from the backend (features/registry.py CATEGORY_ORDER +
+  // CATEGORY_LABELS via /api/config); categories unknown to the backend still
+  // render, appended after the known ones so drift never hides a feature.
+  const known = new Set(category_meta.map((m) => m.id))
+  const groups = [
+    ...category_meta,
+    ...[...new Set(Object.values(categories))]
+      .filter((category) => !known.has(category))
+      .map((category) => ({ id: category, label: category })),
+  ]
   const modeOf = (id: string): Mode =>
     value.enable.includes(id) ? 'enable' : value.disable.includes(id) ? 'disable' : 'default'
   const setMode = (id: string, mode: Mode) => {
@@ -73,12 +75,12 @@ export function FeatureToggles({
         </button>
       </div>
       <div className="feature-toggle-groups">
-        {CATEGORY_ORDER.map((category) => {
-          const ids = registry.filter((id) => categories[id] === category)
+        {groups.map((group) => {
+          const ids = registry.filter((id) => categories[id] === group.id)
           if (ids.length === 0) return null
           return (
-            <div key={category} className="feature-toggle-group">
-              <h4 className="feature-toggle-group-title">{CATEGORY_LABEL[category]}</h4>
+            <div key={group.id} className="feature-toggle-group">
+              <h4 className="feature-toggle-group-title">{group.label}</h4>
               {ids.map((id) => (
                 <label key={id} className="feature-toggle-row">
                   <span className="mono">{id}</span>

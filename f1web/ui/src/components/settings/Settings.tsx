@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import {
   getConfig,
   putConfig,
@@ -7,6 +7,7 @@ import {
   type ConfigResponse,
 } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
+import { debounce, type Debounced } from '../../lib/debounce'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import './Settings.css'
@@ -20,6 +21,7 @@ interface Editor {
   registry: string[]
   defaults: string[]
   categories: Record<string, string>
+  categoryMeta: { id: string; label: string }[]
   seasons: { min: number; max: number }
   paramsKeys: string[]
 }
@@ -31,44 +33,104 @@ export function Settings() {
   return <SettingsForm data={state.data} />
 }
 
+type EditorAction =
+  | { type: 'sync'; data: ConfigResponse }
+  | { type: 'set-value'; section: string; key: string; value: unknown }
+  | { type: 'set-param'; key: string; value: number }
+  | { type: 'toggle-feature'; id: string; checked: boolean }
+
+function editorReducer(editor: Editor, action: EditorAction): Editor {
+  switch (action.type) {
+    case 'sync':
+      return fromResponse(action.data)
+    case 'set-value':
+      return {
+        ...editor,
+        cfg: {
+          ...editor.cfg,
+          [action.section]: { ...editor.cfg[action.section], [action.key]: action.value },
+        },
+      }
+    case 'set-param': {
+      const params = { ...(editor.cfg.model?.params as Record<string, unknown> | undefined) }
+      params[action.key] = action.value
+      return {
+        ...editor,
+        cfg: {
+          ...editor.cfg,
+          model: { ...editor.cfg.model, params },
+        },
+      }
+    }
+    case 'toggle-feature': {
+      const current = (editor.cfg.features?.enabled as string[] | null) ?? editor.defaults
+      const next = action.checked
+        ? [...current, action.id]
+        : current.filter((f) => f !== action.id)
+      return {
+        ...editor,
+        cfg: {
+          ...editor.cfg,
+          features: { ...editor.cfg.features, enabled: next },
+        },
+      }
+    }
+  }
+}
+
 function SettingsForm({ data }: { data: ConfigResponse }) {
-  const [editor, setEditor] = useState<Editor>(() => fromResponse(data))
+  const [editor, dispatch] = useReducer(editorReducer, data, fromResponse)
   const [status, setStatus] = useState<
     { kind: 'ok'; text: string } | { kind: 'error'; text: string } | null
   >(null)
   const [saving, setSaving] = useState(false)
+  const editorRef = useRef(editor)
+  editorRef.current = editor
 
   useEffect(() => {
-    setEditor(fromResponse(data))
+    dispatch({ type: 'sync', data })
   }, [data])
 
   const setValue = (section: string, key: string, value: unknown) => {
-    setEditor((ed) => ({
-      ...ed,
-      cfg: {
-        ...ed.cfg,
-        [section]: { ...ed.cfg[section], [key]: value },
-      },
-    }))
+    dispatch({ type: 'set-value', section, key, value })
   }
 
   const setParam = (key: string, value: number) => {
-    const params = { ...(editor.cfg.model?.params as Record<string, unknown> | undefined) }
-    params[key] = value
-    setValue('model', 'params', params)
+    dispatch({ type: 'set-param', key, value })
   }
 
   const toggleFeature = (id: string, checked: boolean) => {
-    const current = (editor.cfg.features?.enabled as string[] | null) ?? editor.defaults
-    const next = checked ? [...current, id] : current.filter((f) => f !== id)
-    setValue('features', 'enabled', next)
+    dispatch({ type: 'toggle-feature', id, checked })
+  }
+
+  // Text/number inputs are debounced so rapid typing does not re-render the
+  // whole form per keystroke; save() flushes pending edits first so no
+  // keystroke is lost.
+  const debouncedSetters = useMemo(() => new Map<string, Debounced<[unknown]>>(), [])
+  const debouncedSetValue = (section: string, key: string) => {
+    const id = `${section}.${key}`
+    let setter = debouncedSetters.get(id)
+    if (!setter) {
+      setter = debounce((value: unknown) => {
+        dispatch({ type: 'set-value', section, key, value })
+      }, 300)
+      debouncedSetters.set(id, setter)
+    }
+    return (value: unknown) => setter(value)
+  }
+  const flushAll = () => {
+    for (const setter of debouncedSetters.values()) setter.flush()
   }
 
   const save = async () => {
     setSaving(true)
     setStatus(null)
     try {
-      await putConfig(editor.cfg)
+      flushAll()
+      // Let the flushed dispatches re-render so the saved config includes
+      // everything the user typed.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await putConfig(editorRef.current.cfg)
       setStatus({ kind: 'ok', text: 'Saved to config.toml. Retrain the model if features/params changed.' })
     } catch (error) {
       const message = error instanceof ApiError ? error.message : String(error)
@@ -98,7 +160,11 @@ function SettingsForm({ data }: { data: ConfigResponse }) {
                   key={field.key}
                   field={field}
                   value={editor.cfg[section]?.[field.key]}
-                  onChange={(value) => setValue(section, field.key, value)}
+                  onChange={
+                    field.type === 'str' || field.type === 'int' || field.type === 'float'
+                      ? debouncedSetValue(section, field.key)
+                      : (value) => setValue(section, field.key, value)
+                  }
                   editor={editor}
                   toggleFeature={toggleFeature}
                   setParam={setParam}
@@ -128,6 +194,7 @@ function fromResponse(data: ConfigResponse): Editor {
     registry: data.features.registry,
     defaults: data.features.defaults,
     categories: data.features.categories,
+    categoryMeta: data.features.category_meta,
     seasons: data.seasons,
     paramsKeys: data.model_params_keys,
   }
@@ -161,10 +228,15 @@ function Field({
 
   if (field.key === 'enabled' && field.type === 'features') {
     const selectedIds = (editor.cfg.features?.enabled as string[] | null) ?? editor.defaults
-    const groups: { key: string; label: string }[] = [
-      { key: 'core', label: 'Core — on by default' },
-      { key: 'selectable', label: 'Selectable — off by default' },
-      { key: 'cut', label: 'Cut — removal improved the backtest' },
+    // Groups come from the backend (features/registry.py CATEGORY_ORDER +
+    // CATEGORY_LABELS via /api/config); unknown categories still render,
+    // appended after the known ones so drift never hides a feature.
+    const known = new Set(editor.categoryMeta.map((m) => m.id))
+    const groups = [
+      ...editor.categoryMeta,
+      ...[...new Set(Object.values(editor.categories))]
+        .filter((category) => !known.has(category))
+        .map((category) => ({ id: category, label: category })),
     ]
     return (
       <div className="field span-all">
@@ -173,11 +245,11 @@ function Field({
           Reset to registry defaults
         </button>
         {groups.map((group) => (
-          <div key={group.key} className="feature-group">
+          <div key={group.id} className="feature-group">
             <h3 className="feature-group-title">{group.label}</h3>
             <div className="feature-grid">
               {editor.registry
-                .filter((id) => editor.categories[id] === group.key)
+                .filter((id) => editor.categories[id] === group.id)
                 .map((id) => {
                   const selected = selectedIds!.includes(id)
                   return (
