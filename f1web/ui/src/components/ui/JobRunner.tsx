@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { postJob, type Job } from '../../api/client'
 import { useJob, useJobs } from '../../hooks/useJob'
+import { LogView } from './LogView'
 import './JobRunner.css'
 
 interface JobRunnerProps {
@@ -41,6 +42,7 @@ export function JobRunner({
   const pollId = currentId ?? latestDone?.id ?? null
   const job = useJob(pollId)
   const anyBusy = jobs.some((j) => j.status === 'running' || j.status === 'queued')
+  const busyJob = jobs.find((j) => j.status === 'running' || j.status === 'queued') ?? null
   const running = job?.status === 'running' || job?.status === 'queued'
 
   // Notify onDone once when a tracked run reaches a terminal state.
@@ -78,12 +80,18 @@ export function JobRunner({
         </button>
       </div>
       {error ? <p className="save-status error">{error}</p> : null}
+      {anyBusy && !running && busyJob ? (
+        <p className="jobs-busy-note">
+          {busyJob.label} is {busyJob.status === 'running' ? 'running' : 'queued'} — Run is
+          paused until the queue clears (see the Jobs button up top).
+        </p>
+      ) : null}
       {job && running ? (
         <div className="job-log">
-          <h3 className="card-title">{job.label} — running</h3>
-          {job.log.map((line, i) => (
-            <pre key={i} className="log-line">{line}</pre>
-          ))}
+          <h3 className="card-title">
+            {job.label} — {job.status === 'queued' ? 'queued' : 'running'}
+          </h3>
+          <LogView lines={job.log} maxHeight="16rem" />
         </div>
       ) : null}
       {job && job.status === 'failed' ? (

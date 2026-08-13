@@ -47,6 +47,12 @@
   overflow-y: auto;
 }
 
+.jobs-busy-note {
+  margin-top: var(--space-3);
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
 .log-line {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

@@ -15,6 +15,7 @@ import { SeasonContext } from './components/season/SeasonContext'
 import { Status } from './components/status/Status'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Skeleton } from './components/ui/DataState'
+import { JobsWidget } from './components/ui/JobsWidget'
 
 // Chart-heavy views are lazy so Recharts isn't part of the initial bundle.
 const Backtest = lazy(() =>
@@ -117,6 +118,7 @@ export default function App() {
       <header className="site-header">
         <h1 className="brand">F1 Result Predictor</h1>
         <p className="brand-sub">Internal predictor dashboard</p>
+        <JobsWidget />
       </header>
       <nav className="tabs" role="tablist" aria-label="Dashboard sections">
         {TABS.map((entry, index) => (

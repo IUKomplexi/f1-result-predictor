@@ -352,6 +352,24 @@ a {
   font-size: var(--text-sm);
 }
 
+/* ------------------------------------------------------ shared log view */
+
+.log-view {
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.log-empty {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 40rem) {
