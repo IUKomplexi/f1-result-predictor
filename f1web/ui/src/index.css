@@ -329,6 +329,29 @@ a {
   cursor: not-allowed;
 }
 
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* ------------------------------------------------ prerequisite hints */
+
+.prereq-hint {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border-default));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 40rem) {

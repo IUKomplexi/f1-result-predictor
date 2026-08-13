@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { getConfig, putConfig, type Job } from '../../api/client'
+import { getConfig, getStatus, putConfig, type Job } from '../../api/client'
+import { useApi } from '../../hooks/useApi'
 import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { PrereqHint } from '../ui/PrereqHint'
 import { RefreshToggle } from '../ui/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
@@ -11,6 +13,7 @@ import {
 } from '../ui/SeasonRange'
 
 export function Search() {
+  const status = useApi('status', () => getStatus())
   const [n, setN] = useState(16)
   const [maxTest, setMaxTest] = useState(2019)
   const [seed, setSeed] = useState(0)
@@ -19,9 +22,10 @@ export function Search() {
   const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
 
   return (
-    <JobRunner
-      type="search"
-      runLabel="Run search"
+    <>
+      <JobRunner
+        type="search"
+        runLabel="Run search"
       buildPayload={() => ({
         n,
         max_test_season: maxTest,
@@ -67,7 +71,14 @@ export function Search() {
         </>
       }
       renderResult={(job) => <SearchResult job={job} />}
-    />
+      />
+      <PrereqHint
+        when={status.state.phase === 'ready' && !status.state.data.data.has_dataset}
+      >
+        No dataset yet — run Train first so the search has features to tune
+        against.
+      </PrereqHint>
+    </>
   )
 }
 

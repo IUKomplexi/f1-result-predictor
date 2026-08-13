@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import type { Job } from '../../api/client'
+import { getStatus, type Job } from '../../api/client'
+import { useApi } from '../../hooks/useApi'
 import { JobRunner } from '../ui/JobRunner'
+import { PrereqHint } from '../ui/PrereqHint'
 import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import {
   DEFAULT_SEASON_RANGE,
@@ -11,6 +13,7 @@ import {
 import { RefreshToggle } from '../ui/RefreshToggle'
 
 export function Train() {
+  const status = useApi('status', () => getStatus())
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
   const [refresh, setRefresh] = useState(false)
   const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
@@ -18,9 +21,10 @@ export function Train() {
   const suggestion =
     range.start !== null && range.end !== null ? `hurdle-${range.start}-${range.end}` : 'hurdle'
   return (
-    <JobRunner
-      type="train"
-      runLabel="Train model"
+    <>
+      <JobRunner
+        type="train"
+        runLabel="Train model"
       buildPayload={() => ({
         ...seasonPayload(range),
         refresh,
@@ -50,7 +54,14 @@ export function Train() {
         </>
       }
       renderResult={(job) => <TrainResult job={job} />}
-    />
+      />
+      <PrereqHint
+        when={status.state.phase === 'ready' && !status.state.data.data.has_raw_cache}
+      >
+        No raw data cached yet — run Fetch data on the Data tab first, or Train will
+        pull from the API itself (slow).
+      </PrereqHint>
+    </>
   )
 }
 

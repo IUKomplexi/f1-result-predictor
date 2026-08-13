@@ -1,8 +1,18 @@
-import { lazy, Suspense, useState, type KeyboardEvent } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type KeyboardEvent,
+} from 'react'
+import { getStatus } from './api/client'
 import { Race } from './components/race/Race'
 import { RaceHistory } from './components/race-history/RaceHistory'
 import { OverridePrediction } from './components/override/OverridePrediction'
 import { SeasonContext } from './components/season/SeasonContext'
+import { Status } from './components/status/Status'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Skeleton } from './components/ui/DataState'
 
@@ -26,7 +36,27 @@ const Settings = lazy(() =>
   import('./components/settings/Settings').then((m) => ({ default: m.Settings })),
 )
 
-const TABS = [
+type TabId =
+  | 'status'
+  | 'race'
+  | 'history'
+  | 'data'
+  | 'train'
+  | 'search'
+  | 'backtest'
+  | 'calibration'
+  | 'specific'
+  | 'settings'
+  | 'season'
+
+interface TabEntry {
+  id: TabId
+  label: string
+  component: ComponentType<{ onNavigate?: (tabId: string) => void }>
+}
+
+const TABS: TabEntry[] = [
+  { id: 'status', label: 'Status', component: Status },
   { id: 'race', label: 'Race', component: Race },
   { id: 'history', label: 'Race History', component: RaceHistory },
   { id: 'data', label: 'Data', component: Data },
@@ -37,13 +67,39 @@ const TABS = [
   { id: 'specific', label: 'Specific Race', component: OverridePrediction },
   { id: 'settings', label: 'Settings', component: Settings },
   { id: 'season', label: 'Season', component: SeasonContext },
-] as const
-
-type TabId = (typeof TABS)[number]['id']
+]
 
 export default function App() {
+  // Race is the default once the pipeline is ready; a first-run setup that
+  // has missing artifacts lands on Status instead (see the effect below).
   const [tab, setTab] = useState<TabId>('race')
+  const userChose = useRef(false)
   const Active = TABS.find((entry) => entry.id === tab)?.component ?? TABS[0].component
+
+  useEffect(() => {
+    let cancelled = false
+    getStatus()
+      .then((status) => {
+        if (cancelled || userChose.current) return
+        const ready =
+          status.data.has_raw_cache &&
+          status.model.has_checkpoint &&
+          status.model.has_calibrators &&
+          status.reports.has_backtest
+        if (!ready) setTab('status')
+      })
+      .catch(() => {
+        // Status unavailable (e.g. backend not built): keep the Race default.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function selectTab(id: TabId) {
+    userChose.current = true
+    setTab(id)
+  }
 
   function moveFocus(event: KeyboardEvent, index: number) {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
@@ -52,7 +108,7 @@ export default function App() {
       event.key === 'ArrowRight'
         ? (index + 1) % TABS.length
         : (index - 1 + TABS.length) % TABS.length
-    setTab(TABS[next].id)
+    selectTab(TABS[next].id)
     document.getElementById(`tab-${TABS[next].id}`)?.focus()
   }
 
@@ -72,7 +128,7 @@ export default function App() {
             aria-selected={tab === entry.id}
             aria-controls="dashboard-panel"
             className={`tab${tab === entry.id ? ' active' : ''}`}
-            onClick={() => setTab(entry.id)}
+            onClick={() => selectTab(entry.id)}
             onKeyDown={(event) => moveFocus(event, index)}
           >
             {entry.label}
@@ -87,7 +143,7 @@ export default function App() {
       >
         <ErrorBoundary>
           <Suspense fallback={<Skeleton rows={6} />}>
-            <Active />
+            <Active onNavigate={(id) => selectTab(id as TabId)} />
           </Suspense>
         </ErrorBoundary>
       </main>

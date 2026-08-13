@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getCalibration, type Calibration, type CalibrationTarget } from '../../api/client'
+import { getCalibration, getStatus, type Calibration, type CalibrationTarget } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
@@ -7,6 +7,7 @@ import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { PrereqHint } from '../ui/PrereqHint'
 import { RefreshToggle } from '../ui/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
@@ -29,6 +30,7 @@ export function Calibration() {
   const [refresh, setRefresh] = useState(false)
   const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [version, setVersion] = useState(0)
+  const status = useApi('status', () => getStatus())
   const { state, retry } = useApi(`calibration-${version}`, () => getCalibration())
 
   return (
@@ -83,6 +85,12 @@ export function Calibration() {
         }
         renderResult={(job) => <CalibrateRunResult job={job} />}
       />
+      <PrereqHint
+        when={status.state.phase === 'ready' && !status.state.data.model.has_checkpoint}
+      >
+        No model checkpoint yet — run Train first so calibration has a model to
+        evaluate.
+      </PrereqHint>
       <p className="muted config-intro">
         The hold-out split (fit through / evaluate from) controls which
         out-of-sample seasons calibrators are fit on and which they are

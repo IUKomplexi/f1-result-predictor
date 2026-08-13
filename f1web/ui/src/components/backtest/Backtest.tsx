@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getBacktest, type Backtest, type BacktestMetricRow } from '../../api/client'
+import { getBacktest, getStatus, type Backtest, type BacktestMetricRow } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
@@ -7,6 +7,7 @@ import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { PrereqHint } from '../ui/PrereqHint'
 import { RefreshToggle } from '../ui/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
@@ -47,6 +48,7 @@ export function Backtest() {
   const [refresh, setRefresh] = useState(false)
   const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [version, setVersion] = useState(0)
+  const status = useApi('status', () => getStatus())
   const { state, retry } = useApi(`backtest-${version}`, () => getBacktest())
   return (
     <>
@@ -94,6 +96,12 @@ export function Backtest() {
         }
         renderResult={(job) => <BacktestRunResult job={job} />}
       />
+      <PrereqHint
+        when={status.state.phase === 'ready' && !status.state.data.model.has_checkpoint}
+      >
+        No model checkpoint yet — run Train first, or backtest will retrain from
+        scratch on every season (much slower).
+      </PrereqHint>
       {state.phase === 'loading' ? (
         <Skeleton rows={8} />
       ) : state.phase === 'error' ? (
