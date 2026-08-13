@@ -56,6 +56,26 @@ export interface BacktestMetricRow {
   mae: number
 }
 
+export interface CalibrationBin {
+  mean_pred: number
+  observed: number
+  n: number
+}
+
+export interface CalibrationTarget {
+  brier_raw: number
+  brier_calibrated: number
+  delta: number
+  deployed: boolean
+  reliability: CalibrationBin[]
+}
+
+export interface Calibration {
+  context: string
+  deployed: string[]
+  targets: Record<string, CalibrationTarget>
+}
+
 export interface Backtest {
   overall: Record<string, BacktestMetricRow>
   by_season: Record<string, Record<string, BacktestMetricRow>>
@@ -191,6 +211,10 @@ export function getBacktest(): Promise<Backtest> {
   return apiGet<Backtest>('/api/backtest')
 }
 
+export function getCalibration(): Promise<Calibration> {
+  return apiGet<Calibration>('/api/calibration')
+}
+
 export function getCalendar(season: number): Promise<Calendar> {
   return apiGet<Calendar>(`/api/calendar${qs({ season })}`)
 }
@@ -233,7 +257,7 @@ export interface JobSummary {
   id: string
   type: string
   label: string
-  status: 'queued' | 'running' | 'done' | 'failed'
+  status: 'queued' | 'running' | 'done' | 'failed' | 'interrupted' | 'cancelled'
   error: string | null
   created_at: number
   started_at: number | null
@@ -282,6 +306,10 @@ export function getJobs(): Promise<{ jobs: JobSummary[] }> {
 
 export function getJob(id: string): Promise<Job> {
   return apiGet<Job>(`/api/jobs/${id}`)
+}
+
+export function cancelJob(id: string): Promise<{ id: string; status: string }> {
+  return apiJson<{ id: string; status: string }>('POST', `/api/jobs/${id}/cancel`)
 }
 
 export function postPrediction(overrides: PredictOverrides): Promise<Prediction> {

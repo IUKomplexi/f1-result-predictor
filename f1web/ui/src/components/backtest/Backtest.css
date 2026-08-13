@@ -69,3 +69,21 @@
   color: var(--warning);
   font-weight: 600;
 }
+
+/* Calibration panel: Brier delta sign (lower = better) and split inputs. */
+.delta-good {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.delta-bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.season-config {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+}

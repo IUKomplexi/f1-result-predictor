@@ -13,6 +13,7 @@ import {
 } from '../ui/SeasonRange'
 import { BacktestRunResult } from './BacktestRunResult'
 import { BacktestView } from './BacktestView'
+import { Calibration } from './Calibration'
 import { ModelsOverview } from './ModelsOverview'
 import { DEFAULT_MODEL, defaultStem, deployedName, modelChoices, selectedPaths } from './lib'
 import './Backtest.css'
@@ -148,6 +149,7 @@ export function Backtest() {
       ) : (
         <BacktestView backtest={state.data} reference={defaultStem(models)} />
       )}
+      <Calibration />
     </>
   )
 }

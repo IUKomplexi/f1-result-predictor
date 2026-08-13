@@ -63,7 +63,11 @@ export function useJob(id: string | null): Job | null {
         const data = await getJob(id)
         if (cancelled) return
         setJob(data)
-        const done = data.status === 'done' || data.status === 'failed'
+        const done =
+          data.status === 'done' ||
+          data.status === 'failed' ||
+          data.status === 'interrupted' ||
+          data.status === 'cancelled'
         if (!done && timer === undefined) {
           timer = setInterval(() => load(), POLL_MS)
         } else if (done && timer !== undefined) {

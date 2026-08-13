@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { type JobSummary } from '../../api/client'
+import { cancelJob, type JobSummary } from '../../api/client'
 import { useJob, useJobs } from '../../hooks/useJob'
 import { fmtElapsed } from '../../lib/format'
 import { Badge } from './Badge'
@@ -11,6 +11,8 @@ const STATUS_VARIANT: Record<JobSummary['status'], 'ready' | 'missing' | 'warn' 
   running: 'info',
   done: 'ready',
   failed: 'missing',
+  interrupted: 'missing',
+  cancelled: 'warn',
 }
 
 const STATUS_LABEL: Record<JobSummary['status'], string> = {
@@ -18,6 +20,8 @@ const STATUS_LABEL: Record<JobSummary['status'], string> = {
   running: 'Running',
   done: 'Done',
   failed: 'Failed',
+  interrupted: 'Interrupted',
+  cancelled: 'Cancelled',
 }
 
 /**
@@ -27,10 +31,11 @@ const STATUS_LABEL: Record<JobSummary['status'], string> = {
  * Visible on every tab so pipeline activity never happens invisibly.
  */
 export function JobsWidget() {
-  const { jobs } = useJobs()
+  const { jobs, refresh } = useJobs()
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [cancelError, setCancelError] = useState<string | null>(null)
   const widgetRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -45,6 +50,16 @@ export function JobsWidget() {
     running !== null && running.started_at !== null
       ? (now - running.started_at * 1000) / 1000
       : 0
+
+  const cancel = async (id: string) => {
+    setCancelError(null)
+    try {
+      await cancelJob(id)
+      refresh()
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   // Tick once per second while something is running (or the panel is open) so
   // elapsed times move.
@@ -155,10 +170,12 @@ export function JobsWidget() {
                   now={now}
                   selected={selected === entry.id}
                   onSelect={() => setSelectedId(entry.id)}
+                  onCancel={entry.status === 'queued' ? () => cancel(entry.id) : undefined}
                 />
               ))}
             </ul>
           )}
+          {cancelError ? <p className="jobs-error">{cancelError}</p> : null}
           {job ? (
             <div className="jobs-log-block">
               <div className="jobs-log-head">
@@ -168,7 +185,7 @@ export function JobsWidget() {
                 </button>
               </div>
               <LogView lines={job.log} maxHeight="14rem" />
-              {job.status === 'failed' && job.error ? (
+              {(job.status === 'failed' || job.status === 'interrupted') && job.error ? (
                 <p className="jobs-error">{job.error}</p>
               ) : null}
             </div>
@@ -184,18 +201,21 @@ function JobRow({
   now,
   selected,
   onSelect,
+  onCancel,
 }: {
   job: JobSummary
   now: number
   selected: boolean
   onSelect: () => void
+  /** Present only for queued jobs — the worker skips cancelled jobs. */
+  onCancel?: () => void
 }) {
   const elapsed =
     job.status === 'running' && job.started_at !== null
       ? (now - job.started_at * 1000) / 1000
       : job.elapsed_s
   return (
-    <li>
+    <li className="job-row-item">
       <button
         type="button"
         className={`job-row${selected ? ' selected' : ''}`}
@@ -205,6 +225,17 @@ function JobRow({
         <Badge variant={STATUS_VARIANT[job.status]}>{STATUS_LABEL[job.status]}</Badge>
         <span className="job-row-elapsed">{fmtElapsed(elapsed)}</span>
       </button>
+      {onCancel ? (
+        <button
+          type="button"
+          className="job-row-cancel"
+          onClick={onCancel}
+          title={`Cancel ${job.label} before it starts`}
+          aria-label={`Cancel ${job.label}`}
+        >
+          Cancel
+        </button>
+      ) : null}
     </li>
   )
 }
