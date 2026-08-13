@@ -165,10 +165,21 @@ def _grid_path_from_text(text: str) -> str:
     return path
 
 
-def _slim_job(job: dict) -> dict:
-    """A job without the (possibly large) log and result, for the history list."""
+def _slim_job(job: dict, now: float | None = None) -> dict:
+    """A job without the (possibly large) log and result, for the history list.
+
+    ``elapsed_s`` is the running duration (queued jobs have none) or the total
+    duration once finished; ``log_lines`` lets the UI offer a live log tail
+    without shipping the full log in every list poll.
+    """
+    now = now if now is not None else time.time()
+    start = job.get("started_at")
+    elapsed_s = round((job.get("finished_at") or now) - start, 2) if start else None
     return {k: job[k] for k in ("id", "type", "label", "status", "error",
-                                "created_at", "started_at", "finished_at")}
+                                "created_at", "started_at", "finished_at")} | {
+        "elapsed_s": elapsed_s,
+        "log_lines": len(job["log"]),
+    }
 
 
 def create_app(job_manager: JobManager | None = None) -> FastAPI:

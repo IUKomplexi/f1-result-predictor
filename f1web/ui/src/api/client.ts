@@ -264,6 +264,10 @@ export interface JobSummary {
   created_at: number
   started_at: number | null
   finished_at: number | null
+  /** Seconds since started_at (running) or total duration (finished). */
+  elapsed_s: number | null
+  /** Number of log lines; fetch the full log via getJob(id). */
+  log_lines: number
 }
 
 export interface Job extends JobSummary {

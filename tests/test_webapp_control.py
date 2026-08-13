@@ -132,6 +132,11 @@ def test_job_history_and_single_job_detail(tmp_path, monkeypatch):
     assert len(history) == 2
     # history entries are slim (no log/result), detail has them.
     assert all("result" not in j and "log" not in j for j in history)
+    # slim entries carry the queue-widget fields: elapsed and log-line count.
+    for entry in history:
+        assert entry["status"] == "done"
+        assert isinstance(entry["elapsed_s"], (int, float)) and entry["elapsed_s"] >= 0
+        assert entry["log_lines"] == 2  # fake handler logs "started" + payload
     detail = client.get(f"/api/jobs/{ids[0]}").json()
     assert "result" in detail and "log" in detail
 
