@@ -128,10 +128,10 @@ invalid-input highlighting), a **Write report** checkbox (the same
 `reports/prediction.md` the CLI `--out` produces), and the existing
 "Re-fetch from API" refresh toggle. Feature overrides are NOT offered here —
 any changed features require a model retrained with them (Train tab, or
-Backtest's walk-forward retraining). Edits
-stay local until **Apply changes**;
-override predictions are cached on disk per model + grid, so repeats are
-instant and different models/grids never share a cached payload.
+Backtest's walk-forward retraining). Edits stay local until
+**Apply changes**; override predictions are cached on disk per model + grid,
+so repeats are instant and different models/grids never share a cached
+payload.
 
 Every tab is **deep-linkable** via a URL hash (`#/race`, `#/backtest`, …) —
 refresh, the browser back button, and shared links restore the tab. Race

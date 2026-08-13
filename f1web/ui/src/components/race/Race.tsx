@@ -127,7 +127,8 @@ export function Race({ navState }: TabProps) {
  * One race's prediction via POST /api/predict so every per-request CLI
  * override is available: model checkpoint, a qualifying grid, refresh and
  * report writing. Feature overrides are NOT offered here — they only matter
- * at training time (Train tab). Edits are local until "Apply changes"; the
+ * at training time (Train tab, or Backtest's walk-forward retraining). Edits
+ * are local until "Apply changes"; the
  * request is cached server-side per override combination.
  */
 function RacePanel({ season, round }: { season: number; round: number }) {
