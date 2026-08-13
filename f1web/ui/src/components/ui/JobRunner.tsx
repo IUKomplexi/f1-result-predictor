@@ -5,7 +5,7 @@ import { LogView } from './LogView'
 import './JobRunner.css'
 
 interface JobRunnerProps {
-  /** The job type (fetch / train / calibrate / backtest / search). */
+  /** The job type (fetch / history / train / calibrate / backtest). */
   type: string
   /** Run-button label, e.g. "Fetch data". */
   runLabel?: string
@@ -22,7 +22,7 @@ interface JobRunnerProps {
 /**
  * Shared inline pipeline-step control: a Run button (with optional option
  * controls), a live log while a job is running, and the result of either the
- * just-run job or the most recent finished job of this type. All five pipeline
+ * just-run job or the most recent finished job of this type. All pipeline
  * tabs use this so they look and behave consistently.
  */
 export function JobRunner({

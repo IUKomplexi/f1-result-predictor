@@ -26,7 +26,7 @@ JSON API (all errors share the shape ``{"error": ...}``)::
     GET  /api/config                       effective config + schema metadata
     PUT  /api/config                       validate + write config.toml (single source of truth)
     POST /api/jobs                         queue a pipeline job
-                                            (fetch/train/calibrate/backtest/search)
+                                            (fetch/train/calibrate/backtest/history)
                                             payload keys mirror the CLI options
                                             (see f1web/jobs.JOB_PAYLOAD_KEYS)
     GET  /api/jobs                         job history
@@ -332,6 +332,11 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         if "model_path" in payload and payload["model_path"] is not None \
                 and not isinstance(payload["model_path"], str):
             return _error("'model_path' must be a string", 400)
+        if "model_paths" in payload and payload["model_paths"] is not None:
+            if not isinstance(payload["model_paths"], list) or not all(
+                isinstance(p, str) for p in payload["model_paths"]
+            ):
+                return _error("'model_paths' must be a list of strings", 400)
         try:
             job_id = manager.submit(job_type, payload)
         except KeyError as exc:

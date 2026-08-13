@@ -10,8 +10,6 @@ import {
 import { getStatus } from './api/client'
 import { Race } from './components/race/Race'
 import { RaceHistory } from './components/race-history/RaceHistory'
-import { OverridePrediction } from './components/override/OverridePrediction'
-import { SeasonContext } from './components/season/SeasonContext'
 import { Status } from './components/status/Status'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Skeleton } from './components/ui/DataState'
@@ -21,38 +19,17 @@ import { JobsWidget } from './components/ui/JobsWidget'
 const Backtest = lazy(() =>
   import('./components/backtest/Backtest').then((m) => ({ default: m.Backtest })),
 )
-const Calibration = lazy(() =>
-  import('./components/calibration/Calibration').then((m) => ({ default: m.Calibration })),
-)
 const Data = lazy(() =>
   import('./components/data/Data').then((m) => ({ default: m.Data })),
 )
 const Train = lazy(() =>
   import('./components/train/Train').then((m) => ({ default: m.Train })),
 )
-const Search = lazy(() =>
-  import('./components/search/Search').then((m) => ({ default: m.Search })),
-)
-const FeatureLab = lazy(() =>
-  import('./components/features/FeatureLab').then((m) => ({ default: m.FeatureLab })),
-)
 const Settings = lazy(() =>
   import('./components/settings/Settings').then((m) => ({ default: m.Settings })),
 )
 
-type TabId =
-  | 'status'
-  | 'race'
-  | 'history'
-  | 'data'
-  | 'train'
-  | 'search'
-  | 'features'
-  | 'backtest'
-  | 'calibration'
-  | 'specific'
-  | 'settings'
-  | 'season'
+type TabId = 'status' | 'race' | 'history' | 'data' | 'train' | 'backtest' | 'settings'
 
 interface TabEntry {
   id: TabId
@@ -66,13 +43,8 @@ const TABS: TabEntry[] = [
   { id: 'history', label: 'Race History', component: RaceHistory },
   { id: 'data', label: 'Data', component: Data },
   { id: 'train', label: 'Train', component: Train },
-  { id: 'search', label: 'Search', component: Search },
-  { id: 'features', label: 'Feature Lab', component: FeatureLab },
   { id: 'backtest', label: 'Backtest', component: Backtest },
-  { id: 'calibration', label: 'Calibration', component: Calibration },
-  { id: 'specific', label: 'Specific Race', component: OverridePrediction },
   { id: 'settings', label: 'Settings', component: Settings },
-  { id: 'season', label: 'Season', component: SeasonContext },
 ]
 
 export default function App() {

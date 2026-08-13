@@ -59,26 +59,8 @@ export interface BacktestMetricRow {
 export interface Backtest {
   overall: Record<string, BacktestMetricRow>
   by_season: Record<string, Record<string, BacktestMetricRow>>
-}
-
-export interface ReliabilityBin {
-  mean_pred: number
-  observed: number
-  n: number
-}
-
-export interface CalibrationTarget {
-  brier_raw: number
-  brier_calibrated: number
-  delta: number
-  deployed: boolean
-  reliability: ReliabilityBin[]
-}
-
-export interface Calibration {
-  context: string
-  deployed: string[]
-  targets: Record<string, CalibrationTarget>
+  /** Per-checkpoint comparison results (present when run with model_paths). */
+  models?: Record<string, Pick<Backtest, 'overall' | 'by_season'>>
 }
 
 export interface CalendarEntry {
@@ -98,23 +80,6 @@ export interface CalendarEntry {
 export interface Calendar {
   season: number
   calendar: CalendarEntry[]
-}
-
-export interface StandingRow {
-  season: number
-  round: number | null
-  position: number | null
-  points: number
-  wins: number | null
-  driver_id?: string | null
-  constructor_id?: string | null
-}
-
-export interface Standings {
-  season: number
-  round: number | null
-  driver: StandingRow[]
-  constructor: StandingRow[]
 }
 
 export interface Status {
@@ -226,16 +191,8 @@ export function getBacktest(): Promise<Backtest> {
   return apiGet<Backtest>('/api/backtest')
 }
 
-export function getCalibration(): Promise<Calibration> {
-  return apiGet<Calibration>('/api/calibration')
-}
-
 export function getCalendar(season: number): Promise<Calendar> {
   return apiGet<Calendar>(`/api/calendar${qs({ season })}`)
-}
-
-export function getStandings(season: number, round?: number): Promise<Standings> {
-  return apiGet<Standings>(`/api/standings${qs({ season, round })}`)
 }
 
 /* ------------------------------------------------- config / jobs / predict */

@@ -92,11 +92,10 @@ function TrainResult({ job }: { job: Job }) {
         <li>checkpoint: <code className="mono">{named}</code></li>
       </ul>
       <p className="job-option-hint">
-        Trained. To check how good it is, open the <strong>Backtest</strong>{' '}
-        tab and pick {stem ? <code className="mono">{stem}</code> : 'the config-default model'} —
-        it will score seasons with exactly the features this model was trained
-        on. The <strong>Feature Lab</strong> tab can then probe which other
-        features would help.
+        Trained and calibrated. To check how good it is, open the{' '}
+        <strong>Backtest</strong> tab and pick{' '}
+        {stem ? <code className="mono">{stem}</code> : 'the config-default model'} — it will
+        score seasons with exactly the features this model was trained on.
       </p>
     </div>
   )

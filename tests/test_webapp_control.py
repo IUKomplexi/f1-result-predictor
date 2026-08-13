@@ -205,9 +205,8 @@ def test_worker_survives_handler_systemexit(tmp_path, monkeypatch):
 def test_job_payload_forwards_all_cli_options(tmp_path, monkeypatch):
     """Every result-affecting CLI option reaches the job handler unchanged.
 
-    The dashboard is the CLI's control surface, so a job payload must carry
-    the same options ``f1 train/calibrate/backtest/search`` expose
-    (see f1web/jobs.JOB_PAYLOAD_KEYS).
+    The dashboard jobs mirror the options ``f1 train/calibrate/backtest``
+    expose (see f1web/jobs.JOB_PAYLOAD_KEYS).
     """
     import f1web.jobs as jobs_module
 
@@ -218,7 +217,7 @@ def test_job_payload_forwards_all_cli_options(tmp_path, monkeypatch):
         log(f"payload={payload}")
         return {"echo": payload}
 
-    for job_type in ("train", "calibrate", "backtest", "search", "history", "features"):
+    for job_type in ("train", "calibrate", "backtest", "history"):
         manager.register(job_type, fake_handler)
     client = TestClient(create_app(job_manager=manager))
 
@@ -237,16 +236,7 @@ def test_job_payload_forwards_all_cli_options(tmp_path, monkeypatch):
         "backtest": {
             "start": 2012, "end": 2024, "refresh": True, "quantize": False,
             "use_checkpoint": True, "model_path": "data/model/other.joblib",
-            "enable_features": ["grid"], "disable_features": ["season"],
-        },
-        "search": {
-            "n": 8, "seed": 3, "max_test_season": 2020,
-            "start": 2012, "end": 2024, "refresh": True,
-            "enable_features": ["grid"], "disable_features": ["season"],
-        },
-        "features": {
-            "start": 2012, "end": 2024, "refresh": True,
-            "max_test_season": 2022, "model_path": "data/model/other.joblib",
+            "model_paths": ["data/model/other.joblib", "data/model/exp.joblib"],
             "enable_features": ["grid"], "disable_features": ["season"],
         },
     }
@@ -269,6 +259,106 @@ def test_job_rejects_unknown_feature_id(tmp_path, monkeypatch):
     assert "unknown feature" in resp.json()["error"]
 
 
+# ------------------------------------------- jobs: train runs calibration
+
+
+def test_train_handler_calibrates_named_checkpoint(tmp_path, monkeypatch):
+    """Train folds calibration in: a named model is calibrated on its own
+    checkpoint path; the shared wrappers get the same range and features."""
+    import f1web.jobs as jobs_module
+    import model.calibrate as calibrate_module
+    import model.train as train_module
+    from f1core.config import config_to_toml, load_config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(config_to_toml(load_config()), encoding="utf-8")
+    monkeypatch.setattr(jobs_module, "REPO_ROOT", tmp_path)
+    calls = {}
+
+    def fake_train(**kw):
+        calls["train"] = kw
+        return {"checkpoint": kw["out"], "rows": 42}
+
+    def fake_calibrate(**kw):
+        calls["calibrate"] = kw
+        return {"calibrators": kw["out"], "deployed": ["scored"]}
+
+    monkeypatch.setattr(train_module, "run", fake_train)
+    monkeypatch.setattr(calibrate_module, "run", fake_calibrate)
+
+    result = jobs_module._train_handler({"name": "my-model"}, lambda line: None)
+
+    assert calls["train"]["out"] == "data/model/my-model.joblib"
+    # The named checkpoint is calibrated on its own path.
+    assert calls["calibrate"]["model_path"] == "data/model/my-model.joblib"
+    assert calls["calibrate"]["start"] == calls["train"]["start"]
+    assert calls["calibrate"]["end"] == calls["train"]["end"]
+    assert result["calibrated"] is True
+    # The handler surfaces whatever calibrator path the shared wrapper reports.
+    assert result["calibrators"] == calls["calibrate"]["out"]
+
+
+def test_train_handler_default_model_uses_shared_calibrators(tmp_path, monkeypatch):
+    """Without a name, calibration targets the shared [model] calibrators path
+    (walk-forward mode, no model_path)."""
+    import f1web.jobs as jobs_module
+    import model.calibrate as calibrate_module
+    import model.train as train_module
+    from f1core.config import config_to_toml, load_config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(config_to_toml(load_config()), encoding="utf-8")
+    monkeypatch.setattr(jobs_module, "REPO_ROOT", tmp_path)
+    calls = {}
+
+    def fake_train(**kw):
+        calls["train"] = kw
+        return {"checkpoint": kw["out"], "rows": 42}
+
+    def fake_calibrate(**kw):
+        calls["calibrate"] = kw
+        return {"calibrators": kw["out"]}
+
+    monkeypatch.setattr(train_module, "run", fake_train)
+    monkeypatch.setattr(calibrate_module, "run", fake_calibrate)
+
+    cfg = load_config(cfg_path)
+    result = jobs_module._train_handler({}, lambda line: None)
+
+    assert "model_path" not in calls["calibrate"]
+    assert calls["calibrate"]["out"] == cfg["model"]["calibrators"]
+    assert result["calibrated"] is True
+
+
+def test_train_handler_calibration_failure_keeps_model(tmp_path, monkeypatch):
+    """A calibration ValueError (e.g. no out-of-sample seasons left) must not
+    fail the train job — the model is still trained, predictions just stay
+    on raw probabilities."""
+    import f1web.jobs as jobs_module
+    import model.calibrate as calibrate_module
+    import model.train as train_module
+    from f1core.config import config_to_toml, load_config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(config_to_toml(load_config()), encoding="utf-8")
+    monkeypatch.setattr(jobs_module, "REPO_ROOT", tmp_path)
+
+    def fake_train(**kw):
+        return {"checkpoint": kw["out"], "rows": 42}
+
+    def boom_calibrate(**kw):
+        raise ValueError("no out-of-sample seasons remain in 2010-2026")
+
+    monkeypatch.setattr(train_module, "run", fake_train)
+    monkeypatch.setattr(calibrate_module, "run", boom_calibrate)
+
+    result = jobs_module._train_handler({}, lambda line: None)
+
+    assert result["calibrated"] is False
+    assert "no out-of-sample" in result["calibrate_error"]
+    assert result["checkpoint"]  # the train result is preserved
+
+
 def test_job_feature_toggles_must_be_list_of_strings(tmp_path, monkeypatch):
     client = _jobs_client(tmp_path, monkeypatch)
     resp = client.post(
@@ -287,6 +377,17 @@ def test_job_rejects_non_string_model_path(tmp_path, monkeypatch):
     )
     assert resp.status_code == 400
     assert "model_path" in resp.json()["error"]
+
+
+def test_job_rejects_non_list_model_paths(tmp_path, monkeypatch):
+    client = _jobs_client(tmp_path, monkeypatch)
+    for bad in ("data/model/x.joblib", [123], ["ok", 42]):
+        resp = client.post(
+            "/api/jobs",
+            json={"type": "backtest", "payload": {"model_paths": bad}},
+        )
+        assert resp.status_code == 400
+        assert "model_paths" in resp.json()["error"]
 
 
 # ------------------------------------------------------------- model registry

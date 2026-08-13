@@ -26,3 +26,20 @@
   max-width: 60ch;
   margin: 0 0 var(--space-4);
 }
+
+.model-check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-2) 0;
+}
+
+.delta-pos {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.delta-neg {
+  color: var(--warning);
+  font-weight: 600;
+}

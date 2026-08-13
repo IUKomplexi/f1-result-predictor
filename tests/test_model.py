@@ -247,6 +247,48 @@ def test_run_backtest_deployed_checkpoint_scores_all_seasons():
     assert len(by_season["model"]) == 8
 
 
+def test_run_model_paths_compares_checkpoints(tmp_path, monkeypatch):
+    """evaluate.run(model_paths=[...]) scores several checkpoints on one shared
+    dataset and writes a snapshot with a per-model 'models' key."""
+    import json
+
+    import model.evaluate as evaluate_module
+
+    df = add_features(_synthetic_df(n_seasons=8))
+    early = df[df["season"] <= 2018]
+    path_a = tmp_path / "alpha.joblib"
+    path_b = tmp_path / "beta.joblib"
+    save_checkpoint(train_final_model(df), path_a)
+    save_checkpoint(train_final_model(early), path_b)
+
+    # Offline: serve the synthetic frame instead of touching the raw cache.
+    monkeypatch.setattr(evaluate_module, "build_dataset", lambda *a, **kw: df)
+    result = evaluate_module.run(
+        start=2015, end=2022, cache_dir=str(tmp_path / "raw"),
+        dataset=str(tmp_path / "features.parquet"),
+        out=str(tmp_path / "backtest.md"),
+        out_json=str(tmp_path / "backtest.json"),
+        model_paths=[str(path_a), str(path_b)],
+    )
+
+    assert result["models"] == ["alpha", "beta"]
+    snap = result["snapshot"]
+    assert set(snap["models"]) == {"alpha", "beta"}
+    for name in ("alpha", "beta"):
+        entry = snap["models"][name]
+        assert set(entry["overall"]) == {"model", "grid", "championship", "zero"}
+        assert {"winner_hit", "top3_overlap", "spearman", "mae"} <= set(
+            entry["overall"]["model"]
+        )
+        assert "model" in entry["by_season"]
+    # The primary tables come from the first compared checkpoint.
+    assert result["checkpoint"] == str(path_a)
+    # The snapshot on disk carries the models key too.
+    on_disk = json.loads((tmp_path / "backtest.json").read_text(encoding="utf-8"))
+    assert set(on_disk["models"]) == {"alpha", "beta"}
+    assert on_disk["overall"]["model"]["mae"] == snap["models"]["alpha"]["overall"]["model"]["mae"]
+
+
 def test_update_model_index_roundtrip(tmp_path):
     import json
 

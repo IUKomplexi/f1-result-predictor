@@ -41,7 +41,7 @@ export function Data() {
       <p className="muted config-intro">
         Downloads raw race data from the Jolpica API into <code>data/raw</code>{' '}
         (cached — the pipeline runs offline afterwards). Pick the seasons to
-        fetch; every later step (train, backtest, search, calibration) reads
+        fetch; every later step (train, backtest) reads
         from this cache, so fetch new seasons here first. Leave the range blank
         to fetch the configured <code>[data]</code> season range. Runs as a
         background job; only one pipeline step runs at a time.

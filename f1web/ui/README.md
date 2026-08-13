@@ -29,6 +29,6 @@ f1 web --port 8080   # http://127.0.0.1:8080/
 
 - `src/api/client.ts` — typed client for the predictor API (all endpoints).
 - `src/theme/tokens.css` — F1-themed design tokens (colors, spacing, type).
-- `src/App.tsx` — app shell (Next Race / Race History / Backtest / Calibration /
-  Season tabs).
+- `src/App.tsx` — app shell (Status / Race / Race History / Data / Train /
+  Backtest / Settings tabs).
 - Pinned to stable releases (React 18, Vite 5, TypeScript 5.5, Recharts 2).

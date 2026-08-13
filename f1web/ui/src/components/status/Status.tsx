@@ -34,17 +34,8 @@ const STEPS: Step[] = [
     tab: 'train',
     tabLabel: 'Train',
     title: 'Train the model',
-    desc: 'Builds the featured dataset (data/features.parquet) and the hurdle model checkpoint.',
-    ready: (s) => s.model.has_checkpoint,
-  },
-  {
-    id: 'calibrate',
-    jobType: 'calibrate',
-    tab: 'calibration',
-    tabLabel: 'Calibration',
-    title: 'Calibrate probabilities',
-    desc: 'Fits isotonic calibrators on out-of-sample races so P scored / P top 3 / P win are trustworthy.',
-    ready: (s) => s.model.has_calibrators,
+    desc: 'Builds the featured dataset (data/features.parquet), trains the hurdle model checkpoint, and fits its probability calibrators.',
+    ready: (s) => s.model.has_checkpoint && s.model.has_calibrators,
   },
   {
     id: 'backtest',
@@ -58,7 +49,7 @@ const STEPS: Step[] = [
 ]
 
 /**
- * Pipeline onboarding: which of the four pipeline stages are ready, and a
+ * Pipeline onboarding: which of the three pipeline stages are ready, and a
  * one-click "run next" for the missing ones. Readiness comes from /api/status;
  * the list refreshes while any job is running so a finished job flips the
  * checklist without a manual reload.
@@ -152,9 +143,9 @@ export function Status({ onNavigate }: { onNavigate?: (tabId: string) => void })
 
       {error ? <p className="save-status error">{error}</p> : null}
       <p className="muted status-note">
-        The dataset itself is built automatically by Train. Optional extras: precompute
-        race history on Race History for instant past-race views, or run a search on the
-        Search tab to tune hyperparameters first.
+        The dataset itself is built automatically by Train (which also calibrates
+        the model). Optional: precompute race history on Race History for instant
+        past-race views.
       </p>
     </section>
   )

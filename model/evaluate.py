@@ -222,6 +222,31 @@ def format_tables(overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]) -> 
     return "\n".join(lines)
 
 
+def _fixed_model_backtest(
+    df: pd.DataFrame, checkpoint: str, quantize: bool, log
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+    """Score every season with a saved checkpoint, using its own features.
+
+    Raises :class:`ValueError` when the checkpoint carries no feature list
+    (retrain with the current ``model/train.py`` first).
+    """
+    from model.train import checkpoint_meta, load_checkpoint
+
+    meta = checkpoint_meta(checkpoint)
+    if not meta or "features" not in meta:
+        raise ValueError(
+            f"checkpoint {checkpoint} carries no feature list; retrain it "
+            "with the current model/train.py before backtesting"
+        )
+    feats = list(meta["features"])
+    model = load_checkpoint(checkpoint, expected=feats)
+    log(
+        f"Scoring with model {checkpoint} ({len(feats)} features, "
+        f"fp {feature_fingerprint(feats)})"
+    )
+    return run_backtest(df, quantize=quantize, features=feats, model=model)
+
+
 def run(
     *,
     start: int = 2010,
@@ -234,6 +259,7 @@ def run(
     quantize: bool = True,
     use_checkpoint: bool = False,
     model_path: str | None = None,
+    model_paths: Sequence[str] = (),
     enable_features: Sequence[str] = (),
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
@@ -251,6 +277,11 @@ def run(
     are ignored — a model is tested with its own features). ``use_checkpoint``
     is the legacy alias for the *deployed* checkpoint (``[model] checkpoint``);
     ``model_path`` takes precedence when both are given.
+
+    ``model_paths`` compares several saved checkpoints on one shared dataset:
+    each is scored with its own feature set, the snapshot gains a
+    ``"models"`` key (``{checkpoint stem: {overall, by_season}}``), and the
+    primary ``overall``/``by_season`` tables come from the first checkpoint.
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
@@ -261,25 +292,28 @@ def run(
         cfg, enable=list(enable_features), disable=list(disable_features)
     )
     checkpoint: str | None = None
-    if model_path:
-        from model.train import checkpoint_meta, load_checkpoint
+    compared: dict[str, dict] = {}
+    if model_paths:
+        from model.train import checkpoint_meta
+
+        paths = [str(p) for p in model_paths]
+        overall: pd.DataFrame | None = None
+        by_season: dict[str, pd.DataFrame] | None = None
+        for path in paths:
+            overall_i, by_season_i = _fixed_model_backtest(df, path, quantize, log)
+            compared[Path(path).stem] = backtest_snapshot(overall_i, by_season_i)
+            if overall is None:
+                # The primary tables show the first compared model vs the baselines.
+                overall, by_season = overall_i, by_season_i
+        checkpoint = paths[0]
+        feats = list(checkpoint_meta(checkpoint)["features"])
+        assert overall is not None and by_season is not None
+    elif model_path:
+        from model.train import checkpoint_meta
 
         checkpoint = model_path
-        meta = checkpoint_meta(checkpoint)
-        if not meta or "features" not in meta:
-            raise ValueError(
-                f"checkpoint {checkpoint} carries no feature list; retrain it "
-                "with the current model/train.py before backtesting"
-            )
-        feats = list(meta["features"])
-        model = load_checkpoint(checkpoint, expected=feats)
-        log(
-            f"Scoring with model {checkpoint} ({len(feats)} features, "
-            f"fp {feature_fingerprint(feats)})"
-        )
-        overall, by_season = run_backtest(
-            df, quantize=quantize, features=feats, model=model
-        )
+        overall, by_season = _fixed_model_backtest(df, checkpoint, quantize, log)
+        feats = list(checkpoint_meta(checkpoint)["features"])
     elif use_checkpoint:
         from model.train import load_checkpoint
 
@@ -306,6 +340,8 @@ def run(
     log(f"Wrote {out_p}")
 
     snapshot = backtest_snapshot(overall, by_season)
+    if compared:
+        snapshot["models"] = compared
     json_out = Path(out_json)
     json_out.parent.mkdir(parents=True, exist_ok=True)
     json_out.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
@@ -323,6 +359,7 @@ def run(
         "quantize": quantize,
         "report": out,
         "snapshot": snapshot,
+        "models": sorted(compared),
     }
 
 

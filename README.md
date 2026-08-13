@@ -106,42 +106,55 @@ service.
 
 ### Full pipeline control from the dashboard
 
-The dashboard is the control surface for the whole pipeline. The **Settings**
-tab edits every `config.toml` value (including the HGB hyperparameters under
-`[model.params]` and the feature selection) and writes them back in place; the
-**Race** tab shows a single race's prediction with a season selector and
-prev/next navigation; **Race History** loads a whole season in one request;
-each pipeline step runs from its own tab — **Data** (fetch), **Train**,
-**Search**, **Feature Lab**, **Backtest** and **Calibration** — as async
-background jobs (one at a time, the rest queued) with live logs and results
-rendered inline, and can apply a search's best config. Every result-affecting
-CLI option is available from the tabs: season range (`--start/--end` — the
+The dashboard is a deliberately small control surface for the core loop:
+**fetch data → train → backtest**, plus race views. The **Status** tab is a
+three-step readiness checklist (fetch / train / backtest) with one-click runs
+for missing steps; **Data** fetches raw Jolpica data; **Train** builds the
+dataset, trains the hurdle model, and calibrates its probabilities in one job;
+**Backtest** scores models against the grid / championship / zero baselines;
+**Race** shows a single race's prediction with a season selector and prev/next
+navigation; **Race History** loads a whole season in one request (with a
+**Precompute race history** job that warms whole-season caches under
+`data/predictions`, keyed by season + feature fingerprint + params, so repeat
+opens are instant); the **Settings** tab edits every `config.toml` value
+(including the HGB hyperparameters under `[model.params]` and the feature
+selection) and writes them back in place.
+
+Pipeline steps run as async background jobs (one at a time, the rest queued)
+with live logs and results rendered inline. Every result-affecting option of
+the core steps is available from the tabs: season range (`--start/--end` — the
 pickers are clamped to the modern era, 2014+, up to the latest season with
 fetched data; the Data tab's end ceiling is the configured `[data] end_season`
-so new seasons can still be fetched), a refresh toggle (`--refresh`), the
-backtest quantize toggle (`--no-quantize`) and the search `n`/`seed`/
-`max-test-season`. Train accepts a **model name** — blank overwrites the
-configured checkpoint, a name saves a separate `data/model/<name>.joblib`
-recorded in `data/model/index.json` (with its feature list, fingerprint,
-params and training season range). **Backtest** and **Calibration** are
-model-centric: pick a saved model and the job scores/calibrates that model
-with the features it was trained on (no separate feature selection);
-walk-forward retraining is an advanced option on Backtest. Calibration always
-judges the model on the **newest** out-of-sample season (fit on all earlier
-ones) and writes per-model calibrators to
-`data/model/<name>.calibrators.joblib`. **Race History** has a **Precompute
-race history** job that warms whole-season caches (`data/predictions`, keyed
-by season + feature fingerprint + params), so repeat opens are instant. The
-**Feature Lab** tab measures whether each feature actually helps: it evaluates
-the current feature set (config or a saved model's) on a walk-forward window,
-then the ΔMAE/ΔSpearman of adding/removing each feature, with one-click apply
-to `features.enabled`. The **Specific Race** tab's prediction panel (and
-`POST /api/predict`) accepts *ephemeral* overrides (season/round, a grid CSV,
-model checkpoint, refresh, and optionally writing the same
-`reports/prediction.md` the CLI produces) that are merged over the config in
-memory only — nothing is written to `config.toml`. Path overrides
-(`--cache-dir`, `--dataset`, `--out`, `--out-json`) stay config-managed: edit
-them in the Settings tab and web jobs honour the configured paths.
+so new seasons can still be fetched), a refresh toggle (`--refresh`), and the
+backtest quantize toggle (`--no-quantize`). Train accepts a **model name** —
+blank overwrites the configured checkpoint, a name saves a separate
+`data/model/<name>.joblib` recorded in `data/model/index.json` (with its
+feature list, fingerprint, params and training season range) — and then fits
+the calibrators: a named model is calibrated on its own out-of-sample seasons
+(written to `data/model/<name>.calibrators.joblib`), while the config-default
+model uses the shared `[model] calibrators` file fitted on walk-forward
+out-of-sample scores. If the model was trained through the newest season and
+no out-of-sample seasons remain, calibration is skipped with a note in the job
+log — predictions then stay on raw probabilities.
+
+**Backtest** is model-centric: pick any number of saved models (or the config
+default) and the job scores each with the features it was trained on; walk-
+forward retraining is an advanced option. The tab shows a saved-models
+overview (training window, rows, features, params), the classic model-vs-
+baselines tables and per-season trend charts, and — when two or more models
+were scored — a **model comparison**: per-metric line charts with one series
+per model plus the baselines, and a delta table against the deployed model
+(positive = better, MAE reversed). Path overrides (`--cache-dir`, `--dataset`,
+`--out`, `--out-json`) stay config-managed: edit them in the Settings tab and
+web jobs honour the configured paths.
+
+The hyperparameter search and calibration review remain CLI-only
+(`f1 search`, `f1 calibrate`) for occasional use; the dashboard no longer
+carries tabs for them. `POST /api/predict` still
+accepts *ephemeral* overrides (season/round, a grid CSV, model checkpoint,
+refresh, and optionally writing the same `reports/prediction.md` the CLI
+produces) that are merged over the config in memory only — nothing is written
+to `config.toml`.
 
 > ⚠️ **Docker config persistence:** in the container, `config.toml` lives inside
 > the image and resets on rebuild. To keep dashboard edits across rebuilds,
@@ -274,16 +287,13 @@ out-of-sample scores.
 ```mermaid
 flowchart LR
     subgraph SPA["f1web/ui · Preact"]
-        A["Race"]
-        B["Race History"]
-        C["Data"]
-        D["Train"]
-        E["Search"]
+        A["Status"]
+        B["Race"]
+        C["Race History"]
+        D["Data"]
+        E["Train"]
         F["Backtest"]
-        G["Calibration"]
-        H["Specific Race"]
-        I["Settings"]
-        J["Season"]
+        G["Settings"]
     end
     SPA -->|"api/client.ts · typed calls"| API["FastAPI endpoints:<br/>/api/prediction · /api/predictions/season · POST /api/predict · /api/status<br/>/api/backtest · /api/calibration · /api/calendar · /api/standings<br/>GET/PUT /api/config · POST /api/jobs · GET /api/jobs/{id}"]
     API -->|"get_prediction · disk cache"| PC[("data/predictions/ · gitignored")]
@@ -297,19 +307,19 @@ flowchart LR
     PL --> CP
 ```
 
-**Control surface.** The dashboard drives the whole pipeline: **Settings**
-edits `config.toml` (including the HGB hyperparameters under `[model.params]`
-and the feature selection — with an "Evaluate in Feature Lab" deep-link) and
-writes it back in place; each pipeline step runs from its own tab — **Data**,
-**Train**, **Search**, **Feature Lab**, **Backtest**, **Calibration**
-— as async background jobs (one at a time via a worker thread, the rest queued)
-with live logs and inline results, and can apply a search's best config.
-Backtest and Calibration pick a saved model (its own features are used);
-Calibration evaluates on the newest season automatically. The
-**Race** tab navigates a single race (season selector + prev/next), and **Race
-History** loads a whole season through `/api/predictions/season` in one dataset
-pass. `POST /api/predict` applies *ephemeral* overrides (season/round, grid CSV,
-model checkpoint) in memory only. Repeat predictions hit the disk-backed cache
+**Control surface.** The dashboard drives the core loop — **Data** (fetch),
+**Train** (train + calibrate in one job), **Backtest** — as async background
+jobs (one at a time via a worker thread, the rest queued) with live logs and
+inline results; the **Status** tab is the readiness checklist with one-click
+runs. **Settings** edits `config.toml` (including the HGB hyperparameters under
+`[model.params]` and the feature selection) and writes it back in place.
+Backtest selects any number of saved models (each scored with its own
+features) and charts their differences — per-metric model-vs-model lines plus
+a delta table against the deployed model. The **Race** tab navigates a single
+race (season selector + prev/next), and **Race History** loads a whole season
+through `/api/predictions/season` in one dataset pass. `POST /api/predict`
+applies *ephemeral* overrides (season/round, grid CSV, model checkpoint) in
+memory only. Repeat predictions hit the disk-backed cache
 under `data/predictions/` (gitignored, keyed by season/round/feature-fingerprint/
 params). The CLI reads the exact same `config.toml`, so neither surface drifts.
 Jobs are tied to the server process lifetime; `reports/jobs/*.json` records a
@@ -342,7 +352,7 @@ common trait of gradient boosting). `model/calibrate.py` collects genuinely
 out-of-sample raw scores and fits isotonic
 calibrators for P(top-10) / P(top-3) / P(win). Two modes: the classic
 walk-forward mode (OOS scores from the backtest's per-season retrains) and a
-**model-centric mode** used by the Calibration tab — pass `model_path` and the
+**model-centric mode** used for named models — pass `model_path` and the
 checkpoint's own feature set is used, its out-of-sample scores are the seasons
 *after* its training window, and the deployment decision is evaluated on the
 **newest** such season only (fit on every earlier one). Calibrators are written
@@ -352,9 +362,11 @@ where it improves Brier on a chronological hold-out** (fit on OOS seasons
 2013–2020, evaluated on 2021–2025). With the current tuned model the raw
 probabilities are already well-calibrated, so no calibrator is deployed
 (calibration would hurt all three targets); the mechanism stays in place and
-re-activates automatically if a future model is miscalibrated again. Run it
-after every `f1 train`; `f1core/predict.py` applies the saved calibrators
-automatically.
+re-activates automatically if a future model is miscalibrated again. The
+dashboard's Train job runs calibration automatically (the config-default model
+gets the shared walk-forward calibrators, a named model gets its own); run
+`f1 calibrate` after every CLI `f1 train`. `f1core/predict.py` applies the
+saved calibrators automatically.
 
 ## Results (honest)
 

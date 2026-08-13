@@ -1,7 +1,7 @@
 """In-process async job runner for pipeline steps (``threading``-based).
 
-Pipeline jobs (fetch data, precompute history, train, calibrate, backtest,
-search) can take minutes, so they must not block a FastAPI request. This module runs each job
+Pipeline jobs (fetch data, precompute history, train, calibrate, backtest)
+can take minutes, so they must not block a FastAPI request. This module runs each job
 on a dedicated worker thread behind a single-job queue (jobs share ``data/``
 artifacts, so only one runs at a time) and records progress + JSON-safe
 results in memory plus a durable ``reports/jobs/*.json`` history.
@@ -34,8 +34,6 @@ JOB_TYPES: dict[str, str] = {
     "train": "Train",
     "calibrate": "Calibrate",
     "backtest": "Backtest",
-    "search": "Search",
-    "features": "Feature evaluation",
 }
 
 # Payload keys each job type accepts (defaults are read from config / sensible
@@ -54,15 +52,7 @@ JOB_PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "backtest": (
         "start", "end", "refresh", "quantize", "use_checkpoint",
-        "enable_features", "disable_features", "model_path",
-    ),
-    "search": (
-        "n", "seed", "max_test_season", "start", "end", "refresh",
-        "enable_features", "disable_features",
-    ),
-    "features": (
-        "start", "end", "refresh", "max_test_season",
-        "enable_features", "disable_features", "model_path",
+        "enable_features", "disable_features", "model_path", "model_paths",
     ),
 }
 
@@ -237,18 +227,46 @@ def _checkpoint_path(cfg: dict, name: str | None) -> str:
 
 
 def _train_handler(payload: dict, log) -> dict:
+    from model.calibrate import run as run_calibrate
     from model.train import run as run_train
 
     cfg = _load_config()
     start, end = _cfg_start_end(cfg, payload)
     enable, disable = _feature_toggles(payload)
-    return run_train(
+    checkpoint = _checkpoint_path(cfg, payload.get("name"))
+    result = run_train(
         start=start, end=end, refresh=bool(payload.get("refresh", False)),
         cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
-        out=_checkpoint_path(cfg, payload.get("name")),
+        out=checkpoint,
         enable_features=enable, disable_features=disable,
         cfg=cfg, log=log,
     )
+    # Calibration is part of Train: a trained model should predict with
+    # calibrated probabilities right away. A named model is calibrated on its
+    # own out-of-sample seasons (calibrators written next to the checkpoint);
+    # the config-default model uses the shared [model] calibrators file fitted
+    # on walk-forward out-of-sample scores.
+    cal_kwargs = {
+        "start": start, "end": end, "refresh": bool(payload.get("refresh", False)),
+        "cache_dir": cfg["data"]["cache_dir"], "dataset": cfg["data"]["dataset"],
+        "out": cfg["model"]["calibrators"],
+        "enable_features": enable, "disable_features": disable,
+        "cfg": cfg, "log": log,
+    }
+    if payload.get("name"):
+        cal_kwargs["model_path"] = checkpoint
+    try:
+        cal = run_calibrate(**cal_kwargs)
+        result["calibrated"] = True
+        result["calibrators"] = cal.get("calibrators")
+    except ValueError as exc:
+        # E.g. the model was trained through the newest season, so no
+        # out-of-sample seasons remain to fit calibrators on: the model itself
+        # is fine, predictions just stay on raw probabilities.
+        log(f"Calibration skipped: {exc}")
+        result["calibrated"] = False
+        result["calibrate_error"] = str(exc)
+    return result
 
 
 def _calibrate_handler(payload: dict, log) -> dict:
@@ -292,46 +310,15 @@ def _backtest_handler(payload: dict, log) -> dict:
     cfg = _load_config()
     start, end = _cfg_start_end(cfg, payload)
     enable, disable = _feature_toggles(payload)
+    model_paths = [p for p in (payload.get("model_paths") or []) if isinstance(p, str)]
     return run_backtest(
         start=start, end=end,
         cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
         quantize=bool(payload.get("quantize", True)),
         use_checkpoint=bool(payload.get("use_checkpoint", False)),
         model_path=_str_or_none(payload.get("model_path")),
+        model_paths=model_paths,
         refresh=bool(payload.get("refresh", False)),
-        enable_features=enable, disable_features=disable,
-        cfg=cfg, log=log,
-    )
-
-
-def _search_handler(payload: dict, log) -> dict:
-    from model.search import run as run_search
-
-    cfg = _load_config()
-    start, end = _cfg_start_end(cfg, payload)
-    enable, disable = _feature_toggles(payload)
-    return run_search(
-        n=int(payload.get("n", 16)),
-        seed=int(payload.get("seed", 0)),
-        max_test_season=int(payload.get("max_test_season", 2019)),
-        start=start, end=end, refresh=bool(payload.get("refresh", False)),
-        cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
-        enable_features=enable, disable_features=disable,
-        cfg=cfg, log=log,
-    )
-
-
-def _features_handler(payload: dict, log) -> dict:
-    from model.features_eval import run as run_features_eval
-
-    cfg = _load_config()
-    start, end = _cfg_start_end(cfg, payload)
-    enable, disable = _feature_toggles(payload)
-    return run_features_eval(
-        start=start, end=end, refresh=bool(payload.get("refresh", False)),
-        cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
-        max_test_season=_int_or_none(payload.get("max_test_season")),
-        model_path=_str_or_none(payload.get("model_path")),
         enable_features=enable, disable_features=disable,
         cfg=cfg, log=log,
     )
@@ -346,12 +333,10 @@ def _load_config() -> dict:
 
 
 def register_default_handlers(manager: JobManager) -> JobManager:
-    """Attach the default fetch/history/train/calibrate/backtest/search handlers."""
+    """Attach the default fetch/history/train/calibrate/backtest handlers."""
     manager.register("fetch", _fetch_handler)
     manager.register("history", _history_handler)
     manager.register("train", _train_handler)
     manager.register("calibrate", _calibrate_handler)
     manager.register("backtest", _backtest_handler)
-    manager.register("search", _search_handler)
-    manager.register("features", _features_handler)
     return manager

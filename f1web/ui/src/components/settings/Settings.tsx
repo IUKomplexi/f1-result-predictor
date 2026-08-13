@@ -24,20 +24,14 @@ interface Editor {
   paramsKeys: string[]
 }
 
-export function Settings({ onNavigate }: { onNavigate?: (tabId: string) => void }) {
+export function Settings() {
   const { state, retry } = useApi('config', getConfig)
   if (state.phase === 'loading') return <Skeleton rows={6} />
   if (state.phase === 'error') return <ErrorState message={state.message} onRetry={retry} />
-  return <SettingsForm data={state.data} onNavigate={onNavigate} />
+  return <SettingsForm data={state.data} />
 }
 
-function SettingsForm({
-  data,
-  onNavigate,
-}: {
-  data: ConfigResponse
-  onNavigate?: (tabId: string) => void
-}) {
+function SettingsForm({ data }: { data: ConfigResponse }) {
   const [editor, setEditor] = useState<Editor>(() => fromResponse(data))
   const [status, setStatus] = useState<
     { kind: 'ok'; text: string } | { kind: 'error'; text: string } | null
@@ -108,7 +102,6 @@ function SettingsForm({
                   editor={editor}
                   toggleFeature={toggleFeature}
                   setParam={setParam}
-                  onNavigate={onNavigate}
                 />
               ))}
           </SectionGroup>
@@ -156,7 +149,6 @@ function Field({
   editor,
   toggleFeature,
   setParam,
-  onNavigate,
 }: {
   field: ConfigField
   value: unknown
@@ -164,7 +156,6 @@ function Field({
   editor: Editor
   toggleFeature: (id: string, checked: boolean) => void
   setParam: (key: string, value: number) => void
-  onNavigate?: (tabId: string) => void
 }) {
   const help = field.help ? <p className="field-help">{field.help}</p> : null
 
@@ -181,16 +172,6 @@ function Field({
         <button type="button" className="link-button" onClick={reset(editor, onChange)}>
           Reset to registry defaults
         </button>
-        {onNavigate ? (
-          <button
-            type="button"
-            className="link-button"
-            title="Open the Feature Lab tab to measure whether each feature actually helps walk-forward MAE/Spearman."
-            onClick={() => onNavigate('features')}
-          >
-            Evaluate in Feature Lab
-          </button>
-        ) : null}
         {groups.map((group) => (
           <div key={group.key} className="feature-group">
             <h3 className="feature-group-title">{group.label}</h3>
