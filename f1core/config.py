@@ -64,6 +64,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 SEASON_MIN = 1950
 SEASON_MAX = 2100
 
+# Modern-era floor for the UI season pickers (2014 hybrid era onwards).
+# Config validation stays permissive (SEASON_MIN) so legacy configs keep
+# loading; the dashboard clamps pipeline runs to this floor.
+DATA_START_FLOOR = 2014
+
 # Model hyperparameter keys accepted under [model.params] (HGB constructor
 # args). Unknown keys are rejected so a typo can't silently change behaviour.
 MODEL_PARAM_KEYS = {"max_iter", "learning_rate", "max_depth",
@@ -109,9 +114,13 @@ SCHEMA: list[dict[str, Any]] = [
     {"section": "data", "key": "dataset", "type": "str",
      "help": "Path to the featured parquet dataset"},
     {"section": "data", "key": "start_season", "type": "int",
-     "min": SEASON_MIN, "max": SEASON_MAX, "help": "First training season"},
+     "min": SEASON_MIN, "max": SEASON_MAX,
+     "help": "First training season. The dashboard clamps pipeline runs to "
+             "the modern era (2014+)."},
     {"section": "data", "key": "end_season", "type": "int",
-     "min": SEASON_MIN, "max": SEASON_MAX, "help": "Last training season"},
+     "min": SEASON_MIN, "max": SEASON_MAX,
+     "help": "Last training season. The live data ends here; the dashboard "
+             "clamps pipeline runs to the latest season with fetched data."},
 
     {"section": "model", "key": "checkpoint", "type": "str",
      "help": "Model checkpoint path"},

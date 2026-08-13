@@ -5,10 +5,9 @@ import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
-import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { ModelPicker, modelCheckpointPath, useModels, type ModelSelection } from '../ui/ModelPicker'
 import { PrereqHint } from '../ui/PrereqHint'
-import { RefreshToggle } from '../ui/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
@@ -23,14 +22,19 @@ const TARGET_LABEL: Record<string, string> = {
   win: 'P win',
 }
 
+/**
+ * Calibration: pick a trained model and fit isotonic calibrators to its
+ * out-of-sample scores. The model's own features are used; it is always
+ * evaluated on the newest season (fit on all earlier out-of-sample seasons,
+ * deployment decision on the newest one). Nothing else needs configuring.
+ */
 export function Calibration() {
-  const [fitThrough, setFitThrough] = useState('')
-  const [evalFrom, setEvalFrom] = useState('')
+  const [modelChoice, setModelChoice] = useState<ModelSelection>('default')
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
-  const [refresh, setRefresh] = useState(false)
-  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [version, setVersion] = useState(0)
   const status = useApi('status', () => getStatus())
+  const { state: modelsState } = useModels()
+  const models = modelsState.phase === 'ready' ? modelsState.data : null
   const { state, retry } = useApi(`calibration-${version}`, () => getCalibration())
 
   return (
@@ -41,46 +45,16 @@ export function Calibration() {
         onDone={() => setVersion((v) => v + 1)}
         buildPayload={() => ({
           ...seasonPayload(range),
-          refresh,
-          enable_features: features.enable,
-          disable_features: features.disable,
-          fit_through_season: fitThrough === '' ? null : Number(fitThrough),
-          eval_from_season: evalFrom === '' ? null : Number(evalFrom),
+          model_path: modelCheckpointPath(models, modelChoice),
         })}
         options={
           <>
-            <div className="job-option">
-              <label className="field-label" htmlFor="cal-fit-through">Fit through season</label>
-              <input
-                id="cal-fit-through"
-                type="number"
-                value={fitThrough}
-                onChange={(e) => setFitThrough(e.target.value)}
-                placeholder="auto"
-              />
-              <p className="job-option-hint">
-                Evaluation calibrators are fit on out-of-sample seasons up to
-                and including this one.
-              </p>
-            </div>
-            <div className="job-option">
-              <label className="field-label" htmlFor="cal-eval-from">Evaluate from season</label>
-              <input
-                id="cal-eval-from"
-                type="number"
-                value={evalFrom}
-                onChange={(e) => setEvalFrom(e.target.value)}
-                placeholder="auto"
-              />
-              <p className="job-option-hint">
-                First season the hold-out Brier deltas are evaluated from.
-                Blank = chronological two-thirds split; deployment calibrators
-                are always fit on all out-of-sample scores.
-              </p>
-            </div>
+            <ModelPicker
+              value={modelChoice}
+              onChange={setModelChoice}
+              hint="Calibrators are fit on this model's out-of-sample scores and written next to it (data/model/<name>.calibrators.joblib)."
+            />
             <SeasonRange value={range} onChange={setRange} />
-            <RefreshToggle value={refresh} onChange={setRefresh} />
-            <FeatureToggles value={features} onChange={setFeatures} />
           </>
         }
         renderResult={(job) => <CalibrateRunResult job={job} />}
@@ -92,11 +66,12 @@ export function Calibration() {
         evaluate.
       </PrereqHint>
       <p className="muted config-intro">
-        The hold-out split (fit through / evaluate from) controls which
-        out-of-sample seasons calibrators are fit on and which they are
-        evaluated on for the deployment decision. Leave blank for the default
-        chronological two-thirds split. This configures the run — it does not
-        change the model.
+        A model is always judged on the newest season: calibrators are fit on
+        every out-of-sample season before it (after the model's training
+        window) and the deployment decision — calibrate or keep raw — is made
+        on that newest season only. Calibrators that do not improve the
+        hold-out Brier are not deployed. If the model was trained through the
+        dataset end, retrain it with an earlier end season first.
       </p>
       {state.phase === 'loading' ? (
         <Skeleton rows={6} />
@@ -125,6 +100,7 @@ function CalibrateRunResult({ job }: { job: { result: Record<string, unknown> | 
       <ul className="summary-list">
         <li>deployed: <code className="mono">{String(result.deployed)}</code></li>
         <li>fingerprint: <code className="mono">{String(result.fingerprint)}</code></li>
+        <li>calibrators: <code className="mono">{String(result.calibrators)}</code></li>
       </ul>
     </div>
   )

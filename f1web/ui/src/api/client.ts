@@ -118,7 +118,14 @@ export interface Standings {
 }
 
 export interface Status {
-  seasons: { start: number; end: number }
+  seasons: {
+    start: number
+    end: number
+    /** Dashboard clamp floor for pipeline season pickers (modern era). */
+    data_start: number
+    /** Latest season with fetched raw data (pipeline picker ceiling). */
+    data_end: number
+  }
   model: {
     checkpoint: string
     calibrators: string
@@ -142,6 +149,7 @@ export interface ModelInfo {
   params?: Record<string, number>
   features?: string[]
   fingerprint?: string
+  season_range?: [number, number]
   rows?: number
   seasons?: number
   trained_at?: number
@@ -250,7 +258,14 @@ export interface ConfigResponse {
     defaults: string[]
     categories: Record<string, string>
   }
-  seasons: { min: number; max: number }
+  seasons: {
+    min: number
+    max: number
+    /** Dashboard clamp floor for pipeline season pickers (modern era). */
+    data_start: number
+    /** Latest season with fetched raw data (pipeline picker ceiling). */
+    data_end: number
+  }
   model_params_keys: string[]
   jobs: string[]
 }

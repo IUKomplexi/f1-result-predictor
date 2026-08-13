@@ -218,7 +218,7 @@ def test_job_payload_forwards_all_cli_options(tmp_path, monkeypatch):
         log(f"payload={payload}")
         return {"echo": payload}
 
-    for job_type in ("train", "calibrate", "backtest", "search", "history"):
+    for job_type in ("train", "calibrate", "backtest", "search", "history", "features"):
         manager.register(job_type, fake_handler)
     client = TestClient(create_app(job_manager=manager))
 
@@ -232,15 +232,21 @@ def test_job_payload_forwards_all_cli_options(tmp_path, monkeypatch):
             "start": 2012, "end": 2024, "refresh": True,
             "fit_through_season": 2021, "eval_from_season": 2022,
             "enable_features": ["grid"], "disable_features": ["season"],
+            "model_path": "data/model/other.joblib",
         },
         "backtest": {
             "start": 2012, "end": 2024, "refresh": True, "quantize": False,
-            "use_checkpoint": True,
+            "use_checkpoint": True, "model_path": "data/model/other.joblib",
             "enable_features": ["grid"], "disable_features": ["season"],
         },
         "search": {
             "n": 8, "seed": 3, "max_test_season": 2020,
             "start": 2012, "end": 2024, "refresh": True,
+            "enable_features": ["grid"], "disable_features": ["season"],
+        },
+        "features": {
+            "start": 2012, "end": 2024, "refresh": True,
+            "max_test_season": 2022, "model_path": "data/model/other.joblib",
             "enable_features": ["grid"], "disable_features": ["season"],
         },
     }
@@ -271,6 +277,16 @@ def test_job_feature_toggles_must_be_list_of_strings(tmp_path, monkeypatch):
     )
     assert resp.status_code == 400
     assert "list of strings" in resp.json()["error"]
+
+
+def test_job_rejects_non_string_model_path(tmp_path, monkeypatch):
+    client = _jobs_client(tmp_path, monkeypatch)
+    resp = client.post(
+        "/api/jobs",
+        json={"type": "backtest", "payload": {"model_path": 123}},
+    )
+    assert resp.status_code == 400
+    assert "model_path" in resp.json()["error"]
 
 
 # ------------------------------------------------------------- model registry

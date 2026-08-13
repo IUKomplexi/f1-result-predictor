@@ -262,6 +262,14 @@ def test_api_status(client):
     assert set(data["model"]) == {"checkpoint", "calibrators", "has_checkpoint", "has_calibrators"}
 
 
+def test_api_status_exposes_season_hints(client):
+    """/api/status carries the picker clamp (modern era floor + data ceiling)."""
+    seasons = client.get("/api/status").json()["seasons"]
+    assert seasons["data_start"] == 2014
+    assert seasons["data_end"] >= seasons["data_start"]
+    assert seasons["start"] <= seasons["end"]
+
+
 def test_dashboard_not_built_is_503(client, monkeypatch):
     import f1web.app as app_module
 

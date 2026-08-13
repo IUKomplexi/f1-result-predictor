@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -52,6 +53,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
 from f1core.config import (
+    DATA_START_FLOOR,
     MODEL_PARAM_KEYS,
     SCHEMA,
     SEASON_MAX,
@@ -123,6 +125,24 @@ def _read_json(path: Path) -> dict | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def _data_end_season(cfg: dict) -> int:
+    """Latest season with cached raw data (fallback: the configured end).
+
+    Scans the raw cache dir for ``.../f1/<season>...`` filenames. The result
+    caps the pipeline season pickers (train/backtest/search/calibration) so a
+    run never silently references seasons that have no data yet — fetching new
+    seasons is the Data page's job, which uses the *configured* end instead.
+    """
+    cache_dir = REPO_ROOT / cfg["data"]["cache_dir"]
+    seasons: set[int] = set()
+    if cache_dir.is_dir():
+        for entry in cache_dir.glob("*.json"):
+            match = re.search(r"f1_(\d{4})", entry.name)
+            if match:
+                seasons.add(int(match.group(1)))
+    return max(seasons) if seasons else int(cfg["data"]["end_season"])
 
 
 def _data_client() -> F1Client:
@@ -240,7 +260,12 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
                 "defaults": default_enabled(),
                 "categories": {f.id: f.category for f in REGISTRY},
             },
-            "seasons": {"min": SEASON_MIN, "max": SEASON_MAX},
+            "seasons": {
+                "min": SEASON_MIN,
+                "max": SEASON_MAX,
+                "data_start": DATA_START_FLOOR,
+                "data_end": _data_end_season(cfg),
+            },
             "model_params_keys": sorted(MODEL_PARAM_KEYS),
             "jobs": sorted(JOB_TYPES),
         }
@@ -304,6 +329,9 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
                 return _error(f"{name}: unknown feature(s): {unknown}", 422)
         if "name" in payload and not isinstance(payload["name"], str):
             return _error("'name' must be a string", 400)
+        if "model_path" in payload and payload["model_path"] is not None \
+                and not isinstance(payload["model_path"], str):
+            return _error("'model_path' must be a string", 400)
         try:
             job_id = manager.submit(job_type, payload)
         except KeyError as exc:
@@ -510,6 +538,8 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
             "seasons": {
                 "start": cfg["data"]["start_season"],
                 "end": cfg["data"]["end_season"],
+                "data_start": DATA_START_FLOOR,
+                "data_end": _data_end_season(cfg),
             },
             "model": {
                 "checkpoint": cfg["model"]["checkpoint"],

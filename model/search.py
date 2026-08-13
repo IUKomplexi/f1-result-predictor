@@ -132,6 +132,23 @@ def run(
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    if end < start:
+        raise ValueError(f"search: end season {end} is before start season {start}")
+    n_seasons = end - start + 1
+    if n_seasons < 4:
+        raise ValueError(
+            f"search needs at least 4 seasons (3 to train on + 1 to test); "
+            f"{start}-{end} is only {n_seasons} seasons"
+        )
+    if max_test_season > end:
+        raise ValueError(
+            f"max_test_season {max_test_season} is after the search range end ({end})"
+        )
+    if max_test_season < start + 3:
+        raise ValueError(
+            f"max_test_season {max_test_season} leaves fewer than 3 earlier "
+            f"seasons to train on (start {start})"
+        )
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
     log(f"Building dataset {start}-{end} ...")
     df = build_dataset(client, range(start, end + 1), cache_path=dataset)

@@ -6,21 +6,19 @@ import {
   type Prediction,
   type PredictOverrides,
 } from '../../api/client'
-import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import './OverridePrediction.css'
 
 /**
  * Run a one-off prediction with ephemeral overrides (season/round, grid CSV,
- * feature toggles, refresh, model checkpoint, optional report file). Nothing
- * is written to config.toml; overrides apply to this request only.
+ * model checkpoint, optional report file). The model's own features are used —
+ * nothing is written to config.toml; overrides apply to this request only.
  */
 export function OverridePrediction() {
   const [season, setSeason] = useState<string>('')
   const [round, setRound] = useState<string>('')
   const [grid, setGrid] = useState<string>('')
-  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [refresh, setRefresh] = useState(false)
   const [models, setModels] = useState<ModelsResponse | null>(null)
   const [modelChoice, setModelChoice] = useState('default')
@@ -42,8 +40,6 @@ export function OverridePrediction() {
       if (season !== '') overrides.season = Number(season)
       if (round !== '') overrides.round = Number(round)
       if (grid.trim() !== '') overrides.grid_csv = grid
-      if (features.enable.length > 0) overrides.enable_features = features.enable
-      if (features.disable.length > 0) overrides.disable_features = features.disable
       if (refresh) overrides.refresh = true
       const checkpoint =
         modelChoice === 'custom'
@@ -68,11 +64,10 @@ export function OverridePrediction() {
     <section className="card">
       <h2 className="card-title">Specific race prediction</h2>
       <p className="muted config-intro">
-        Run a one-off prediction with ephemeral overrides — season/round, a
-        qualifying grid (CSV text with <code>driver_id,grid</code>), feature
-        toggles, a model checkpoint, and optionally the same Markdown report{' '}
-        <code>f1 predict</code> writes. Nothing is written to{' '}
-        <code>config.toml</code>.
+        Run a one-off prediction with a qualifying grid (CSV text with{' '}
+        <code>driver_id,grid</code>) against a saved model of your choice —
+        the model's own features are used. Season/round default to the next
+        race. Nothing is written to <code>config.toml</code>.
       </p>
       <div className="override-grid">
         <div className="field">
@@ -129,7 +124,7 @@ export function OverridePrediction() {
               checked={refresh}
               onChange={(e) => setRefresh(e.target.checked)}
             />
-            Refresh raw data (ignore cache)
+            Re-fetch from API (ignore cache)
           </label>
           <label className="check-line">
             <input
@@ -141,7 +136,6 @@ export function OverridePrediction() {
           </label>
         </div>
       </div>
-      <FeatureToggles value={features} onChange={setFeatures} />
       <div className="save-row">
         <button type="button" className="button" onClick={run} disabled={loading}>
           {loading ? 'Predicting…' : 'Predict'}

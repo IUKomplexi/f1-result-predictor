@@ -233,6 +233,7 @@ def run(
     out_json: str = "reports/backtest.json",
     quantize: bool = True,
     use_checkpoint: bool = False,
+    model_path: str | None = None,
     enable_features: Sequence[str] = (),
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
@@ -245,9 +246,11 @@ def run(
     dict is JSON-safe and carries the full ``backtest_snapshot`` so the web
     runner can refresh the dashboard views without re-reading the file.
 
-    ``use_checkpoint`` scores every season in the range with the *deployed*
-    checkpoint (``[model] checkpoint``) instead of walk-forward retraining —
-    the "how good is the current model on these seasons" mode.
+    ``model_path`` scores every season in the range with that saved checkpoint,
+    using the feature set the checkpoint was trained on (the feature toggles
+    are ignored — a model is tested with its own features). ``use_checkpoint``
+    is the legacy alias for the *deployed* checkpoint (``[model] checkpoint``);
+    ``model_path`` takes precedence when both are given.
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
@@ -257,7 +260,27 @@ def run(
     feats = enabled_features(
         cfg, enable=list(enable_features), disable=list(disable_features)
     )
-    if use_checkpoint:
+    checkpoint: str | None = None
+    if model_path:
+        from model.train import checkpoint_meta, load_checkpoint
+
+        checkpoint = model_path
+        meta = checkpoint_meta(checkpoint)
+        if not meta or "features" not in meta:
+            raise ValueError(
+                f"checkpoint {checkpoint} carries no feature list; retrain it "
+                "with the current model/train.py before backtesting"
+            )
+        feats = list(meta["features"])
+        model = load_checkpoint(checkpoint, expected=feats)
+        log(
+            f"Scoring with model {checkpoint} ({len(feats)} features, "
+            f"fp {feature_fingerprint(feats)})"
+        )
+        overall, by_season = run_backtest(
+            df, quantize=quantize, features=feats, model=model
+        )
+    elif use_checkpoint:
         from model.train import load_checkpoint
 
         checkpoint = cfg["model"]["checkpoint"]
@@ -296,6 +319,7 @@ def run(
         "features": feats,
         "n_features": len(feats),
         "fingerprint": feature_fingerprint(feats),
+        "checkpoint": checkpoint,
         "quantize": quantize,
         "report": out,
         "snapshot": snapshot,

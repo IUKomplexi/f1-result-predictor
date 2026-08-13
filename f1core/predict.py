@@ -445,10 +445,24 @@ def _featured_frame(client: F1Client, seasons: Sequence[int]) -> tuple[list[dict
 
 
 def _load_models(cfg: dict, model_path: str | None, feats: Sequence[str]) -> tuple:
-    """(checkpoint, model, calibrators) for the configured model + feature set."""
+    """(checkpoint, model, calibrators) for the configured model + feature set.
+
+    When ``model_path`` points at a checkpoint that was calibrated on its own
+    (``data/model/<stem>.calibrators.joblib``), those calibrators take
+    precedence; otherwise the shared ``[model] calibrators`` file is used (its
+    fingerprint must match ``feats``).
+    """
     checkpoint = model_path or cfg["model"]["checkpoint"]
     model = load_checkpoint(checkpoint, expected=feats)
-    calibrators = load_calibrators(cfg["model"]["calibrators"], expected=list(feats))
+    calibrators: dict | None = None
+    if model_path:
+        sibling = Path(model_path).with_name(
+            f"{Path(model_path).stem}.calibrators.joblib"
+        )
+        if sibling.is_file():
+            calibrators = load_calibrators(sibling, expected=list(feats))
+    if calibrators is None:
+        calibrators = load_calibrators(cfg["model"]["calibrators"], expected=list(feats))
     return checkpoint, model, calibrators
 
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import type { Job } from '../../api/client'
+import { getStatus, type Job } from '../../api/client'
+import { useApi } from '../../hooks/useApi'
 import { JobRunner } from '../ui/JobRunner'
 import {
   DEFAULT_SEASON_RANGE,
@@ -11,8 +12,11 @@ import { RefreshToggle } from '../ui/RefreshToggle'
 import './Data.css'
 
 export function Data() {
+  const status = useApi('status', () => getStatus())
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
   const [refresh, setRefresh] = useState(false)
+  const seasons =
+    status.state.phase === 'ready' ? status.state.data.seasons : null
   return (
     <>
       <JobRunner
@@ -21,16 +25,26 @@ export function Data() {
         buildPayload={() => ({ ...seasonPayload(range), refresh })}
         options={
           <>
-            <SeasonRange value={range} onChange={setRange} />
+            {/* Fetch is the one place that pulls NEW seasons, so the end
+                ceiling is the configured end season, not the cached max. */}
+            <SeasonRange
+              value={range}
+              onChange={setRange}
+              min={seasons?.data_start}
+              max={seasons?.end}
+            />
             <RefreshToggle value={refresh} onChange={setRefresh} />
           </>
         }
         renderResult={(job) => <FetchResult job={job} />}
       />
       <p className="muted config-intro">
-        Fetches cached raw results from the Jolpica API (offline afterwards) into{' '}
-        <code>data/raw</code>. Runs as a background job; only one pipeline step
-        runs at a time.
+        Downloads raw race data from the Jolpica API into <code>data/raw</code>{' '}
+        (cached — the pipeline runs offline afterwards). Pick the seasons to
+        fetch; every later step (train, backtest, search, calibration) reads
+        from this cache, so fetch new seasons here first. Leave the range blank
+        to fetch the configured <code>[data]</code> season range. Runs as a
+        background job; only one pipeline step runs at a time.
       </p>
     </>
   )

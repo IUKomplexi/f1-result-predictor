@@ -15,7 +15,9 @@ from model.evaluate import (
     run_backtest,
 )
 from model.train import (
+    FEATURES,
     HurdleModels,
+    checkpoint_meta,
     load_checkpoint,
     points_for_position,
     prepare,
@@ -196,6 +198,24 @@ def test_load_checkpoint_rejects_mismatched_features(tmp_path):
     joblib.dump({"models": None, "features": ["old_feature"]}, path)
     with pytest.raises(ValueError, match="does not match"):
         load_checkpoint(path)
+
+
+def test_checkpoint_meta_roundtrips_season_range(tmp_path):
+    """The training window is stored with the checkpoint and readable back."""
+    df = add_features(_synthetic_df(n_seasons=4))
+    feats = FEATURES
+    model = train_final_model(df, feats)
+    path = tmp_path / "hurdle-2015-2018.joblib"
+    save_checkpoint(model, path, features=feats, season_range=(2015, 2018))
+    meta = checkpoint_meta(path)
+    assert meta["season_range"] == [2015, 2018]
+    assert meta["features"] == feats
+    assert "fingerprint" in meta
+    # Legacy checkpoints (no season_range) degrade gracefully.
+    legacy = tmp_path / "legacy.joblib"
+    save_checkpoint(model, legacy, features=feats)
+    assert "season_range" not in checkpoint_meta(legacy)
+    assert checkpoint_meta(tmp_path / "missing.joblib") is None
 
 
 def test_quantize_points_rounds_to_table_values():

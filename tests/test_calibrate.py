@@ -7,16 +7,19 @@ import pandas as pd
 import pytest
 from test_model import _synthetic_df
 
+from features.build import add_features
 from model.calibrate import (
     TARGETS,
     apply_calibration,
     brier,
     collect_oos_scores,
+    collect_oos_scores_fixed,
     fit_calibrators,
     load_calibrators,
     reliability_table,
     save_calibrators,
 )
+from model.train import FEATURES, prepare, train_final_model
 
 
 def test_brier_and_reliability_table():
@@ -25,6 +28,22 @@ def test_brier_and_reliability_table():
     assert brier(y, p) == pytest.approx(((0.25) ** 2 * 4) / 4)
     table = reliability_table(y, p, bins=4)
     assert {"mean_pred", "observed", "n"} <= set(table.columns)
+
+
+def test_collect_oos_scores_fixed_matches_model_probs():
+    """The fixed-model collector scores every row with the given checkpoint."""
+    df = add_features(_synthetic_df(n_seasons=4))
+    feats = FEATURES
+    model = train_final_model(df, feats)
+    scores = collect_oos_scores_fixed(df, model, feats)
+    assert set(scores.columns) == {
+        "p_scored", "p_top3", "p_win", "scored", "top3", "win", "season",
+    }
+    assert len(scores) == len(df)
+    X, _ = prepare(df, feats)
+    probs = model.predict_probs(X)
+    np.testing.assert_allclose(scores["p_scored"], probs["p_scored"])
+    np.testing.assert_allclose(scores["p_top3"], probs["p_top3"])
 
 
 def test_fit_calibrators_fixes_overconfidence():

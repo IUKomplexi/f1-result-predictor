@@ -7,9 +7,10 @@ export function driverLabel(id: string | null | undefined): string {
     .replace(/\b[a-z]/g, (c) => c.toUpperCase())
 }
 
-export function fmtNumber(value: number | null | undefined, digits = 2): string {
+export function fmtNumber(value: number | null | undefined, digits = 2, sign = false): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '–'
-  return value.toFixed(digits)
+  const text = value.toFixed(digits)
+  return sign && value > 0 ? `+${text}` : text
 }
 
 export function fmtPoints(value: number | null | undefined): string {

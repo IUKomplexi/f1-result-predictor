@@ -7,6 +7,7 @@ import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { ModelPicker, modelCheckpointPath, useModels, type ModelSelection } from '../ui/ModelPicker'
 import { PrereqHint } from '../ui/PrereqHint'
 import { RefreshToggle } from '../ui/RefreshToggle'
 import {
@@ -41,14 +42,22 @@ const METRICS: { key: keyof BacktestMetricRow; label: string }[] = [
   { key: 'mae', label: 'MAE' },
 ]
 
+/**
+ * Backtest: pick a trained model and score every selected season with it
+ * (using the features it was trained on) — the "how good is THIS model" view.
+ * Walk-forward retraining and output quantization live under Advanced.
+ */
 export function Backtest() {
+  const [modelChoice, setModelChoice] = useState<ModelSelection>('default')
+  const [walkForward, setWalkForward] = useState(false)
   const [quantize, setQuantize] = useState(true)
-  const [useCheckpoint, setUseCheckpoint] = useState(false)
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
   const [refresh, setRefresh] = useState(false)
   const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [version, setVersion] = useState(0)
   const status = useApi('status', () => getStatus())
+  const { state: modelsState } = useModels()
+  const models = modelsState.phase === 'ready' ? modelsState.data : null
   const { state, retry } = useApi(`backtest-${version}`, () => getBacktest())
   return (
     <>
@@ -60,38 +69,60 @@ export function Backtest() {
           ...seasonPayload(range),
           refresh,
           quantize,
-          use_checkpoint: useCheckpoint,
-          enable_features: features.enable,
-          disable_features: features.disable,
+          // With a model chosen (or the config default), score with that fixed
+          // model. Walk-forward retraining is the explicit advanced opt-in.
+          use_checkpoint: !walkForward,
+          model_path: walkForward ? null : modelCheckpointPath(models, modelChoice),
+          enable_features: walkForward ? features.enable : [],
+          disable_features: walkForward ? features.disable : [],
         })}
         options={
           <>
-            <div className="job-option">
-              <label className="check-line" title="Round expected points to the nearest points-table value (matches the deployed predictor).">
-                <input
-                  type="checkbox"
-                  checked={quantize}
-                  onChange={(e) => setQuantize(e.target.checked)}
-                />
-                Quantize points
-              </label>
-            </div>
-            <div className="job-option">
-              <label
-                className="check-line"
-                title="Score every season with the deployed checkpoint instead of walk-forward retraining — 'how good is the current model on these seasons' (in-sample w.r.t. its own training data)."
-              >
-                <input
-                  type="checkbox"
-                  checked={useCheckpoint}
-                  onChange={(e) => setUseCheckpoint(e.target.checked)}
-                />
-                Use deployed checkpoint
-              </label>
-            </div>
+            <ModelPicker
+              value={modelChoice}
+              onChange={setModelChoice}
+              disabled={walkForward}
+            />
             <SeasonRange value={range} onChange={setRange} />
             <RefreshToggle value={refresh} onChange={setRefresh} />
-            <FeatureToggles value={features} onChange={setFeatures} />
+            <details className="advanced-options">
+              <summary>Advanced</summary>
+              <div className="job-options-inner">
+                <div className="job-option">
+                  <label
+                    className="check-line"
+                    title="Ignore the selected model and retrain on every test season (train = all strictly earlier seasons)."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={walkForward}
+                      onChange={(e) => setWalkForward(e.target.checked)}
+                    />
+                    Walk-forward retraining
+                  </label>
+                  <p className="job-option-hint">
+                    Honest out-of-sample estimates, but does not tell you how
+                    good the model you just trained is.
+                  </p>
+                </div>
+                <div className="job-option">
+                  <label
+                    className="check-line"
+                    title="Round expected points to the nearest points-table value (matches the deployed predictor)."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={quantize}
+                      onChange={(e) => setQuantize(e.target.checked)}
+                    />
+                    Quantize points
+                  </label>
+                </div>
+                {walkForward ? (
+                  <FeatureToggles value={features} onChange={setFeatures} />
+                ) : null}
+              </div>
+            </details>
           </>
         }
         renderResult={(job) => <BacktestRunResult job={job} />}
@@ -99,8 +130,8 @@ export function Backtest() {
       <PrereqHint
         when={status.state.phase === 'ready' && !status.state.data.model.has_checkpoint}
       >
-        No model checkpoint yet — run Train first, or backtest will retrain from
-        scratch on every season (much slower).
+        No model checkpoint yet — run Train first so there is a model to
+        score.
       </PrereqHint>
       {state.phase === 'loading' ? (
         <Skeleton rows={8} />
@@ -115,6 +146,7 @@ export function Backtest() {
 
 function BacktestRunResult({ job }: { job: { result: Record<string, unknown> | null; log: string[] } }) {
   const overall = (job.result?.overall ?? {}) as Record<string, Record<string, number>>
+  const checkpoint = job.result?.checkpoint as string | undefined
   return (
     <div className="result-block">
       <h3 className="card-title">Backtest run</h3>
@@ -126,6 +158,11 @@ function BacktestRunResult({ job }: { job: { result: Record<string, unknown> | n
           ))}
         </details>
       )}
+      {checkpoint ? (
+        <p className="summary-list">
+          Model: <code className="mono">{checkpoint}</code>
+        </p>
+      ) : null}
       <div className="table-wrap">
         <table className="data-table">
           <thead>
@@ -160,7 +197,7 @@ function BacktestView({ backtest }: { backtest: Backtest }) {
   return (
     <>
       <section className="card">
-        <h2 className="card-title">Model vs baselines (walk-forward, mean)</h2>
+        <h2 className="card-title">Model vs baselines (mean)</h2>
         <div className="table-wrap">
           <table className="data-table">
             <thead>

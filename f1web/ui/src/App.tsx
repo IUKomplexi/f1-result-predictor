@@ -33,6 +33,9 @@ const Train = lazy(() =>
 const Search = lazy(() =>
   import('./components/search/Search').then((m) => ({ default: m.Search })),
 )
+const FeatureLab = lazy(() =>
+  import('./components/features/FeatureLab').then((m) => ({ default: m.FeatureLab })),
+)
 const Settings = lazy(() =>
   import('./components/settings/Settings').then((m) => ({ default: m.Settings })),
 )
@@ -44,6 +47,7 @@ type TabId =
   | 'data'
   | 'train'
   | 'search'
+  | 'features'
   | 'backtest'
   | 'calibration'
   | 'specific'
@@ -63,6 +67,7 @@ const TABS: TabEntry[] = [
   { id: 'data', label: 'Data', component: Data },
   { id: 'train', label: 'Train', component: Train },
   { id: 'search', label: 'Search', component: Search },
+  { id: 'features', label: 'Feature Lab', component: FeatureLab },
   { id: 'backtest', label: 'Backtest', component: Backtest },
   { id: 'calibration', label: 'Calibration', component: Calibration },
   { id: 'specific', label: 'Specific Race', component: OverridePrediction },

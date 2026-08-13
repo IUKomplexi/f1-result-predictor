@@ -35,6 +35,7 @@ JOB_TYPES: dict[str, str] = {
     "calibrate": "Calibrate",
     "backtest": "Backtest",
     "search": "Search",
+    "features": "Feature evaluation",
 }
 
 # Payload keys each job type accepts (defaults are read from config / sensible
@@ -49,15 +50,19 @@ JOB_PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     "calibrate": (
         "start", "end", "refresh",
         "fit_through_season", "eval_from_season",
-        "enable_features", "disable_features",
+        "enable_features", "disable_features", "model_path",
     ),
     "backtest": (
         "start", "end", "refresh", "quantize", "use_checkpoint",
-        "enable_features", "disable_features",
+        "enable_features", "disable_features", "model_path",
     ),
     "search": (
         "n", "seed", "max_test_season", "start", "end", "refresh",
         "enable_features", "disable_features",
+    ),
+    "features": (
+        "start", "end", "refresh", "max_test_season",
+        "enable_features", "disable_features", "model_path",
     ),
 }
 
@@ -260,6 +265,7 @@ def _calibrate_handler(payload: dict, log) -> dict:
         cfg=cfg, log=log,
         fit_through_season=_int_or_none(payload.get("fit_through_season")),
         eval_from_season=_int_or_none(payload.get("eval_from_season")),
+        model_path=_str_or_none(payload.get("model_path")),
     )
 
 
@@ -273,6 +279,13 @@ def _int_or_none(value) -> int | None:
         return None
 
 
+def _str_or_none(value) -> str | None:
+    """A non-empty string payload value, else None."""
+    if not isinstance(value, str) or value.strip() == "":
+        return None
+    return value.strip()
+
+
 def _backtest_handler(payload: dict, log) -> dict:
     from model.evaluate import run as run_backtest
 
@@ -284,6 +297,7 @@ def _backtest_handler(payload: dict, log) -> dict:
         cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
         quantize=bool(payload.get("quantize", True)),
         use_checkpoint=bool(payload.get("use_checkpoint", False)),
+        model_path=_str_or_none(payload.get("model_path")),
         refresh=bool(payload.get("refresh", False)),
         enable_features=enable, disable_features=disable,
         cfg=cfg, log=log,
@@ -307,6 +321,22 @@ def _search_handler(payload: dict, log) -> dict:
     )
 
 
+def _features_handler(payload: dict, log) -> dict:
+    from model.features_eval import run as run_features_eval
+
+    cfg = _load_config()
+    start, end = _cfg_start_end(cfg, payload)
+    enable, disable = _feature_toggles(payload)
+    return run_features_eval(
+        start=start, end=end, refresh=bool(payload.get("refresh", False)),
+        cache_dir=cfg["data"]["cache_dir"], dataset=cfg["data"]["dataset"],
+        max_test_season=_int_or_none(payload.get("max_test_season")),
+        model_path=_str_or_none(payload.get("model_path")),
+        enable_features=enable, disable_features=disable,
+        cfg=cfg, log=log,
+    )
+
+
 def _load_config() -> dict:
     from f1core.config import load_config
 
@@ -323,4 +353,5 @@ def register_default_handlers(manager: JobManager) -> JobManager:
     manager.register("calibrate", _calibrate_handler)
     manager.register("backtest", _backtest_handler)
     manager.register("search", _search_handler)
+    manager.register("features", _features_handler)
     return manager

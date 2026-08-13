@@ -78,6 +78,31 @@ def collect_oos_scores(
     return pd.concat(chunks)
 
 
+def collect_oos_scores_fixed(
+    df: pd.DataFrame, model, features: list[str] | None = None
+) -> pd.DataFrame:
+    """Raw probabilities of one *fixed* model on every row of ``df``.
+
+    Used to calibrate a saved checkpoint: the caller decides which seasons are
+    genuinely out-of-sample (after the model's training window) and filters the
+    result. Same output columns as :func:`collect_oos_scores`.
+    """
+    X, _ = prepare(df, features)
+    probs = model.predict_probs(X)
+    return pd.DataFrame(
+        {
+            "p_scored": probs["p_scored"],
+            "p_top3": probs["p_top3"],
+            "p_win": probs["p_win"],
+            "scored": df["scored"].to_numpy(dtype=int),  # type: ignore[reportAttributeAccessIssue]
+            "top3": df["top3"].to_numpy(dtype=int),  # type: ignore[reportAttributeAccessIssue]
+            "win": df["win"].to_numpy(dtype=int),  # type: ignore[reportAttributeAccessIssue]
+            "season": df["season"].to_numpy(),  # type: ignore[reportAttributeAccessIssue]
+        },
+        index=df.index,
+    )
+
+
 # --------------------------------------------------------------------------
 # Calibrators
 # --------------------------------------------------------------------------
@@ -291,6 +316,7 @@ def run(
     log=None,
     fit_through_season: int | None = None,
     eval_from_season: int | None = None,
+    model_path: str | None = None,
 ) -> dict:
     """Fit + deploy calibrators end-to-end and return a JSON-safe summary.
 
@@ -299,6 +325,14 @@ def run(
     snapshot; the returned dict carries the full ``calibration_snapshot`` so
     the web runner can refresh the dashboard view without re-reading the file.
 
+    ``model_path`` calibrates a *saved checkpoint*: the checkpoint's own
+    feature set is used (the feature toggles are ignored), out-of-sample
+    scores come from that fixed model on seasons after its training window,
+    and the deployment decision is evaluated on the newest such season only.
+    Calibrators are written next to the model
+    (``data/model/<stem>.calibrators.joblib``) so each model keeps its own.
+
+    Without ``model_path`` the legacy walk-forward behaviour applies:
     ``fit_through_season`` / ``eval_from_season`` optionally override the
     hold-out split used for the *evaluation* Brier deltas (which calibrators
     are deployed): with both set, calibrators for evaluation are fit on OOS
@@ -316,28 +350,82 @@ def run(
         cfg, enable=list(enable_features), disable=list(disable_features)
     )
 
-    log(f"Collecting out-of-sample scores ({len(feats)} features, fp {feature_fingerprint(feats)})")
-    oos = collect_oos_scores(df, feats)
+    if model_path:
+        from model.train import checkpoint_meta, load_checkpoint
+
+        meta = checkpoint_meta(model_path)
+        if not meta or "features" not in meta:
+            raise ValueError(
+                f"checkpoint {model_path} carries no feature list; retrain it "
+                "with the current model/train.py before calibrating"
+            )
+        feats = list(meta["features"])
+        train_range = meta.get("season_range")
+        if not train_range:
+            raise ValueError(
+                f"checkpoint {model_path} has no recorded training window; "
+                "retrain it with the current model/train.py before calibrating"
+            )
+        model = load_checkpoint(model_path, expected=feats)
+        log(
+            f"Scoring with model {model_path} ({len(feats)} features, "
+            f"trained {train_range[0]}-{train_range[1]})"
+        )
+        scores = collect_oos_scores_fixed(df, model, feats)
+        train_end = int(train_range[1])
+        oos = scores[scores["season"] > train_end]  # type: ignore[reportAttributeAccessIssue]
+        if oos.empty:
+            raise ValueError(
+                f"model {model_path} was trained through {train_end} — no "
+                f"out-of-sample seasons remain in {start}-{end}. Retrain the "
+                "model with an earlier end season (leave the newest season "
+                "out), or fetch newer data first."
+            )
+        oos_seasons = sorted(int(s) for s in oos["season"].unique())
+        log(f"Out-of-sample seasons for this model: {oos_seasons}")
+        # The model is always judged on the newest season: fit calibrators on
+        # every earlier OOS season, evaluate the deployment decision on the
+        # newest one only.
+        fit_through_season = oos_seasons[-1] - 1
+        eval_from_season = oos_seasons[-1]
+        cal_out = str(Path(model_path).with_name(
+            f"{Path(model_path).stem}.calibrators.joblib"
+        ))
+        log(f"Calibrators for this model will be written to {cal_out}")
+    else:
+        cal_out = out
+        log(
+            f"Collecting out-of-sample scores "
+            f"({len(feats)} features, fp {feature_fingerprint(feats)})"
+        )
+        oos = collect_oos_scores(df, feats)
     # Deployment calibrators: fit on ALL out-of-sample scores (most data).
     calibrators = fit_calibrators(oos)
-    save_calibrators(calibrators, out, features=feats)
+    save_calibrators(calibrators, cal_out, features=feats)
 
     # Honest evaluation: fit calibrators on the earlier OOS seasons only and
     # evaluate on the later ones, so the reported Brier deltas are not
     # in-sample for the calibration step. An explicit split (fit through /
     # evaluate from) overrides the default two-thirds chronological split.
     fit_oos, eval_oos = _holdout_split(oos, fit_through_season, eval_from_season)
-    if len(eval_oos) < 200:
+    if len(eval_oos) < 200 or fit_oos.empty:
         eval_oos = oos
         context = f"in-sample (too few hold-out rows; fit+eval on the same {len(oos)} OOS rows)"
         eval_cal = calibrators
     else:
         eval_cal = fit_calibrators(fit_oos)  # type: ignore[reportArgumentType]  # boolean-mask slice is Unknown
-        context = (
-            f"chronological hold-out: calibrators fit on OOS seasons "
-            f"{min(fit_oos['season'])}-{max(fit_oos['season'])}, evaluated on "
-            f"seasons {min(eval_oos['season'])}-{max(eval_oos['season'])}"
-        )
+        if model_path:
+            context = (
+                f"model {Path(model_path).name}: calibrators fit on OOS seasons "
+                f"{min(fit_oos['season'])}-{max(fit_oos['season'])}, evaluated "
+                f"on the newest season {max(eval_oos['season'])}"
+            )
+        else:
+            context = (
+                f"chronological hold-out: calibrators fit on OOS seasons "
+                f"{min(fit_oos['season'])}-{max(fit_oos['season'])}, evaluated on "
+                f"seasons {min(eval_oos['season'])}-{max(eval_oos['season'])}"
+            )
 
     # Deploy a calibrator only where it improves hold-out Brier; other targets
     # keep their raw scores.
@@ -348,9 +436,9 @@ def run(
         < brier(eval_oos[target], eval_oos[score])
     }
     deployment = {t: calibrators[t] for t in keep}
-    save_calibrators(deployment, out, features=feats)
+    save_calibrators(deployment, cal_out, features=feats)
     log(f"Deployed calibrators: {', '.join(sorted(keep)) if keep else 'none (raw kept)'}")
-    log(f"Wrote {out}")
+    log(f"Wrote {cal_out}")
 
     snapshot = calibration_snapshot(
         eval_oos, eval_cal, keep=keep, context=context  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
@@ -364,7 +452,8 @@ def run(
         "deployed": sorted(keep),
         "n_features": len(feats),
         "fingerprint": feature_fingerprint(feats),
-        "calibrators": out,
+        "calibrators": cal_out,
+        "checkpoint": model_path,
         "snapshot": snapshot,
         "summary": summarize(eval_oos, eval_cal, context=context, keep=keep),  # type: ignore[reportArgumentType]  # eval_oos is a boolean-mask slice (Unknown)
     }

@@ -148,14 +148,14 @@ function RacePanel({ season, round }: { season: number; round: number }) {
       <section className="card race-refresh-row">
         <label
           className="check-line"
-          title="Ignore the raw-data cache and re-fetch from the API (CLI --refresh)."
+          title="Re-download raw data from Jolpica instead of reusing the cached data/raw files (CLI --refresh)."
         >
           <input
             type="checkbox"
             checked={refresh}
             onChange={(e) => setRefresh(e.target.checked)}
           />
-          Refresh raw data (ignore cache)
+          Re-fetch from API (ignore cache)
         </label>
       </section>
       <RaceTable prediction={state.data} />

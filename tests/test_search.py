@@ -6,7 +6,7 @@ import pytest
 from test_model import _synthetic_df
 
 from features.build import add_features
-from model.search import evaluate_config, sample_configs, search
+from model.search import evaluate_config, run, sample_configs, search
 
 
 def test_sample_configs_seeded_and_in_range():
@@ -55,3 +55,15 @@ def test_evaluate_config_matches_run_backtest_aggregation():
     # overall is rounded to 4 decimals by run_backtest.
     assert mae == pytest.approx(overall.loc["model", "mae"], abs=5e-5)
     assert spearman == pytest.approx(overall.loc["model", "spearman"], abs=5e-5)
+
+
+def test_run_validates_season_window_before_building_data():
+    """Bad search windows fail fast with an actionable message (no fetch)."""
+    with pytest.raises(ValueError, match="at least 4 seasons"):
+        run(n=4, seed=0, max_test_season=2019, start=2024, end=2026)
+    with pytest.raises(ValueError, match="after the search range end"):
+        run(n=4, seed=0, max_test_season=2026, start=2015, end=2025)
+    with pytest.raises(ValueError, match="fewer than 3 earlier seasons"):
+        run(n=4, seed=0, max_test_season=2017, start=2015, end=2025)
+    with pytest.raises(ValueError, match="before start season"):
+        run(n=4, seed=0, max_test_season=2019, start=2024, end=2020)

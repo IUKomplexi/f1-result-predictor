@@ -166,3 +166,7 @@
 .save-status.error {
   color: var(--danger);
 }
+
+.field .link-button + .link-button {
+  margin-left: var(--space-3);
+}

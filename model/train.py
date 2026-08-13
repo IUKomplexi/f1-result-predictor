@@ -291,13 +291,18 @@ def _joblib_load(path: Path) -> Any:
 
 
 def save_checkpoint(
-    models: HurdleModels, path: str | Path, features: Sequence[str] | None = None
+    models: HurdleModels,
+    path: str | Path,
+    features: Sequence[str] | None = None,
+    season_range: tuple[int, int] | None = None,
 ) -> None:
     """Persist the model plus the feature set (and its fingerprint) it was trained on.
 
     ``features`` defaults to the full ``FEATURES`` set. The stored fingerprint
     lets :func:`load_checkpoint` reject a checkpoint trained on a different
-    feature selection instead of silently reusing it.
+    feature selection instead of silently reusing it. ``season_range`` records
+    the training window (used by calibration to know which seasons are truly
+    out-of-sample for this model).
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -311,16 +316,38 @@ def save_checkpoint(
         sys.modules["model.train"] = sys.modules["__main__"]
     for cls in (HurdleModels, _ConstantProb, _ConstantPoints):
         cls.__module__ = "model.train"
-    _joblib_dump(
-        {
-            "models": models,
-            "features": feats,
-            "fingerprint": feature_fingerprint(feats),
-        },
-        path,
-    )
+    payload: dict[str, Any] = {
+        "models": models,
+        "features": feats,
+        "fingerprint": feature_fingerprint(feats),
+    }
+    if season_range is not None:
+        payload["season_range"] = [int(season_range[0]), int(season_range[1])]
+    _joblib_dump(payload, path)
     logger.info("Saved checkpoint (%d features, fp %s) to %s",
                 len(feats), feature_fingerprint(feats), path)
+
+
+def checkpoint_meta(path: str | Path) -> dict[str, Any] | None:
+    """Best-effort metadata from a checkpoint file (features/fingerprint/season_range).
+
+    Returns None for a missing file; missing keys are simply absent from the
+    dict so legacy checkpoints (no ``season_range``) degrade gracefully.
+    """
+    p = Path(path)
+    if not p.is_file():
+        return None
+    try:
+        payload = _joblib_load(p)
+    except (OSError, ValueError, KeyError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    meta: dict[str, Any] = {}
+    for key in ("features", "fingerprint", "season_range"):
+        if key in payload:
+            meta[key] = payload[key]
+    return meta or None
 
 
 def update_model_index(path: str | Path, meta: dict) -> Path:
@@ -405,12 +432,16 @@ def run(
         f"seasons), {len(feats)} features (fp {feature_fingerprint(feats)})"
     )
     models = train_final_model(df, feats, params=model_params(cfg))
-    save_checkpoint(models, out, features=feats)
+    # Record the ACTUAL data window the model saw (the requested start..end may
+    # include seasons with no fetched data).
+    actual_range = (int(df["season"].min()), int(df["season"].max()))  # type: ignore[reportAttributeAccessIssue]
+    save_checkpoint(models, out, features=feats, season_range=actual_range)
     index_path = update_model_index(out, {
         "checkpoint": out,
         "params": model_params(cfg),
         "features": feats,
         "fingerprint": feature_fingerprint(feats),
+        "season_range": list(actual_range),
         "rows": len(df),
         "seasons": int(df["season"].nunique()),
         "trained_at": time.time(),
