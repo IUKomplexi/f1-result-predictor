@@ -36,6 +36,20 @@ from features.build import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 Category = Literal["core", "selectable", "cut"]
 CATEGORIES: tuple[Category, ...] = ("core", "selectable", "cut")
 
+# Display labels, in CATEGORIES order (the dashboard renders feature groups
+# from category_meta() — see GET /api/config — so this is the single source
+# of truth for the UI group ordering and titles).
+CATEGORY_LABELS: dict[Category, str] = {
+    "core": "Core — on by default",
+    "selectable": "Selectable — off by default",
+    "cut": "Cut — removal improved the backtest",
+}
+
+
+def category_meta() -> list[dict[str, str]]:
+    """Display metadata for every category, in CATEGORIES display order."""
+    return [{"id": category, "label": CATEGORY_LABELS[category]} for category in CATEGORIES]
+
 
 @dataclass(frozen=True)
 class FeatureSpec:
@@ -202,6 +216,11 @@ def _validate_registry() -> None:
             raise AssertionError(
                 f"{f.id}: kind {f.kind!r} does not match the feature lists"
             )
+    # Every category needs a display label so category_meta() (the dashboard
+    # feature-group rendering) can never come up half-empty.
+    for category in CATEGORIES:
+        if category not in CATEGORY_LABELS:
+            raise AssertionError(f"category {category!r} has no entry in CATEGORY_LABELS")
 
 
 _validate_registry()

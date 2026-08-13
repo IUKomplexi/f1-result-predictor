@@ -76,7 +76,7 @@ from f1data import (
     fetch_driver_standings,
 )
 from f1web.jobs import JOB_PAYLOAD_KEYS, JOB_TYPES, JobManager, register_default_handlers
-from features.registry import REGISTRY, all_feature_ids, default_enabled
+from features.registry import REGISTRY, all_feature_ids, category_meta, default_enabled
 
 # Anchored to the repo root so reports resolve regardless of the server's
 # working directory.
@@ -259,6 +259,7 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
                 "registry": all_feature_ids(),
                 "defaults": default_enabled(),
                 "categories": {f.id: f.category for f in REGISTRY},
+                "category_meta": category_meta(),
             },
             "seasons": {
                 "min": SEASON_MIN,

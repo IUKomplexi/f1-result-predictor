@@ -214,6 +214,8 @@ export interface ConfigResponse {
     registry: string[]
     defaults: string[]
     categories: Record<string, string>
+    /** Display order + labels for the feature groups (see features/registry.py). */
+    category_meta: { id: string; label: string }[]
   }
   seasons: {
     min: number

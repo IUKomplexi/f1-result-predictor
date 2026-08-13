@@ -12,6 +12,7 @@ from features.registry import (
     CATEGORIES,
     REGISTRY,
     all_feature_ids,
+    category_meta,
     default_enabled,
     enabled_features,
     feature_fingerprint,
@@ -64,6 +65,15 @@ def test_registry_complete_and_consistent():
     # every category is actually used
     used = {spec.category for spec in REGISTRY}
     assert used <= set(CATEGORIES)
+
+
+def test_category_meta_covers_all_categories_in_order():
+    """category_meta() drives the dashboard feature groups: every category
+    has a label, in CATEGORIES display order, with no extras."""
+    meta = category_meta()
+    assert [m["id"] for m in meta] == list(CATEGORIES)
+    assert all(m["label"] for m in meta)
+    assert all(m["id"] in CATEGORIES for m in meta)
 
 
 def test_defaults_roundtrip():
