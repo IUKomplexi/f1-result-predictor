@@ -33,8 +33,7 @@ export function Train() {
         <>
           <SeasonRange value={range} onChange={setRange} />
           <p className="job-option-hint">
-            New raw data fetched on the Data tab is picked up automatically —
-            the dataset rebuilds whenever the raw cache is newer.
+            New data you fetch on the Data tab is picked up automatically.
           </p>
           <div className="job-option">
             <label className="field-label" htmlFor="train-name">Model name</label>
@@ -47,10 +46,9 @@ export function Train() {
               placeholder={suggestion}
             />
             <p className="job-option-hint">
-              Blank overwrites the configured checkpoint; a name saves a separate{' '}
-              <code>data/model/&lt;name&gt;.joblib</code> you can pick on Specific Race.
-              Only letters, digits, <code>.</code>, <code>_</code> and <code>-</code> are
-              allowed — other characters are stripped as you type.
+              Leave empty to replace the current model. Type a name to save a
+              new model you can pick on the Race tab. Only letters, numbers,
+              <code>.</code>, <code>_</code> and <code>-</code> are allowed.
             </p>
           </div>
           <FeatureToggles value={features} onChange={setFeatures} />
@@ -95,10 +93,9 @@ function TrainResult({ job }: { job: Job }) {
         <li>checkpoint: <code className="mono">{named}</code></li>
       </ul>
       <p className="job-option-hint">
-        Trained and calibrated. To check how good it is, open the{' '}
+        Done. To see how good it is, open the{' '}
         <strong>Backtest</strong> tab and pick{' '}
-        {stem ? <code className="mono">{stem}</code> : 'the config-default model'} — it will
-        score seasons with exactly the features this model was trained on.
+        {stem ? <code className="mono">{stem}</code> : 'the default model'}.
       </p>
     </div>
   )

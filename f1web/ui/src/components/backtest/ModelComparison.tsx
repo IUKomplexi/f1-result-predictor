@@ -20,8 +20,8 @@ export function ModelComparison({ backtest, reference }: { backtest: Backtest; r
     <section className="card">
       <h2 className="card-title">Model comparison</h2>
       <p className="context-note">
-        Each saved model scores the same seasons with its own feature set — the
-        baselines are identical across models, so only the model lines differ.
+        All models are scored on the same seasons. Baselines are identical, so
+        only the model lines differ.
       </p>
       <div className="chart-grid">
         {METRICS.map((metric) => (

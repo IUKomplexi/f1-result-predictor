@@ -97,9 +97,9 @@ export function BacktestView({ backtest, reference }: { backtest: Backtest; refe
       <section className="card">
         <h2 className="card-title">Model edge vs baselines (per season)</h2>
         <p className="context-note">
-          Positive means the model beat the baseline that season (for MAE,
-          lower is better, so the edge is reversed). See how much better/worse
-          the model is than the grid / championship across seasons.
+          Above 0 = the model was better than that baseline in that season.
+          MAE is reversed (lower is better), so a positive edge is good there
+          too.
         </p>
         <div className="chart-grid">
           {METRICS.map((metric) => (

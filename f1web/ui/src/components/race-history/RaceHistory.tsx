@@ -110,17 +110,16 @@ export function RaceHistory({ onNavigate }: TabProps) {
                 value={refresh}
                 onChange={setRefresh}
                 label="Recompute all races (ignore prediction cache)"
-                hint="Off by default: Race History reuses the cached season snapshots in data/predictions. Turn on after a re-fetch or retrain to recompute every round."
+                hint="Off by default: old results are reused. Turn on after a re-fetch or retrain to calculate everything again."
               />
             </>
           }
           renderResult={(job) => <HistoryRunResult job={job} />}
         />
         <p className="muted">
-          Scores every completed round of the selected seasons once and caches
-          whole-season snapshots, so opening Race History afterwards is instant.
-          Run again after new race data or a retrain (use Refresh to clear the
-          cache).
+          Calculates all past races of these seasons once, so opening Race
+          History afterwards is fast. Run again after new race data or a
+          retrain (use Refresh to clear the saved results).
         </p>
       </section>
 

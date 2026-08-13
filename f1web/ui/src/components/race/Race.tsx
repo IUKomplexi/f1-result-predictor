@@ -215,7 +215,7 @@ function RacePanel({ season, round }: { season: number; round: number }) {
           <div className="race-toggles">
             <label
               className="check-line"
-              title="Re-download raw data from Jolpica instead of reusing the cached data/raw files (CLI --refresh)."
+              title="Download fresh data instead of using the saved copy."
             >
               <input
                 type="checkbox"
@@ -226,7 +226,7 @@ function RacePanel({ season, round }: { season: number; round: number }) {
             </label>
             <label
               className="check-line"
-              title="Write the same Markdown report the CLI produces to the configured [report] prediction path (CLI --out)."
+              title="Save the result as reports/prediction.md."
             >
               <input
                 type="checkbox"

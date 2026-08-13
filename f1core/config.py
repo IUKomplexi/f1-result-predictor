@@ -119,7 +119,7 @@ def _infer_type(value: Any) -> str:
 # DEFAULTS (plus an optional hint here).
 _SCHEMA_HINTS: dict[tuple[str, str], dict[str, Any]] = {
     ("api", "base_url"): {"help": "Jolpica (Ergast-compatible) API base URL"},
-    ("api", "user_agent"): {"help": "HTTP User-Agent (Jolpica terms require a descriptive one)"},
+    ("api", "user_agent"): {"help": "Name sent to the API (Jolpica requires a real one)"},
     ("api", "sleep_seconds"): {
         "min": 0.0, "max": 60.0, "help": "Seconds between API requests",
     },
@@ -127,33 +127,31 @@ _SCHEMA_HINTS: dict[tuple[str, str], dict[str, Any]] = {
         "min": 1.0, "max": 300.0, "help": "Request timeout (seconds)",
     },
     ("api", "max_retries"): {
-        "min": 0, "max": 20, "help": "Request retries before failing",
+        "min": 0, "max": 20, "help": "How often to retry failed requests",
     },
-    ("data", "cache_dir"): {"help": "Directory for cached raw API responses"},
-    ("data", "dataset"): {"help": "Path to the featured parquet dataset"},
+    ("data", "cache_dir"): {"help": "Folder for saved API data"},
+    ("data", "dataset"): {"help": "Path to the built dataset file"},
     ("data", "start_season"): {
         "min": SEASON_MIN, "max": SEASON_MAX,
-        "help": "First training season. The dashboard clamps pipeline runs to "
-                "the modern era (2014+).",
+        "help": "First season used for training.",
     },
     ("data", "end_season"): {
         "min": SEASON_MIN, "max": SEASON_MAX,
-        "help": "Last training season. The live data ends here; the dashboard "
-                "clamps pipeline runs to the latest season with fetched data.",
+        "help": "Last season used for training (newest data).",
     },
-    ("model", "checkpoint"): {"help": "Model checkpoint path"},
-    ("model", "calibrators"): {"help": "Calibrator checkpoint path"},
+    ("model", "checkpoint"): {"help": "Path of the trained model"},
+    ("model", "calibrators"): {"help": "Path of the calibrated probabilities"},
     ("model", "seed"): {
         "min": 0, "max": 2**31 - 1, "help": "Random seed for model fitting",
     },
     ("model", "params"): {
-        "help": "HGB hyperparameters (max_iter, learning_rate, max_depth, "
-                "l2_regularization, min_samples_leaf)",
+        "help": "Model settings (max_iter, learning_rate, max_depth, "
+                "l2_regularization, min_samples_leaf). Retrain after changing.",
     },
-    ("report", "backtest"): {"help": "Backtest markdown report path"},
-    ("report", "prediction"): {"help": "Prediction markdown report path"},
+    ("report", "backtest"): {"help": "Backtest report file path"},
+    ("report", "prediction"): {"help": "Prediction report file path"},
     ("features", "enabled"): {
-        "help": "Explicit feature selection; empty falls back to registry defaults",
+        "help": "Which features the model uses. Empty = the defaults",
     },
 }
 

@@ -88,9 +88,8 @@ export function Backtest() {
                 ))}
               </div>
               <p className="job-option-hint">
-                Each selected model scores the same seasons with its own features. Pick two
-                or more to get comparison charts below; uncheck all to score the deployed
-                checkpoint via the config feature set.
+                Pick one or more models. Two or more also shows comparison
+                charts. None selected = the default model.
               </p>
             </div>
             <SeasonRange value={range} onChange={setRange} />
@@ -100,7 +99,7 @@ export function Backtest() {
                 <div className="job-option">
                   <label
                     className="check-line"
-                    title="Ignore the selected models and retrain on every test season (train = all strictly earlier seasons)."
+                    title="Retrain for each season instead of using the saved models. Only for testing."
                   >
                     <input
                       type="checkbox"
@@ -110,14 +109,13 @@ export function Backtest() {
                     Walk-forward retraining
                   </label>
                   <p className="job-option-hint">
-                    Honest out-of-sample estimates, but does not tell you how
-                    good the model you just trained is.
+                    More realistic, but doesn't judge the model you just trained.
                   </p>
                 </div>
                 <div className="job-option">
                   <label
                     className="check-line"
-                    title="Round expected points to the nearest points-table value (matches the deployed predictor)."
+                    title="Round points to real F1 values (25, 18, 15, ...)."
                   >
                     <input
                       type="checkbox"

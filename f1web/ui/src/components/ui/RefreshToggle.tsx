@@ -11,7 +11,7 @@ export function RefreshToggle({
   value,
   onChange,
   label = 'Re-fetch from API (ignore cache)',
-  hint = 'Off by default: pipeline steps reuse the cached data in data/raw. Turn on to re-download from Jolpica — needed after a race weekend or an upstream data fix so new results are picked up.',
+  hint = 'Off by default: saved data is reused. Turn on to download fresh data — do this after a race weekend so new results are picked up.',
 }: {
   value: boolean
   onChange: (value: boolean) => void

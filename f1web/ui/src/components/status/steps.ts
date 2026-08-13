@@ -24,7 +24,7 @@ export const STEPS: Step[] = [
     tab: 'data',
     tabLabel: 'Data',
     title: 'Fetch raw data',
-    desc: 'Downloads cached race results from the Jolpica API into data/raw. Everything after this works offline.',
+    desc: 'Downloads race data from the Jolpica API.',
     ready: (s) => s.data.has_raw_cache,
   },
   {
@@ -33,7 +33,7 @@ export const STEPS: Step[] = [
     tab: 'train',
     tabLabel: 'Train',
     title: 'Train the model',
-    desc: 'Builds the featured dataset (data/features.parquet), trains the hurdle model checkpoint, and fits its probability calibrators.',
+    desc: 'Trains the model so it can predict.',
     ready: (s) => s.model.has_checkpoint && s.model.has_calibrators,
   },
   {
@@ -42,7 +42,7 @@ export const STEPS: Step[] = [
     tab: 'backtest',
     tabLabel: 'Backtest',
     title: 'Run a backtest',
-    desc: 'Walk-forward validation of the model against grid / championship / zero baselines (reports/backtest.json).',
+    desc: 'Checks how good the model is.',
     ready: (s) => s.reports.has_backtest,
   },
 ]

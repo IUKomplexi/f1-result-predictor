@@ -35,8 +35,7 @@ export function GridEditor({
         </button>
       </div>
       <p className="job-option-hint">
-        Feed the actual qualifying grid before applying — positions take effect
-        on the next prediction. Empty cells keep the model's grid for that driver.
+        Type the real starting grid here. Empty cells keep the model's guess.
       </p>
       <div className="table-wrap grid-editor-table">
         <table className="data-table grid-table">

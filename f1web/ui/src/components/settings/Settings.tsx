@@ -186,7 +186,7 @@ function SettingsForm({
       await new Promise((resolve) => setTimeout(resolve, 0))
       await putConfig(editorRef.current.cfg)
       setSavedCfg(structuredClone(editorRef.current.cfg) as ConfigMap)
-      setStatus({ kind: 'ok', text: 'Saved to config.toml. Retrain the model if features/params changed.' })
+      setStatus({ kind: 'ok', text: 'Saved. Retrain if you changed features or model params.' })
     } catch (error) {
       const message = error instanceof ApiError ? error.message : String(error)
       setStatus({ kind: 'error', text: message })
@@ -202,9 +202,9 @@ function SettingsForm({
       <section className="card">
         <h2 className="card-title">Configuration</h2>
         <p className="muted config-intro">
-          These values are written back to <code>config.toml</code>, the single
-          source of truth shared with the CLI. Editing features or{' '}
-          <code>[model.params]</code> requires a retrain.
+          These settings are saved to <code>config.toml</code> and used
+          everywhere (web and CLI). Changing features or model params means
+          you must retrain the model.
         </p>
         {sections.map((section) => (
           <SectionGroup key={section} title={section}>

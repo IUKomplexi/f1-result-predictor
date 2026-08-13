@@ -20,7 +20,7 @@ import {
   seasonPayload,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
-import { deployedName, modelChoices } from './lib'
+import { modelChoices } from './lib'
 
 const TARGET_LABEL: Record<string, string> = {
   scored: 'P scored',
@@ -88,10 +88,8 @@ export function Calibration() {
                     ))}
                 </select>
                 <p className="job-option-hint">
-                  No model = shared walk-forward calibrators ({' '}
-                  {deployedName(models) ?? 'config'} checkpoint's features).
-                  A saved model is calibrated on its own out-of-sample seasons
-                  (calibrators written next to it) with its own features.
+                  No model = the default model. A saved model gets its own
+                  calibration.
                 </p>
               </div>
               <SeasonRange value={range} onChange={setRange} />
@@ -127,10 +125,9 @@ export function Calibration() {
                     </div>
                   </div>
                   <p className="job-option-hint">
-                    Both together override the hold-out split used for the
-                    deployment decision (fit OOS seasons ≤ fit-through,
-                    evaluate seasons ≥ eval-from). Left blank, the default
-                    chronological two-thirds split applies.
+                    Optional. Fit on seasons up to "fit through", judge on
+                    seasons from "evaluate from". Leave both empty for
+                    automatic.
                   </p>
                 </div>
               </details>
@@ -145,9 +142,9 @@ export function Calibration() {
           evaluate.
         </PrereqHint>
         <p className="muted config-intro">
-          Calibrators that do not improve the hold-out Brier are not deployed.
-          If the model was trained through the dataset end, retrain it with an
-          earlier end season first — calibration needs out-of-sample seasons.
+          Calibration is only used if it actually helps. If a model was
+          trained on ALL seasons, retrain it with an earlier end season first —
+          calibration needs seasons it hasn't seen.
         </p>
       </section>
       {state.phase === 'loading' ? (
@@ -194,7 +191,7 @@ export function CalibrationView({ calibration }: { calibration: Calibration }) {
       <section className="card">
         <h2 className="card-title">Brier score — raw vs calibrated</h2>
         <p className="context-note">
-          {calibration.context || 'Calibration evaluation (out-of-sample).'}
+          {calibration.context || 'How calibration was tested.'}
         </p>
         <div className="table-wrap">
           <table className="data-table">

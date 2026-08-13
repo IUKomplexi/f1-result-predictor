@@ -65,7 +65,7 @@ export function FeatureToggles({
   return (
     <div className="job-option feature-toggles">
       <div className="feature-toggle-head">
-        <span className="job-label">Feature overrides (CLI --enable/--disable-features)</span>
+        <span className="job-label">Feature overrides</span>
         <button
           type="button"
           className="link-button"

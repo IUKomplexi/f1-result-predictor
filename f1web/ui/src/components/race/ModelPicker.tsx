@@ -46,7 +46,7 @@ export function ModelPicker({
         ))}
       </select>
       <p className="job-option-hint">
-        The selected checkpoint scores this race, with its own calibrators when it has them.
+        Pick which trained model makes the prediction.
       </p>
     </div>
   )

@@ -108,9 +108,8 @@ export function Status({ onNavigate }: { onNavigate?: (tabId: string) => void })
 
       {error ? <p className="save-status error">{error}</p> : null}
       <p className="muted status-note">
-        The dataset itself is built automatically by Train (which also calibrates
-        the model). Optional: precompute race history on Race History for instant
-        past-race views.
+        Train also calibrates the model automatically. Optional: Race History
+        can pre-compute past races so they open faster.
       </p>
     </section>
   )
