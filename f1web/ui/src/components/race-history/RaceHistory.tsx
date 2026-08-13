@@ -1,9 +1,17 @@
-import { useEffect, useState } from 'react'
-import { ApiError, getSeasonPredictions, getStatus, type Prediction } from '../../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { ApiError, getSeasonPredictions, getStatus, type Job, type Prediction } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { driverLabel, fmtDate } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { JobRunner } from '../ui/JobRunner'
+import { RefreshToggle } from '../ui/RefreshToggle'
+import {
+  DEFAULT_SEASON_RANGE,
+  SeasonRange,
+  seasonPayload,
+  type SeasonRangeValue,
+} from '../ui/SeasonRange'
 import './RaceHistory.css'
 
 interface RaceResult {
@@ -19,19 +27,23 @@ interface RaceResult {
 }
 
 function analyzeRace(prediction: Prediction): RaceResult {
-  const sorted = [...prediction.drivers].sort((a, b) => a.pred_rank - b.pred_rank)
+  // Defensive: a malformed/partial prediction must degrade to an empty row,
+  // not throw and take down the tab (see ErrorBoundary).
+  const drivers = Array.isArray(prediction.drivers) ? prediction.drivers : []
+  const race = prediction.race ?? { race_name: null, circuit_id: null, date: null }
+  const sorted = [...drivers].sort((a, b) => a.pred_rank - b.pred_rank)
   const predictedTop3 = sorted.slice(0, 3).map((row) => row.driver_id)
   const predictedWinner = predictedTop3[0] ?? ''
 
-  const raced = prediction.drivers.filter(
+  const raced = drivers.filter(
     (row) => row.actual_position !== null && row.actual_position !== undefined,
   )
   const winnerRow = raced.find((row) => row.actual_position === 1)
   if (!winnerRow) {
     return {
       round: prediction.round,
-      raceName: prediction.race.race_name ?? `Round ${prediction.round}`,
-      date: prediction.race.date ?? '',
+      raceName: race.race_name ?? `Round ${prediction.round}`,
+      date: race.date ?? '',
       predictedWinner,
       actualWinner: null,
       winnerHit: null,
@@ -49,8 +61,8 @@ function analyzeRace(prediction: Prediction): RaceResult {
   const overlap = predictedTop3.filter((id) => actualTop3.includes(id)).length
   return {
     round: prediction.round,
-    raceName: prediction.race.race_name ?? `Round ${prediction.round}`,
-    date: prediction.race.date ?? '',
+    raceName: race.race_name ?? `Round ${prediction.round}`,
+    date: race.date ?? '',
     predictedWinner,
     actualWinner: actualByPosition.get(1) ?? null,
     winnerHit: actualByPosition.get(1) === predictedWinner,
@@ -85,7 +97,8 @@ function useSeasonResults(season: number | null): {
         // One dataset pass for the whole season (backend /api/predictions/season),
         // instead of N sequential per-round recomputes.
         const data = await getSeasonPredictions(season)
-        const races = data.predictions
+        const predictions = Array.isArray(data.predictions) ? data.predictions : []
+        const races = predictions
           .map(analyzeRace)
           .sort((a, b) => a.round - b.round)
         if (!cancelled) setState({ phase: 'ready', races })
@@ -107,7 +120,19 @@ function useSeasonResults(season: number | null): {
 export function RaceHistory() {
   const status = useApi('status', () => getStatus())
   const [season, setSeason] = useState<number | null>(null)
+  const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
+  const [refresh, setRefresh] = useState(false)
+  const primed = useRef(false)
   const { state, retry } = useSeasonResults(season)
+
+  const statusState = status.state
+  // Default the precompute range to the most recent three seasons.
+  useEffect(() => {
+    if (primed.current || statusState.phase !== 'ready') return
+    primed.current = true
+    const { start, end } = statusState.data.seasons
+    setRange({ start: Math.max(end - 2, start), end })
+  }, [statusState])
 
   if (status.state.phase === 'loading') return <Skeleton rows={3} />
   if (status.state.phase === 'error') {
@@ -116,8 +141,40 @@ export function RaceHistory() {
   const { start, end } = status.state.data.seasons
   const selected = season ?? end
 
+  // After a precompute finishes, show the newest season (or refresh the
+  // current selection) so the instant cache hit is visible immediately.
+  const handlePrecomputed = () => {
+    if (season === null) {
+      setSeason(end)
+    } else {
+      retry()
+    }
+  }
+
   return (
     <>
+      <section className="card">
+        <JobRunner
+          type="history"
+          runLabel="Precompute race history"
+          onDone={handlePrecomputed}
+          buildPayload={() => ({ ...seasonPayload(range), refresh })}
+          options={
+            <>
+              <SeasonRange value={range} onChange={setRange} />
+              <RefreshToggle value={refresh} onChange={setRefresh} />
+            </>
+          }
+          renderResult={(job) => <HistoryRunResult job={job} />}
+        />
+        <p className="muted">
+          Scores every completed round of the selected seasons once and caches
+          whole-season snapshots, so opening Race History afterwards is instant.
+          Run again after new race data or a retrain (use Refresh to clear the
+          cache).
+        </p>
+      </section>
+
       <section className="card">
         <label className="field">
           <span className="field-label">Season</span>
@@ -145,6 +202,31 @@ export function RaceHistory() {
         <RaceHistoryTable races={state.races} />
       ) : null}
     </>
+  )
+}
+
+function HistoryRunResult({ job }: { job: Job }) {
+  const result = job.result ?? {}
+  const seasons = (result.seasons ?? {}) as Record<string, { rounds: number; elapsed_s: number }>
+  return (
+    <div className="result-block">
+      <h3 className="card-title">Precomputed seasons</h3>
+      {job.log.length > 0 && (
+        <details className="job-log">
+          <summary>Log</summary>
+          {job.log.map((line, i) => (
+            <pre key={i} className="log-line">{line}</pre>
+          ))}
+        </details>
+      )}
+      <ul className="summary-list">
+        {Object.entries(seasons).map(([s, v]) => (
+          <li key={s}>
+            season {s}: <strong>{v.rounds}</strong> rounds ({v.elapsed_s}s)
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

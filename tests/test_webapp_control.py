@@ -194,6 +194,118 @@ def test_worker_survives_handler_systemexit(tmp_path, monkeypatch):
     assert _wait_for(client, good)["status"] == "done"
 
 
+# ------------------------------------------- jobs: CLI option parity
+
+
+def test_job_payload_forwards_all_cli_options(tmp_path, monkeypatch):
+    """Every result-affecting CLI option reaches the job handler unchanged.
+
+    The dashboard is the CLI's control surface, so a job payload must carry
+    the same options ``f1 train/calibrate/backtest/search`` expose
+    (see f1web/jobs.JOB_PAYLOAD_KEYS).
+    """
+    import f1web.jobs as jobs_module
+
+    monkeypatch.setattr(jobs_module, "JOBS_DIR", tmp_path / "reports" / "jobs")
+    manager = JobManager()
+
+    def fake_handler(payload, log):
+        log(f"payload={payload}")
+        return {"echo": payload}
+
+    for job_type in ("train", "calibrate", "backtest", "search", "history"):
+        manager.register(job_type, fake_handler)
+    client = TestClient(create_app(job_manager=manager))
+
+    payloads = {
+        "history": {"start": 2024, "end": 2026, "refresh": True},
+        "train": {
+            "start": 2012, "end": 2024, "refresh": True, "name": "my-model",
+            "enable_features": ["grid"], "disable_features": ["season"],
+        },
+        "calibrate": {
+            "start": 2012, "end": 2024, "refresh": True,
+            "fit_through_season": 2021, "eval_from_season": 2022,
+            "enable_features": ["grid"], "disable_features": ["season"],
+        },
+        "backtest": {
+            "start": 2012, "end": 2024, "refresh": True, "quantize": False,
+            "use_checkpoint": True,
+            "enable_features": ["grid"], "disable_features": ["season"],
+        },
+        "search": {
+            "n": 8, "seed": 3, "max_test_season": 2020,
+            "start": 2012, "end": 2024, "refresh": True,
+            "enable_features": ["grid"], "disable_features": ["season"],
+        },
+    }
+    for job_type, payload in payloads.items():
+        job_id = client.post(
+            "/api/jobs", json={"type": job_type, "payload": payload}
+        ).json()["id"]
+        job = _wait_for(client, job_id)
+        assert job["status"] == "done", job
+        assert job["result"]["echo"] == payload, f"{job_type}: payload not forwarded"
+
+
+def test_job_rejects_unknown_feature_id(tmp_path, monkeypatch):
+    client = _jobs_client(tmp_path, monkeypatch)
+    resp = client.post(
+        "/api/jobs",
+        json={"type": "train", "payload": {"enable_features": ["bogus_feature"]}},
+    )
+    assert resp.status_code == 422
+    assert "unknown feature" in resp.json()["error"]
+
+
+def test_job_feature_toggles_must_be_list_of_strings(tmp_path, monkeypatch):
+    client = _jobs_client(tmp_path, monkeypatch)
+    resp = client.post(
+        "/api/jobs",
+        json={"type": "backtest", "payload": {"disable_features": "grid"}},
+    )
+    assert resp.status_code == 400
+    assert "list of strings" in resp.json()["error"]
+
+
+# ------------------------------------------------------------- model registry
+
+
+def test_models_api_lists_index(tmp_path, monkeypatch):
+    import json
+
+    import f1web.app as app_module
+
+    client = _config_client(tmp_path, monkeypatch)
+    model_dir = tmp_path / "data" / "model"
+    model_dir.mkdir(parents=True)
+    (model_dir / "index.json").write_text(
+        json.dumps({"hurdle": {"checkpoint": "data/model/hurdle.joblib", "rows": 208}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_module, "REPO_ROOT", tmp_path)
+    resp = client.get("/api/models")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["models"]["hurdle"]["rows"] == 208
+    assert body["default"] == "data/model/hurdle.joblib"
+
+
+def test_models_api_fallback_lists_joblibs_excluding_calibrators(tmp_path, monkeypatch):
+    import f1web.app as app_module
+
+    client = _config_client(tmp_path, monkeypatch)
+    model_dir = tmp_path / "data" / "model"
+    model_dir.mkdir(parents=True)
+    (model_dir / "hurdle.joblib").write_bytes(b"x")
+    (model_dir / "experiment.joblib").write_bytes(b"x")
+    (model_dir / "calibrators.joblib").write_bytes(b"x")  # not a model — excluded
+    monkeypatch.setattr(app_module, "REPO_ROOT", tmp_path)
+    resp = client.get("/api/models")
+    assert resp.status_code == 200
+    assert set(resp.json()["models"]) == {"hurdle", "experiment"}
+
+
 def test_predict_rejects_non_integer_grid(tmp_path, monkeypatch):
     client = _config_client(tmp_path, monkeypatch)
     resp = client.post(
@@ -272,3 +384,85 @@ def test_predict_bad_json_is_400(tmp_path, monkeypatch):
         headers={"Content-Type": "application/json"},
     )
     assert resp.status_code == 400
+
+
+# -------------------------------------------- predict: CLI-option overrides
+
+
+def _canned_prediction():
+    import numpy as np
+    import pandas as pd
+
+    return {
+        "result": pd.DataFrame(
+            {
+                "pred_rank": [np.int64(1)],
+                "driver_id": ["russell"],
+                "constructor_id": ["mercedes"],
+                "grid": [np.int64(1)],
+                "expected_points": [np.float64(15.0)],
+                "p_scored": [np.float64(0.9)],
+                "p_top3": [np.float64(0.6)],
+                "p_win": [np.float64(0.5)],
+                "actual_points": [np.float64(25.0)],
+                "actual_position": [np.int64(1)],
+            }
+        ),
+        "meta": {"race_name": "Test", "circuit_id": "test", "date": "2024-01-01"},
+        "season": 2024,
+        "round": 1,
+        "synthetic": True,
+        "verified": False,
+        "calibrated": False,
+        "checkpoint": "data/model/hurdle.joblib",
+    }
+
+
+def test_predict_forwards_refresh_and_model_path(tmp_path, monkeypatch):
+    """POST /api/predict mirrors the CLI's --refresh and --model."""
+    import f1web.app as app_module
+
+    client = _config_client(tmp_path, monkeypatch)
+    seen = {}
+
+    def fake_prediction(**kw):
+        seen.update(kw)
+        return _canned_prediction()
+
+    monkeypatch.setattr(app_module, "get_prediction", fake_prediction)
+    resp = client.post(
+        "/api/predict",
+        json={"refresh": True, "model_path": "data/model/other.joblib"},
+    )
+    assert resp.status_code == 200
+    assert seen["refresh"] is True
+    assert seen["model_path"] == "data/model/other.joblib"
+
+
+def test_predict_rejects_bad_override_types(tmp_path, monkeypatch):
+    client = _config_client(tmp_path, monkeypatch)
+    assert client.post("/api/predict", json={"refresh": "yes"}).status_code == 400
+    assert client.post("/api/predict", json={"model_path": 42}).status_code == 400
+    assert client.post("/api/predict", json={"write_report": "yep"}).status_code == 400
+
+
+def test_predict_write_report_writes_markdown(tmp_path, monkeypatch):
+    """write_report mirrors `f1 predict --out`: same report, config path."""
+    import f1web.app as app_module
+
+    client = _config_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(app_module, "REPO_ROOT", tmp_path)
+
+    def fake_prediction(**kw):
+        return _canned_prediction()
+
+    monkeypatch.setattr(app_module, "get_prediction", fake_prediction)
+    resp = client.post(
+        "/api/predict", json={"season": 2024, "round": 1, "write_report": True}
+    )
+    assert resp.status_code == 200
+    report = tmp_path / "reports" / "prediction.md"
+    assert report.is_file()
+    text = report.read_text(encoding="utf-8")
+    assert "# Prediction:" in text
+    assert "2024 Round 1" in text

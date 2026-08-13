@@ -1,31 +1,37 @@
 import { useEffect, useState } from 'react'
 import {
-  getConfig,
+  getModels,
   postPrediction,
-  type ConfigResponse,
+  type ModelsResponse,
   type Prediction,
   type PredictOverrides,
 } from '../../api/client'
+import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import './OverridePrediction.css'
 
 /**
  * Run a one-off prediction with ephemeral overrides (season/round, grid CSV,
- * feature toggles). Nothing is written to config.toml; overrides apply to this
- * request only.
+ * feature toggles, refresh, model checkpoint, optional report file). Nothing
+ * is written to config.toml; overrides apply to this request only.
  */
 export function OverridePrediction() {
   const [season, setSeason] = useState<string>('')
   const [round, setRound] = useState<string>('')
   const [grid, setGrid] = useState<string>('')
+  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
+  const [refresh, setRefresh] = useState(false)
+  const [models, setModels] = useState<ModelsResponse | null>(null)
+  const [modelChoice, setModelChoice] = useState('default')
+  const [customPath, setCustomPath] = useState('')
+  const [writeReport, setWriteReport] = useState(false)
   const [pred, setPred] = useState<Prediction | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [cfg, setCfg] = useState<ConfigResponse | null>(null)
 
   useEffect(() => {
-    getConfig().then(setCfg).catch(() => {})
+    getModels().then(setModels).catch(() => {})
   }, [])
 
   const run = async () => {
@@ -36,6 +42,17 @@ export function OverridePrediction() {
       if (season !== '') overrides.season = Number(season)
       if (round !== '') overrides.round = Number(round)
       if (grid.trim() !== '') overrides.grid_csv = grid
+      if (features.enable.length > 0) overrides.enable_features = features.enable
+      if (features.disable.length > 0) overrides.disable_features = features.disable
+      if (refresh) overrides.refresh = true
+      const checkpoint =
+        modelChoice === 'custom'
+          ? customPath.trim()
+          : modelChoice === 'default'
+            ? null
+            : models?.models[modelChoice]?.checkpoint
+      if (checkpoint) overrides.model_path = checkpoint
+      if (writeReport) overrides.write_report = true
       const result = await postPrediction(overrides)
       setPred(result)
     } catch (err) {
@@ -45,13 +62,17 @@ export function OverridePrediction() {
     }
   }
 
+  const modelNames = models ? Object.keys(models.models).sort() : []
+
   return (
     <section className="card">
       <h2 className="card-title">Specific race prediction</h2>
       <p className="muted config-intro">
         Run a one-off prediction with ephemeral overrides — season/round, a
-        qualifying grid (CSV text with <code>driver_id,grid</code>), and feature
-        toggles. Nothing is written to <code>config.toml</code>.
+        qualifying grid (CSV text with <code>driver_id,grid</code>), feature
+        toggles, a model checkpoint, and optionally the same Markdown report{' '}
+        <code>f1 predict</code> writes. Nothing is written to{' '}
+        <code>config.toml</code>.
       </p>
       <div className="override-grid">
         <div className="field">
@@ -73,14 +94,54 @@ export function OverridePrediction() {
           />
         </div>
       </div>
-      {cfg ? (
-        <div className="override-toggles">
-          <span className="field-label">Default features</span>
-          {cfg.features.registry
-            .filter((id) => cfg.features.defaults.includes(id))
-            .map((id) => <span key={id} className="mono feature-tag">{id}</span>)}
+      <div className="override-run-options">
+        <div className="field">
+          <label className="field-label" htmlFor="ov-model">Model</label>
+          <select
+            id="ov-model"
+            className="select"
+            value={modelChoice}
+            onChange={(e) => setModelChoice(e.target.value)}
+          >
+            <option value="default">config default</option>
+            {modelNames.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+            <option value="custom">custom path…</option>
+          </select>
         </div>
-      ) : null}
+        {modelChoice === 'custom' ? (
+          <div className="field">
+            <label className="field-label" htmlFor="ov-model-path">Checkpoint path</label>
+            <input
+              id="ov-model-path"
+              type="text"
+              value={customPath}
+              onChange={(e) => setCustomPath(e.target.value)}
+              placeholder="data/model/other.joblib"
+            />
+          </div>
+        ) : null}
+        <div className="field override-checks">
+          <label className="check-line">
+            <input
+              type="checkbox"
+              checked={refresh}
+              onChange={(e) => setRefresh(e.target.checked)}
+            />
+            Refresh raw data (ignore cache)
+          </label>
+          <label className="check-line">
+            <input
+              type="checkbox"
+              checked={writeReport}
+              onChange={(e) => setWriteReport(e.target.checked)}
+            />
+            Write reports/prediction.md
+          </label>
+        </div>
+      </div>
+      <FeatureToggles value={features} onChange={setFeatures} />
       <div className="save-row">
         <button type="button" className="button" onClick={run} disabled={loading}>
           {loading ? 'Predicting…' : 'Predict'}

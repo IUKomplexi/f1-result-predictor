@@ -58,12 +58,28 @@
   resize: vertical;
 }
 
-.override-toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
+.override-run-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-4);
   margin-top: var(--space-4);
+}
+
+.override-checks {
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.override-checks .check-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.override-checks .check-line input {
+  accent-color: var(--accent);
 }
 
 .save-row {

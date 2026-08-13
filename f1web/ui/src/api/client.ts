@@ -137,6 +137,21 @@ export interface Status {
   dashboard: { built: boolean }
 }
 
+export interface ModelInfo {
+  checkpoint: string
+  params?: Record<string, number>
+  features?: string[]
+  fingerprint?: string
+  rows?: number
+  seasons?: number
+  trained_at?: number
+}
+
+export interface ModelsResponse {
+  models: Record<string, ModelInfo>
+  default: string
+}
+
 /* --------------------------------------------------------------- request */
 
 async function apiJson<T>(
@@ -166,9 +181,9 @@ async function apiGet<T>(path: string): Promise<T> {
   return apiJson<T>('GET', path)
 }
 
-function qs(params: Record<string, string | number | null | undefined>): string {
+function qs(params: Record<string, string | number | boolean | null | undefined>): string {
   const entries = Object.entries(params).filter(
-    (entry): entry is [string, string | number] =>
+    (entry): entry is [string, string | number | boolean] =>
       entry[1] !== null && entry[1] !== undefined,
   )
   const search = new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString()
@@ -181,8 +196,12 @@ export function getStatus(): Promise<Status> {
   return apiGet<Status>('/api/status')
 }
 
-export function getPrediction(season?: number, round?: number): Promise<Prediction> {
-  return apiGet<Prediction>(`/api/prediction${qs({ season, round })}`)
+export function getModels(): Promise<ModelsResponse> {
+  return apiGet<ModelsResponse>('/api/models')
+}
+
+export function getPrediction(season?: number, round?: number, refresh = false): Promise<Prediction> {
+  return apiGet<Prediction>(`/api/prediction${qs({ season, round, refresh: refresh || undefined })}`)
 }
 
 export interface SeasonPredictions {
@@ -259,6 +278,12 @@ export interface PredictOverrides {
   grid_csv?: string
   enable_features?: string[]
   disable_features?: string[]
+  /** Ignore the raw-data cache (CLI --refresh). */
+  refresh?: boolean
+  /** Model checkpoint override (CLI --model). */
+  model_path?: string
+  /** Also write the Markdown report the CLI produces (CLI --out). */
+  write_report?: boolean
 }
 
 export function getConfig(): Promise<ConfigResponse> {

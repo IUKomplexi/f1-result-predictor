@@ -1,14 +1,30 @@
+import { useState } from 'react'
 import type { Job } from '../../api/client'
 import { JobRunner } from '../ui/JobRunner'
+import {
+  DEFAULT_SEASON_RANGE,
+  SeasonRange,
+  seasonPayload,
+  type SeasonRangeValue,
+} from '../ui/SeasonRange'
+import { RefreshToggle } from '../ui/RefreshToggle'
 import './Data.css'
 
 export function Data() {
+  const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
+  const [refresh, setRefresh] = useState(false)
   return (
     <>
       <JobRunner
         type="fetch"
         runLabel="Fetch data"
-        buildPayload={() => ({})}
+        buildPayload={() => ({ ...seasonPayload(range), refresh })}
+        options={
+          <>
+            <SeasonRange value={range} onChange={setRange} />
+            <RefreshToggle value={refresh} onChange={setRefresh} />
+          </>
+        }
         renderResult={(job) => <FetchResult job={job} />}
       />
       <p className="muted config-intro">

@@ -3,6 +3,7 @@ import { Race } from './components/race/Race'
 import { RaceHistory } from './components/race-history/RaceHistory'
 import { OverridePrediction } from './components/override/OverridePrediction'
 import { SeasonContext } from './components/season/SeasonContext'
+import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Skeleton } from './components/ui/DataState'
 
 // Chart-heavy views are lazy so Recharts isn't part of the initial bundle.
@@ -84,9 +85,11 @@ export default function App() {
         aria-labelledby={`tab-${tab}`}
         className="panel"
       >
-        <Suspense fallback={<Skeleton rows={6} />}>
-          <Active />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<Skeleton rows={6} />}>
+            <Active />
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   )

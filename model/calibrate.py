@@ -279,7 +279,7 @@ def _holdout_split(
 def run(
     *,
     start: int = 2010,
-    end: int = 2025,
+    end: int = 2026,
     refresh: bool = False,
     cache_dir: str = "data/raw",
     dataset: str = "data/features.parquet",

@@ -39,6 +39,10 @@ COPY f1data/ f1data/
 COPY f1weather/ f1weather/
 COPY features/ features/
 COPY model/ model/
+# scripts/ holds CLI shims (fetch_all/fetch_weather/feature_audit); the shared
+# fetch logic lives in the installed f1data.fetch package, but the shims are
+# copied so `python scripts/fetch_all.py` also works inside the container.
+COPY scripts/ scripts/
 # Explicit file list (not a bare `COPY f1web/`): ui/ is built in stage 1 and
 # copied as dist below, and ui/node_modules must not enter the runtime image.
 # New modules in the f1web package must be added here (e.g. f1web/jobs.py).

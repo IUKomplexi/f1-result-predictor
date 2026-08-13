@@ -178,7 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("train", help="train the final model")
     p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2025)
+    p.add_argument("--end", type=int, default=2026)
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--cache-dir", default="data/raw")
     p.add_argument("--dataset", default="data/features.parquet")
@@ -188,7 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("backtest", help="walk-forward backtest vs baselines")
     p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2025)
+    p.add_argument("--end", type=int, default=2026)
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--cache-dir", default="data/raw")
     p.add_argument("--dataset", default="data/features.parquet")
@@ -202,7 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("calibrate", help="fit + deploy isotonic probability calibrators")
     p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2025)
+    p.add_argument("--end", type=int, default=2026)
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--cache-dir", default="data/raw")
     p.add_argument("--dataset", default="data/features.parquet")
@@ -222,7 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-test-season", type=int, default=2019,
                    help="latest test season in the search window")
     p.add_argument("--start", type=int, default=2010)
-    p.add_argument("--end", type=int, default=2025)
+    p.add_argument("--end", type=int, default=2026)
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--cache-dir", default="data/raw")
     p.add_argument("--dataset", default="data/features.parquet")

@@ -30,7 +30,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "cache_dir": "data/raw",
         "dataset": "data/features.parquet",
         "start_season": 2010,
-        "end_season": 2025,
+        "end_season": 2026,
     },
     "model": {
         "checkpoint": "data/model/hurdle.joblib",

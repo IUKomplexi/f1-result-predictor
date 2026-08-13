@@ -90,16 +90,43 @@ def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
 # Backtest
 # --------------------------------------------------------------------------
 
+def _collect_metric_rows(df: pd.DataFrame) -> list[dict]:
+    """Per-race metrics for every ``(season, round)`` in ``df``.
+
+    ``df`` must already carry the ``pred_model``/``pred_grid``/
+    ``pred_champ``/``pred_zero`` columns (see :func:`run_backtest`).
+    """
+    rows: list[dict] = []
+    for (season, round_), race in df.groupby(["season", "round"]):  # type: ignore[reportGeneralTypeIssues]  # keys are Hashable; runtime is a 2-tuple
+        for name, col in (
+            ("model", "pred_model"),
+            ("grid", "pred_grid"),
+            ("championship", "pred_champ"),
+            ("zero", "pred_zero"),
+        ):
+            sub = race.copy()
+            sub["pred_points"] = sub[col]
+            m = race_metrics(sub)
+            m.update({"season": int(season), "round": int(round_), "baseline": name})
+            rows.append(m)
+    return rows
+
+
 def run_backtest(
     df: pd.DataFrame,
     quantize: bool = True,
     features: list[str] | None = None,
+    model: Any = None,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
-    """Walk-forward backtest; returns (overall table, per-season tables).
+    """Backtest; returns (overall table, per-season tables).
 
-    The model is re-trained for every test season (train = all strictly
-    earlier seasons) on ``features`` (default: the full feature set). Metrics
-    are computed per race and then averaged per season and overall. Expected
+    The default is a walk-forward backtest: the model is re-trained for every
+    test season (train = all strictly earlier seasons) on ``features``
+    (default: the full feature set). Pass ``model`` (a pre-trained
+    :class:`~model.train.HurdleModels` checkpoint) to instead score every
+    season with that fixed model — the "how good is *this* model on a season
+    range" mode (not out-of-sample w.r.t. its own training data). Metrics are
+    computed per race and then averaged per season and overall. Expected
     points are quantized to the points table by default (the deployed
     output); pass ``quantize=False`` to compare the raw continuous
     expectations.
@@ -110,32 +137,24 @@ def run_backtest(
     df["pred_champ"] = baseline_champ_points(df)
     df["pred_zero"] = baseline_zero_points(df)
 
-    season_rows: list[dict] = []
-    model_by_season: dict[int, HurdleModels] = {}
-    params = model_params()  # read [model.params] once, outside the loop
-    for train, test, season in walk_forward_seasons(df):
-        X_train, y_train = prepare(train, features)
-        model = HurdleModels(params=params).fit(X_train, y_train)
-        model_by_season[season] = model
-        X_test, _ = prepare(test, features)
-        test = test.copy()
-        pred = model.predict_expected_points(X_test)
-        test["pred_model"] = quantize_points(pred) if quantize else pred
-        df.loc[test.index, "pred_model"] = test["pred_model"]
-
-        # Metrics are defined per race: rank drivers within one race only.
-        for (_, round_), race in test.groupby(["season", "round"]):  # type: ignore[reportGeneralTypeIssues]  # keys are Hashable; runtime is a 2-tuple
-            for name, col in (
-                ("model", "pred_model"),
-                ("grid", "pred_grid"),
-                ("championship", "pred_champ"),
-                ("zero", "pred_zero"),
-            ):
-                sub = race.copy()
-                sub["pred_points"] = sub[col]
-                m = race_metrics(sub)
-                m.update({"season": season, "round": round_, "baseline": name})
-                season_rows.append(m)
+    if model is not None:
+        # Deployed-checkpoint mode: score every row with the fixed model.
+        X_all, _ = prepare(df, features)
+        pred = model.predict_expected_points(X_all)
+        df["pred_model"] = quantize_points(pred) if quantize else pred
+        season_rows = _collect_metric_rows(df)
+    else:
+        season_rows: list[dict] = []
+        params = model_params()  # read [model.params] once, outside the loop
+        for train, test, _season in walk_forward_seasons(df):
+            X_train, y_train = prepare(train, features)
+            fitted = HurdleModels(params=params).fit(X_train, y_train)
+            X_test, _ = prepare(test, features)
+            test = test.copy()
+            pred = fitted.predict_expected_points(X_test)
+            test["pred_model"] = quantize_points(pred) if quantize else pred
+            df.loc[test.index, "pred_model"] = test["pred_model"]
+            season_rows.extend(_collect_metric_rows(test))
 
     results = pd.DataFrame(season_rows)
     overall = (
@@ -206,13 +225,14 @@ def format_tables(overall: pd.DataFrame, by_season: dict[str, pd.DataFrame]) -> 
 def run(
     *,
     start: int = 2010,
-    end: int = 2025,
+    end: int = 2026,
     refresh: bool = False,
     cache_dir: str = "data/raw",
     dataset: str = "data/features.parquet",
     out: str = "reports/backtest.md",
     out_json: str = "reports/backtest.json",
     quantize: bool = True,
+    use_checkpoint: bool = False,
     enable_features: Sequence[str] = (),
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
@@ -224,6 +244,10 @@ def run(
     keyword-only so the CLI and the dashboard share one code path. The returned
     dict is JSON-safe and carries the full ``backtest_snapshot`` so the web
     runner can refresh the dashboard views without re-reading the file.
+
+    ``use_checkpoint`` scores every season in the range with the *deployed*
+    checkpoint (``[model] checkpoint``) instead of walk-forward retraining —
+    the "how good is the current model on these seasons" mode.
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
@@ -233,11 +257,24 @@ def run(
     feats = enabled_features(
         cfg, enable=list(enable_features), disable=list(disable_features)
     )
-    log(
-        f"Running walk-forward backtest with {len(feats)} features "
-        f"(fp {feature_fingerprint(feats)})"
-    )
-    overall, by_season = run_backtest(df, quantize=quantize, features=feats)
+    if use_checkpoint:
+        from model.train import load_checkpoint
+
+        checkpoint = cfg["model"]["checkpoint"]
+        model = load_checkpoint(checkpoint, expected=feats)
+        log(
+            f"Scoring with deployed checkpoint {checkpoint} "
+            f"({len(feats)} features, fp {feature_fingerprint(feats)})"
+        )
+        overall, by_season = run_backtest(
+            df, quantize=quantize, features=feats, model=model
+        )
+    else:
+        log(
+            f"Running walk-forward backtest with {len(feats)} features "
+            f"(fp {feature_fingerprint(feats)})"
+        )
+        overall, by_season = run_backtest(df, quantize=quantize, features=feats)
 
     report = format_tables(overall, by_season)
     out_p = Path(out)

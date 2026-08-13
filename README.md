@@ -2,7 +2,7 @@
 
 Predicts **points per driver** for a Formula 1 race from *pre-race* information
 (grid, qualifying, driver/team form, circuit history, championship position),
-using a zero-inflated hurdle model trained on 2010–2025 race data from the
+using a zero-inflated hurdle model trained on 2010–2026 race data from the
 [Jolpica F1 API](https://www.jolpi.ca/ergast/) (the Ergast successor).
 
 ```
@@ -22,7 +22,7 @@ Dockerized.
 
 ```bash
 uv sync --all-extras     # install project + test/lint/web deps into .venv (Python 3.12)
-uv run scripts/fetch_all.py      # fetch + cache 2010-2025 (one-time)
+uv run scripts/fetch_all.py      # fetch + cache 2010-2026 (one-time)
 uv run pytest -q                 # run the test suite
 ```
 
@@ -43,7 +43,7 @@ paths).
 
 | Command | What it does |
 | --- | --- |
-| `uv run scripts/fetch_all.py [--start 2010] [--end 2025]` | fetch and cache raw API data |
+| `uv run scripts/fetch_all.py [--start 2010] [--end 2026]` | fetch and cache raw API data |
 | `f1 train` | train the final model → `data/model/hurdle.joblib` |
 | `f1 calibrate` | fit isotonic probability calibrators → `data/model/calibrators.joblib` (run after every `f1 train`) |
 | `f1 backtest [--no-quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` + `.json` (quantized by default) |
@@ -114,10 +114,24 @@ prev/next navigation; **Race History** loads a whole season in one request;
 each pipeline step runs from its own tab — **Data** (fetch), **Train**,
 **Search**, **Backtest** and **Calibration** — as async background jobs (one at
 a time, the rest queued) with live logs and results rendered inline, and can
-apply a search's best config. The **Specific Race** tab's prediction panel (and
+apply a search's best config. Every result-affecting CLI option is available
+from the tabs: season range (`--start/--end`), a refresh toggle
+(`--refresh`), per-feature overrides (`--enable/--disable-features`), the
+backtest quantize toggle (`--no-quantize`) and the search `n`/`seed`/
+`max-test-season`. Train accepts a **model name** — blank overwrites the
+configured checkpoint, a name saves a separate `data/model/<name>.joblib`
+recorded in `data/model/index.json` and selectable on the **Specific Race**
+tab (plus a backtest "use deployed checkpoint" mode that scores a season
+range with an existing model instead of walk-forward retraining). **Race
+History** has a **Precompute race history** job that warms whole-season
+caches (`data/predictions`, keyed by season + feature fingerprint + params),
+so repeat opens are instant. The **Specific Race** tab's prediction panel (and
 `POST /api/predict`) accepts *ephemeral* overrides (season/round, a grid CSV,
-feature toggles) that are merged over the config in memory only — nothing is
-written to `config.toml`.
+feature toggles, model checkpoint, refresh, and optionally writing the same
+`reports/prediction.md` the CLI produces) that are merged over the config in
+memory only — nothing is written to `config.toml`. Path overrides
+(`--cache-dir`, `--dataset`, `--out`, `--out-json`) stay config-managed: edit
+them in the Settings tab and web jobs honour the configured paths.
 
 > ⚠️ **Docker config persistence:** in the container, `config.toml` lives inside
 > the image and resets on rebuild. To keep dashboard edits across rebuilds,
@@ -447,7 +461,7 @@ moves, or refactors; the weather layer stays.
   feature could actually move top-3/MAE — per-circuit setup, strategy data,
   2026-regs data?
 - **2026 regulation change** is an imminent transfer-risk event for a model
-  trained on 2010–2025 (the `points_era` split only covers pre/post-2019).
+  trained on 2010–2026 (the `points_era` split only covers pre/post-2019).
 - **Weather re-evaluation** plumbing is ready (`f1weather/`); the first attempt
   failed 1-of-3 metrics, all within noise — finer granularity is the obvious
   retry.

@@ -1,6 +1,6 @@
 # AGENTS.md — F1 Result Predictor
 
-Predicts **points per driver** for an F1 race from strictly pre-race info (grid, qualifying, form, circuit history) via a zero-inflated hurdle model (`E[points] = P(top-10) × E(points|top-10)`), trained on 2010–2025 Jolpica F1 API data. Python ≥3.12, managed with **uv**; CLI + FastAPI + Preact dashboard; Dockerized. See `README.md` — the canonical doc (setup, usage, repository map, invariants, extending).
+Predicts **points per driver** for an F1 race from strictly pre-race info (grid, qualifying, form, circuit history) via a zero-inflated hurdle model (`E[points] = P(top-10) × E(points|top-10)`), trained on 2010–2026 Jolpica F1 API data. Python ≥3.12, managed with **uv**; CLI + FastAPI + Preact dashboard; Dockerized. See `README.md` — the canonical doc (setup, usage, repository map, invariants, extending).
 
 ## Commands (run from repo root — config/report paths are CWD-relative)
 
@@ -30,7 +30,7 @@ Single-direction deps, all packages import shared helpers from `f1core` (no sys.
 - `f1core/` — shared core: `predict.py` (`predict_race`, `get_prediction`, `format_report`, `format_console`), `config.py` (`DEFAULTS`, `load_config`, **`save_config`/`validate_config`/`SCHEMA`** TOML writer), `httpclient.py` (`CachedHTTPClient` base), `reporting.py` (`to_md`, `rank_by`), `cli.py` (the single `f1` CLI + subcommand handlers)
 - `features/build.py` — per-start dataset: `build_dataset`, `add_features`, `assemble`; strictly pre-race features + points target
 - `model/` — `train.py` (hurdle: HGB classifier + regressor), `evaluate.py` (walk-forward backtest vs grid/championship/zero), `calibrate.py` (isotonic, per-target, deployed only where it improves hold-out Brier), `search.py` (walk-forward-validated tuning). Each exposes a keyword-only `run_* -> dict` wrapper called by the `f1` CLI and the web job runner.
-- `f1web/` — `app.py` (`create_app`, JSON API + built-SPA host), `jobs.py` (`JobManager`, threading worker + single-job queue + `reports/jobs/*.json` history) and Preact SPA in `f1web/ui/` (Vite + TS; `@preact/preset-vite` + `preact/compat`); tabs: Race, Race History, Data, Train, Search, Backtest, Calibration, Specific Race, Settings, Season. Pipeline steps each run from their own tab via the shared `ui/JobRunner`. No UI *unit* suite (known gap; `npm run build`/`npm run lint` are the UI checks)
+- `f1web/` — `app.py` (`create_app`, JSON API + built-SPA host), `jobs.py` (`JobManager`, threading worker + single-job queue + `reports/jobs/*.json` history) and Preact SPA in `f1web/ui/` (Vite + TS; `@preact/preset-vite` + `preact/compat`); tabs: Race, Race History, Data, Train, Search, Backtest, Calibration, Specific Race, Settings, Season. Pipeline steps each run from their own tab via the shared `ui/JobRunner` (including a Precompute race history job that warms the season cache under `data/predictions`). No UI *unit* suite (known gap; `npm run build`/`npm run lint` are the UI checks)
 - `f1weather/` — Open-Meteo layer, **evaluated but NOT adopted** (kept deliberately; see `reports/weather.md`)
 - `scripts/` — `fetch_all.py`, `fetch_weather.py`, `download_fixtures.py`
 - `tests/` — offline suite, recorded fixtures (`tests/fixtures/`), `test_e2e.py` runs the full pipeline
@@ -54,7 +54,7 @@ Data flow: `data/raw/*.json` → `data/features.parquet` → `data/model/*.jobli
 
 ## Notes
 
-After completing each working phase, generate a commit message adhering to the **Conventional Commits** specification.
+After completing each working phase, generate a commit message adhering to the **Conventional Commits** specification and commit via **GH CLI**, then wait for CI to run and verify the result.
 
 * **Format:** `<type>(<scope>)[!]: <description>`
 * **Primary Types:** `feat` (new features), `fix` (bug fixes), `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.

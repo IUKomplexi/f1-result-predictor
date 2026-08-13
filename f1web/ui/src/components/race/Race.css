@@ -65,3 +65,18 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+
+.race-refresh-row {
+  padding-block: var(--space-3);
+}
+
+.race-refresh-row .check-line {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.race-refresh-row .check-line input {
+  accent-color: var(--accent);
+}

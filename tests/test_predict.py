@@ -385,6 +385,77 @@ def test_prediction_cache_key_distinguishes_season_round_fingerprint_params():
     assert len(distinct) == 5
 
 
+def test_season_cache_key_distinguishes_season_fingerprint_params():
+    from f1core.predict import season_cache_key
+
+    k = season_cache_key(2024, "fpA", "pA")
+    assert season_cache_key(2024, "fpA", "pA") == k  # deterministic
+    distinct = {
+        season_cache_key(2024, "fpA", "pA"),  # base
+        season_cache_key(2025, "fpA", "pA"),  # different season
+        season_cache_key(2024, "fpB", "pA"),  # different feature fingerprint
+        season_cache_key(2024, "fpA", "pB"),  # different params hash
+    }
+    assert len(distinct) == 4
+    # The season key must never collide with a per-round key.
+    from f1core.predict import prediction_cache_key
+
+    assert season_cache_key(2024, "fpA", "pA") != prediction_cache_key(2024, 1, "fpA", "pA")
+
+
+def test_predict_season_serves_repeat_calls_from_season_cache(tmp_path, monkeypatch):
+    """predict_season caches a whole-season snapshot; repeat calls skip scoring.
+
+    The first call assembles the frame and scores every completed round; the
+    second call (same season/fingerprint/params) must come back from the cache
+    without reassembling or rescoring.
+    """
+    import f1core.predict as predict_module
+    from f1core.predict import predict_season
+
+    calls = {"frame": 0, "race": 0}
+
+    def fake_frame(client, seasons):
+        calls["frame"] += 1
+        return [], pd.DataFrame(
+            {
+                "season": [2024, 2024], "round": [1, 2],
+                "race_name": ["A", "B"], "circuit_id": ["a", "b"],
+                "date": ["2024-01-01", "2024-01-02"],
+            }
+        )
+
+    def fake_predict_race(df, model, season, round_, calibrators, feats):
+        calls["race"] += 1
+        return pd.DataFrame(
+            {
+                "pred_rank": [1], "driver_id": ["russell"],
+                "constructor_id": ["mercedes"], "grid": [1],
+                "expected_points": [15.0], "p_scored": [0.9],
+                "p_top3": [0.6], "p_win": [0.5],
+                "actual_points": [15.0], "actual_position": [1],
+            }
+        )
+
+    def fake_models(cfg, model_path, feats):
+        return "data/model/hurdle.joblib", object(), None
+
+    monkeypatch.setattr(predict_module, "_featured_frame", fake_frame)
+    monkeypatch.setattr(predict_module, "predict_race", fake_predict_race)
+    monkeypatch.setattr(predict_module, "_load_models", fake_models)
+
+    cache = tmp_path / "predcache"
+    first = predict_season(2024, quiet=True, cache_dir=cache)
+    second = predict_season(2024, quiet=True, cache_dir=cache)
+
+    assert [p["round"] for p in first] == [1, 2]
+    assert [p["round"] for p in second] == [1, 2]
+    assert first[0]["verified"] is True
+    # Assembly + scoring happened once across both calls.
+    assert calls["frame"] == 1
+    assert calls["race"] == 2
+
+
 def test_prediction_cache_roundtrip_rebuilds_result(tmp_path):
     import json
 

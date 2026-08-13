@@ -5,7 +5,15 @@ import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { RefreshToggle } from '../ui/RefreshToggle'
+import {
+  DEFAULT_SEASON_RANGE,
+  SeasonRange,
+  seasonPayload,
+  type SeasonRangeValue,
+} from '../ui/SeasonRange'
 import './Calibration.css'
 
 const TARGET_LABEL: Record<string, string> = {
@@ -17,6 +25,9 @@ const TARGET_LABEL: Record<string, string> = {
 export function Calibration() {
   const [fitThrough, setFitThrough] = useState('')
   const [evalFrom, setEvalFrom] = useState('')
+  const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
+  const [refresh, setRefresh] = useState(false)
+  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [version, setVersion] = useState(0)
   const { state, retry } = useApi(`calibration-${version}`, () => getCalibration())
 
@@ -27,11 +38,15 @@ export function Calibration() {
         runLabel="Run calibration"
         onDone={() => setVersion((v) => v + 1)}
         buildPayload={() => ({
+          ...seasonPayload(range),
+          refresh,
+          enable_features: features.enable,
+          disable_features: features.disable,
           fit_through_season: fitThrough === '' ? null : Number(fitThrough),
           eval_from_season: evalFrom === '' ? null : Number(evalFrom),
         })}
         options={
-          <div className="season-config">
+          <>
             <div className="job-option">
               <label className="field-label" htmlFor="cal-fit-through">Fit through season</label>
               <input
@@ -41,6 +56,10 @@ export function Calibration() {
                 onChange={(e) => setFitThrough(e.target.value)}
                 placeholder="auto"
               />
+              <p className="job-option-hint">
+                Evaluation calibrators are fit on out-of-sample seasons up to
+                and including this one.
+              </p>
             </div>
             <div className="job-option">
               <label className="field-label" htmlFor="cal-eval-from">Evaluate from season</label>
@@ -51,8 +70,16 @@ export function Calibration() {
                 onChange={(e) => setEvalFrom(e.target.value)}
                 placeholder="auto"
               />
+              <p className="job-option-hint">
+                First season the hold-out Brier deltas are evaluated from.
+                Blank = chronological two-thirds split; deployment calibrators
+                are always fit on all out-of-sample scores.
+              </p>
             </div>
-          </div>
+            <SeasonRange value={range} onChange={setRange} />
+            <RefreshToggle value={refresh} onChange={setRefresh} />
+            <FeatureToggles value={features} onChange={setFeatures} />
+          </>
         }
         renderResult={(job) => <CalibrateRunResult job={job} />}
       />

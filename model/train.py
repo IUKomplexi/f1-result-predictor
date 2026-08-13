@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import sys
+import time
 import warnings
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -320,6 +323,30 @@ def save_checkpoint(
                 len(feats), feature_fingerprint(feats), path)
 
 
+def update_model_index(path: str | Path, meta: dict) -> Path:
+    """Record a trained checkpoint in ``index.json`` next to it (name -> metadata).
+
+    The index is the source of truth for the dashboard's model selector
+    (``GET /api/models``): each entry maps the checkpoint's stem (e.g.
+    ``hurdle-2022-2026-1a2b3c4d``) to its metadata. Re-training a name
+    overwrites its entry.
+    """
+    path = Path(path)
+    index_path = path.parent / "index.json"
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index: dict = {}
+    if index_path.is_file():
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            index = {}
+    index[path.stem] = meta
+    tmp = index_path.with_name(f".{index_path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    os.replace(tmp, index_path)
+    return index_path
+
+
 def load_checkpoint(
     path: str | Path, expected: Sequence[str] | None = None
 ) -> HurdleModels:
@@ -349,7 +376,7 @@ def load_checkpoint(
 def run(
     *,
     start: int = 2010,
-    end: int = 2025,
+    end: int = 2026,
     refresh: bool = False,
     cache_dir: str = "data/raw",
     dataset: str = "data/features.parquet",
@@ -379,7 +406,17 @@ def run(
     )
     models = train_final_model(df, feats, params=model_params(cfg))
     save_checkpoint(models, out, features=feats)
+    index_path = update_model_index(out, {
+        "checkpoint": out,
+        "params": model_params(cfg),
+        "features": feats,
+        "fingerprint": feature_fingerprint(feats),
+        "rows": len(df),
+        "seasons": int(df["season"].nunique()),
+        "trained_at": time.time(),
+    })
     log(f"Saved checkpoint to {out}")
+    log(f"Recorded model index {index_path}")
     return {
         "rows": len(df),
         "seasons": int(df["season"].nunique()),  # type: ignore[reportArgumentType]  # nunique on an untyped Series is Unknown

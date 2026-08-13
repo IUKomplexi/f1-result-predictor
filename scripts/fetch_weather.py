@@ -4,7 +4,7 @@ Historical mode (default) fetches ERA5 archive actuals for every race in the
 cached raw data — one polite request per race, results cached under
 ``data/weather/`` so later runs are offline::
 
-    python scripts/fetch_weather.py [--start 2010] [--end 2025]
+    python scripts/fetch_weather.py [--start 2010] [--end 2026]
 
 Forecast mode pre-warms the forecast for one (usually the next) race::
 

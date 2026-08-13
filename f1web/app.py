@@ -22,10 +22,13 @@ JSON API (all errors share the shape ``{"error": ...}``)::
     GET  /api/calendar?season=             race calendar
     GET  /api/standings?season=&round=     driver + constructor standings
     GET  /api/status                       artifact presence + model/dataset paths
+    GET  /api/models                       saved model checkpoints + metadata
     GET  /api/config                       effective config + schema metadata
     PUT  /api/config                       validate + write config.toml (single source of truth)
     POST /api/jobs                         queue a pipeline job
                                             (fetch/train/calibrate/backtest/search)
+                                            payload keys mirror the CLI options
+                                            (see f1web/jobs.JOB_PAYLOAD_KEYS)
     GET  /api/jobs                         job history
     GET  /api/jobs/{id}                    job status + log + result
 
@@ -57,7 +60,12 @@ from f1core.config import (
     save_config,
     validate_config,
 )
-from f1core.predict import get_prediction, predict_season, prediction_payload
+from f1core.predict import (
+    format_report,
+    get_prediction,
+    predict_season,
+    prediction_payload,
+)
 from f1data import (
     F1APIError,
     F1Client,
@@ -272,6 +280,20 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         # Only accept the keys a job type understands; ignore the rest.
         keys = JOB_PAYLOAD_KEYS.get(job_type, ())
         payload = {k: payload[k] for k in keys if k in payload}
+        # Validate feature toggles up front so a typo fails fast instead of
+        # surfacing mid-run (mirrors enabled_features' unknown-feature check).
+        known_features = set(all_feature_ids())
+        for name in ("enable_features", "disable_features"):
+            group = payload.get(name)
+            if group is None:
+                continue
+            if not isinstance(group, list) or not all(isinstance(f, str) for f in group):
+                return _error(f"'{name}' must be a list of strings", 400)
+            unknown = sorted(set(group) - known_features)
+            if unknown:
+                return _error(f"{name}: unknown feature(s): {unknown}", 422)
+        if "name" in payload and not isinstance(payload["name"], str):
+            return _error("'name' must be a string", 400)
         try:
             job_id = manager.submit(job_type, payload)
         except KeyError as exc:
@@ -295,8 +317,16 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
     def prediction_api(
         season: int | None = Query(default=None),
         round: int | None = Query(default=None),
+        refresh: bool = Query(default=False),
     ):
         try:
+            if refresh:
+                # CLI --refresh: bypass the in-memory + raw-data caches.
+                payload = _payload(get_prediction(
+                    season=season, round_=round, quiet=True,
+                    cache_dir=PREDICTION_CACHE_DIR, refresh=True,
+                ))
+                return payload
             return _cached_prediction(season, round)
         except SystemExit as exc:
             return _error(str(exc), 409)
@@ -319,8 +349,13 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         """Prediction with ephemeral overrides merged over config in memory only.
 
         Body: ``{"season": int?, "round": int?, "grid_csv": str?,
-        "enable_features": [str]?, "disable_features": [str]?}``. Nothing is
-        written to ``config.toml``; the overrides apply to this request only.
+        "enable_features": [str]?, "disable_features": [str]?,
+        "refresh": bool?, "model_path": str?, "write_report": bool?}``.
+        ``refresh`` ignores the raw-data cache (CLI ``--refresh``), ``model_path``
+        overrides the checkpoint (CLI ``--model``), and ``write_report`` writes
+        the same Markdown report the CLI produces to
+        ``config.toml [report] prediction`` (CLI ``--out``). Nothing is written
+        to ``config.toml``; the overrides apply to this request only.
         """
         try:
             body = await request.json()
@@ -344,6 +379,16 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
             if not isinstance(group, list) or not all(isinstance(f, str) for f in group):
                 return _error(f"'{name}' must be a list of strings", 400)
 
+        refresh = body.get("refresh", False)
+        model_path = body.get("model_path")
+        write_report = body.get("write_report", False)
+        if not isinstance(refresh, bool):
+            return _error("'refresh' must be a boolean", 400)
+        if model_path is not None and not isinstance(model_path, str):
+            return _error("'model_path' must be a string", 400)
+        if not isinstance(write_report, bool):
+            return _error("'write_report' must be a boolean", 400)
+
         grid_path = None
         grid_csv = body.get("grid_csv")
         if grid_csv is not None:
@@ -357,7 +402,8 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         try:
             pred = get_prediction(
                 season=season, round_=round_, grid_csv=grid_path,
-                enable_features=enable, disable_features=disable, quiet=True,
+                enable_features=enable, disable_features=disable,
+                refresh=refresh, model_path=model_path, quiet=True,
             )
         except SystemExit as exc:
             return _error(str(exc), 409)
@@ -366,6 +412,21 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         finally:
             if grid_path:
                 Path(grid_path).unlink(missing_ok=True)
+
+        if write_report:
+            # Mirror `f1 predict`'s --out: write the same Markdown report the
+            # CLI produces, to the path configured in [report] prediction.
+            try:
+                report = format_report(
+                    pred["result"], pred["season"], pred["round"], pred["meta"],
+                    verified=pred["verified"], checkpoint=pred["checkpoint"],
+                    calibrated=pred["calibrated"],
+                )
+                out = REPO_ROOT / load_config(CONFIG_TOML)["report"]["prediction"]
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(report, encoding="utf-8")
+            except (OSError, ValueError) as exc:
+                return _error(f"could not write report: {exc}", 500)
         return _payload(pred)
 
     @app.get("/api/backtest")
@@ -402,6 +463,31 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         except (F1APIError, KeyError, TypeError) as exc:
             return _error(f"could not fetch standings for {season}: {exc}", 502)
         return {"season": season, "round": round, "driver": driver, "constructor": constructor}
+
+    @app.get("/api/models")
+    def models_api() -> dict:
+        """Saved model checkpoints + metadata (from data/model/index.json).
+
+        The index is written by every train job (see model.train.update_model_index);
+        if it is missing/empty, fall back to listing ``*.joblib`` files in the
+        model dir so the selector still works on images built before the index
+        existed.
+        """
+        index_path = REPO_ROOT / "data" / "model" / "index.json"
+        models: dict = {}
+        if index_path.is_file():
+            try:
+                models = json.loads(index_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                models = {}
+        if not models:
+            calibrators = Path(load_config(CONFIG_TOML)["model"]["calibrators"]).name
+            model_dir = REPO_ROOT / "data" / "model"
+            for joblib in sorted(model_dir.glob("*.joblib")):
+                if joblib.name == calibrators:
+                    continue
+                models[joblib.stem] = {"checkpoint": str(joblib.relative_to(REPO_ROOT))}
+        return {"models": models, "default": load_config(CONFIG_TOML)["model"]["checkpoint"]}
 
     @app.get("/api/status")
     def status_api() -> dict:

@@ -5,7 +5,15 @@ import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { RefreshToggle } from '../ui/RefreshToggle'
+import {
+  DEFAULT_SEASON_RANGE,
+  SeasonRange,
+  seasonPayload,
+  type SeasonRangeValue,
+} from '../ui/SeasonRange'
 import './Backtest.css'
 
 const BASELINES = ['model', 'grid', 'championship', 'zero'] as const
@@ -34,6 +42,10 @@ const METRICS: { key: keyof BacktestMetricRow; label: string }[] = [
 
 export function Backtest() {
   const [quantize, setQuantize] = useState(true)
+  const [useCheckpoint, setUseCheckpoint] = useState(false)
+  const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
+  const [refresh, setRefresh] = useState(false)
+  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [version, setVersion] = useState(0)
   const { state, retry } = useApi(`backtest-${version}`, () => getBacktest())
   return (
@@ -42,18 +54,43 @@ export function Backtest() {
         type="backtest"
         runLabel="Run backtest"
         onDone={() => setVersion((v) => v + 1)}
-        buildPayload={() => ({ quantize })}
+        buildPayload={() => ({
+          ...seasonPayload(range),
+          refresh,
+          quantize,
+          use_checkpoint: useCheckpoint,
+          enable_features: features.enable,
+          disable_features: features.disable,
+        })}
         options={
-          <div className="job-option">
-            <label className="check-line" title="Round expected points to the nearest points-table value (matches the deployed predictor).">
-              <input
-                type="checkbox"
-                checked={quantize}
-                onChange={(e) => setQuantize(e.target.checked)}
-              />
-              Quantize points
-            </label>
-          </div>
+          <>
+            <div className="job-option">
+              <label className="check-line" title="Round expected points to the nearest points-table value (matches the deployed predictor).">
+                <input
+                  type="checkbox"
+                  checked={quantize}
+                  onChange={(e) => setQuantize(e.target.checked)}
+                />
+                Quantize points
+              </label>
+            </div>
+            <div className="job-option">
+              <label
+                className="check-line"
+                title="Score every season with the deployed checkpoint instead of walk-forward retraining — 'how good is the current model on these seasons' (in-sample w.r.t. its own training data)."
+              >
+                <input
+                  type="checkbox"
+                  checked={useCheckpoint}
+                  onChange={(e) => setUseCheckpoint(e.target.checked)}
+                />
+                Use deployed checkpoint
+              </label>
+            </div>
+            <SeasonRange value={range} onChange={setRange} />
+            <RefreshToggle value={refresh} onChange={setRefresh} />
+            <FeatureToggles value={features} onChange={setFeatures} />
+          </>
         }
         renderResult={(job) => <BacktestRunResult job={job} />}
       />

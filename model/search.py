@@ -115,7 +115,7 @@ def run(
     seed: int = 0,
     max_test_season: int = 2019,
     start: int = 2010,
-    end: int = 2025,
+    end: int = 2026,
     refresh: bool = False,
     cache_dir: str = "data/raw",
     dataset: str = "data/features.parquet",

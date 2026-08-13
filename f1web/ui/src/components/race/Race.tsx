@@ -130,10 +130,31 @@ export function Race() {
 }
 
 function RacePanel({ season, round }: { season: number; round: number }) {
-  const { state, retry } = useApi(`race-${season}-${round}`, () => getPrediction(season, round))
+  const [refresh, setRefresh] = useState(false)
+  const { state, retry } = useApi(
+    `race-${season}-${round}-${refresh}`,
+    () => getPrediction(season, round, refresh),
+  )
   if (state.phase === 'loading') return <Skeleton rows={10} />
   if (state.phase === 'error') return <ErrorState message={state.message} onRetry={retry} />
-  return <RaceTable prediction={state.data} />
+  return (
+    <>
+      <section className="card race-refresh-row">
+        <label
+          className="check-line"
+          title="Ignore the raw-data cache and re-fetch from the API (CLI --refresh)."
+        >
+          <input
+            type="checkbox"
+            checked={refresh}
+            onChange={(e) => setRefresh(e.target.checked)}
+          />
+          Refresh raw data (ignore cache)
+        </label>
+      </section>
+      <RaceTable prediction={state.data} />
+    </>
+  )
 }
 
 function RaceTable({ prediction }: { prediction: Prediction }) {

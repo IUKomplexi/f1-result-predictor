@@ -366,6 +366,16 @@ def prediction_cache_key(
     return hashlib.sha256(payload).hexdigest()
 
 
+def season_cache_key(season: int, feats_fingerprint: str, params_hash: str) -> str:
+    """Cache filename key for a whole-season prediction snapshot.
+
+    Distinct from :func:`prediction_cache_key` (rounds start at 1, so a
+    ``season|...`` prefix can never collide with a per-round key).
+    """
+    payload = f"season|{season}|{feats_fingerprint}|{params_hash}".encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
 def load_cached_prediction(cache_dir: str | Path, key: str) -> dict | None:
     """Read a cached JSON payload for ``key``, or None when missing/corrupt."""
     path = Path(cache_dir) / f"{key}.json"
@@ -728,17 +738,30 @@ def predict_season(
     Race History cost) and scores each completed round from it. Each prediction
     is shaped like :func:`get_prediction`'s return; ``synthetic`` is always
     False here because only cached (completed) rounds are scored. When
-    ``cache_dir`` is given, per-round payloads are also written to the shared
-    disk cache so single-race fetches are instant too.
+    ``cache_dir`` is given, per-round payloads are written to the shared disk
+    cache AND a whole-season snapshot is cached (keyed by season + feature
+    fingerprint + params hash), so repeat Race History opens are instant —
+    only a feature-set/params change or new raw data (refresh the cache)
+    recomputes.
     """
     cfg = cfg or load_config()
     seasons = list(range(cfg["data"]["start_season"], cfg["data"]["end_season"] + 1))
+    feats = enabled_features(cfg, enable=enable_features or [], disable=disable_features or [])
+    fp = feature_fingerprint(feats)
+    params = _params_hash(cfg)
+
+    # Whole-season cache hit: rebuild prediction dicts from the stored JSON
+    # payloads, skipping dataset assembly + scoring entirely.
+    if cache_dir is not None:
+        cached = load_cached_prediction(cache_dir, season_cache_key(season, fp, params))
+        if cached is not None and isinstance(cached.get("predictions"), list):
+            return [_pred_from_payload(p) for p in cached["predictions"]]
+
     client = _make_client(cfg, False, client)
     _, base_df = _featured_frame(client, seasons)
     completed = sorted(
         base_df.loc[base_df["season"] == season, "round"].astype(int).unique()
     )
-    feats = enabled_features(cfg, enable=enable_features or [], disable=disable_features or [])
     checkpoint, model, calibrators = _load_models(cfg, model_path, feats)
 
     preds: list[dict] = []
@@ -756,9 +779,13 @@ def predict_season(
             "features": feats,
         }
         if cache_dir is not None:
-            key = prediction_cache_key(
-                season, int(round_), feature_fingerprint(feats), _params_hash(cfg)
-            )
+            key = prediction_cache_key(season, int(round_), fp, params)
             save_cached_prediction(cache_dir, key, prediction_payload(pred))
         preds.append(pred)
+    if cache_dir is not None:
+        save_cached_prediction(
+            cache_dir,
+            season_cache_key(season, fp, params),
+            {"season": season, "predictions": [prediction_payload(p) for p in preds]},
+        )
     return preds

@@ -214,6 +214,41 @@ def test_run_backtest_quantize_option():
     assert overall_q.loc["model", "mae"] < overall_q.loc["zero", "mae"]
 
 
+def test_run_backtest_deployed_checkpoint_scores_all_seasons():
+    """model= scores every season with the fixed checkpoint (no walk-forward)."""
+    df = add_features(_synthetic_df(n_seasons=8))
+    model = train_final_model(df)
+    overall, by_season = run_backtest(df, model=model)
+    assert set(overall.index) == {"model", "grid", "championship", "zero"}
+    assert set(overall.columns) == {"winner_hit", "top3_overlap", "spearman", "mae"}
+    assert overall.loc["model", "mae"] < overall.loc["zero", "mae"]
+    # The fixed model applies to every season — unlike the walk-forward mode,
+    # which needs min_train_seasons prior seasons before the first test.
+    assert len(by_season["model"]) == 8
+
+
+def test_update_model_index_roundtrip(tmp_path):
+    import json
+
+    from model.train import update_model_index
+
+    named = tmp_path / "data" / "model" / "hurdle-2022-2026-abc.joblib"
+    other = tmp_path / "data" / "model" / "experiment.joblib"
+    index_path = update_model_index(named, {"checkpoint": str(named), "rows": 100})
+    assert index_path == tmp_path / "data" / "model" / "index.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    assert "hurdle-2022-2026-abc" in index
+    assert index["hurdle-2022-2026-abc"]["rows"] == 100
+
+    # A new name is added; re-training an existing name overwrites its entry.
+    update_model_index(other, {"rows": 2})
+    update_model_index(named, {"checkpoint": str(named), "rows": 101})
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    assert index["hurdle-2022-2026-abc"]["rows"] == 101
+    assert index["experiment"]["rows"] == 2
+    assert len(index) == 2
+
+
 def test_quantize_points_nan_maps_to_zero():
     from model.train import quantize_points
 

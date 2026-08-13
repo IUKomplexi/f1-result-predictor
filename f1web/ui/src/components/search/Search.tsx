@@ -1,16 +1,36 @@
 import { useState } from 'react'
 import { getConfig, putConfig, type Job } from '../../api/client'
+import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
+import { RefreshToggle } from '../ui/RefreshToggle'
+import {
+  DEFAULT_SEASON_RANGE,
+  SeasonRange,
+  seasonPayload,
+  type SeasonRangeValue,
+} from '../ui/SeasonRange'
 
 export function Search() {
   const [n, setN] = useState(16)
   const [maxTest, setMaxTest] = useState(2019)
+  const [seed, setSeed] = useState(0)
+  const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
+  const [refresh, setRefresh] = useState(false)
+  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
 
   return (
     <JobRunner
       type="search"
       runLabel="Run search"
-      buildPayload={() => ({ n, max_test_season: maxTest, seed: 0 })}
+      buildPayload={() => ({
+        n,
+        max_test_season: maxTest,
+        seed,
+        ...seasonPayload(range),
+        refresh,
+        enable_features: features.enable,
+        disable_features: features.disable,
+      })}
       options={
         <>
           <div className="job-option">
@@ -32,6 +52,18 @@ export function Search() {
               onChange={(e) => setMaxTest(Number(e.target.value) || 2019)}
             />
           </div>
+          <div className="job-option">
+            <label className="field-label" htmlFor="search-seed">Seed</label>
+            <input
+              id="search-seed"
+              type="number"
+              value={seed}
+              onChange={(e) => setSeed(Number(e.target.value) || 0)}
+            />
+          </div>
+          <SeasonRange value={range} onChange={setRange} />
+          <RefreshToggle value={refresh} onChange={setRefresh} />
+          <FeatureToggles value={features} onChange={setFeatures} />
         </>
       }
       renderResult={(job) => <SearchResult job={job} />}
