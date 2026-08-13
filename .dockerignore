@@ -17,6 +17,3 @@ f1web/ui/dist/
 .github/
 .reasonix/
 .vscode/
-
-# Derived weather cache (regenerable; not needed for the dashboard)
-data/weather/

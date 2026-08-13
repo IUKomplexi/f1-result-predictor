@@ -8,7 +8,6 @@ import {
 } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { debounce, type Debounced } from '../../lib/debounce'
-import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import './Settings.css'
 
@@ -266,35 +265,6 @@ function Field({
             </div>
           </div>
         ))}
-        {help}
-      </div>
-    )
-  }
-
-  if (field.section === 'weather') {
-    // Weather is evaluated but not adopted (reports/weather.md): keep the cache
-    // dir editable but present a visible, disabled "plug into data" placeholder.
-    return (
-      <div className="field span-all">
-        <div className="weather-note">
-          <Badge variant="warn">Not adopted</Badge>
-          <p className="field-help">
-            Weather features were evaluated but not adopted (see reports/weather.md);
-            the shipped model does not use them. The data plumbing is not enabled.
-          </p>
-        </div>
-        <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
-          {field.key}
-        </label>
-        <input
-          id={`${field.section}-${field.key}`}
-          type="text"
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <button type="button" className="button" disabled title="Weather is not adopted; the data plumbing is not enabled.">
-          Plug into data
-        </button>
         {help}
       </div>
     )

@@ -36,12 +36,11 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY f1core/ f1core/
 COPY f1data/ f1data/
-COPY f1weather/ f1weather/
 COPY features/ features/
 COPY model/ model/
-# scripts/ holds one-off tooling (fetch_weather, feature_audit,
-# download_fixtures); data fetching is the `f1 fetch` CLI subcommand (the
-# shared logic lives in the installed f1data.fetch package).
+# scripts/ holds one-off tooling (download_fixtures); data fetching is the
+# `f1 fetch` CLI subcommand (the shared logic lives in the installed
+# f1data.fetch package).
 COPY scripts/ scripts/
 # Bare COPY is safe: .dockerignore excludes f1web/ui/node_modules and
 # f1web/ui/dist (ui/ is built in stage 1 and copied as dist below), so new

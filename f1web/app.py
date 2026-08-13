@@ -131,7 +131,7 @@ def _data_end_season(cfg: dict) -> int:
     """Latest season with cached raw data (fallback: the configured end).
 
     Scans the raw cache dir for ``.../f1/<season>...`` filenames. The result
-    caps the pipeline season pickers (train/backtest/search/calibration) so a
+    caps the pipeline season pickers (train/backtest/calibration) so a
     run never silently references seasons that have no data yet — fetching new
     seasons is the Data page's job, which uses the *configured* end instead.
     """
