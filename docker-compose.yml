@@ -6,9 +6,17 @@ services:
       - "8080:8080"
     restart: unless-stopped
     volumes:
+      # Settings edits (Settings tab / PUT /api/config) survive rebuilds —
+      # config.toml is the single source of truth shared with the CLI.
+      - ./config.toml:/app/config.toml
+      # Fetched raw data, the featured dataset, model checkpoints and the
+      # prediction cache survive rebuilds; the baked-in data/ files
+      # initialize this on first use.
+      - data:/app/data
       # Runtime-generated snapshots (backtest/calibration JSON) survive
       # rebuilds; the baked-in reports/ files initialize this on first use.
       - reports:/app/reports
 
 volumes:
+  data:
   reports:

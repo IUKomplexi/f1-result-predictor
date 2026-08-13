@@ -95,7 +95,8 @@ Endpoints: `/` and `/dashboard` (React dashboard), `/health`, and the JSON API
 under `/api/*` (GET `/api/prediction`, GET `/api/predictions/season`,
 `/api/backtest`, `/api/calibration`, `/api/calendar`, `/api/standings`,
 `/api/status`, GET/PUT `/api/config`, `POST /api/jobs`, `GET /api/jobs`,
-`GET /api/jobs/{id}`, `POST /api/predict`). The dashboard is the single
+`GET /api/jobs/{id}`, `POST /api/jobs/{id}/cancel`, `POST /api/predict`). The
+dashboard is the single
 frontend — there is no server-rendered HTML (the FastAPI backend only serves
 JSON + the built SPA). Predictions are computed on demand through the same
 code path as the CLI and cached on disk under `data/predictions/` (gitignored),
@@ -117,6 +118,18 @@ navigation; **Race History** loads a whole season in one request (with a
 opens are instant); the **Settings** tab edits every `config.toml` value
 (including the HGB hyperparameters under `[model.params]` and the feature
 selection) and writes them back in place.
+
+**Race** is the full per-race control surface (it posts to `POST /api/predict`,
+so every CLI predict override is available): a **model picker** (`--model`,
+defaults to the deployed checkpoint; named models keep their own calibrators),
+an interactive **qualifying-grid editor** for upcoming races (`--grid` —
+per-driver grid inputs seeded from the model's grid, with a reset button and
+invalid-input highlighting), per-race **feature overrides**
+(`--enable/--disable-features`), a **Write report** checkbox (the same
+`reports/prediction.md` the CLI `--out` produces), and the existing
+"Re-fetch from API" refresh toggle. Edits stay local until **Apply changes**;
+override predictions are cached on disk per model + grid, so repeats are
+instant and different models/grids never share a cached payload.
 
 Every tab is **deep-linkable** via a URL hash (`#/race`, `#/backtest`, …) —
 refresh, the browser back button, and shared links restore the tab. Race
@@ -163,19 +176,28 @@ per model plus the baselines, and a delta table against the deployed model
 `--out`, `--out-json`) stay config-managed: edit them in the Settings tab and
 web jobs honour the configured paths.
 
-Calibration review remains CLI-only (`f1 calibrate`) for occasional use; the
-dashboard no longer carries a tab for it. `POST /api/predict` still
-accepts *ephemeral* overrides (season/round, a grid CSV, model checkpoint,
-refresh, and optionally writing the same `reports/prediction.md` the CLI
-produces) that are merged over the config in memory only — nothing is written
-to `config.toml`.
+Calibration lives in a **panel at the bottom of Backtest** (no separate tab):
+run `f1 calibrate`'s equivalent as a job — model choice (the config default or
+a saved model, which is calibrated on its own out-of-sample seasons), season
+range, and advanced fit-through/eval-from windows — and review the
+`reports/calibration.json` report: per-target raw vs calibrated Brier with the
+deployment decision, plus reliability curves (predicted vs observed with the
+perfect-calibration diagonal). The view refreshes automatically when a
+calibration job finishes. `POST /api/predict` accepts *ephemeral* overrides
+(season/round, a grid CSV, model checkpoint, feature toggles, refresh, and
+optionally writing the same `reports/prediction.md` the CLI produces) that are
+merged over the config in memory only — nothing is written to `config.toml`.
 
-> ⚠️ **Docker config persistence:** in the container, `config.toml` lives inside
-> the image and resets on rebuild. To keep dashboard edits across rebuilds,
-> bind-mount it, e.g. `docker compose run -v "$PWD/config.toml:/app/config.toml"` —
-> the CLI and web always read/write the same file, so either surface works.
-> Jobs are tied to the server process lifetime: `uvicorn --reload` restarts
-> kill in-flight jobs (the `reports/jobs/*.json` history records what ran).
+> ⚠️ **Docker persistence:** `docker-compose.yml` bind-mounts `./config.toml`
+> into the container and keeps `data/` (fetched raw data, dataset, models,
+> prediction cache) and `reports/` on named volumes, so dashboard edits and
+> pipeline artifacts survive image rebuilds — the CLI and web always
+> read/write the same file, so either surface works. Jobs are tied to the
+> server process lifetime: `uvicorn --reload` restarts kill in-flight jobs;
+> the `reports/jobs/*.json` history is reloaded at startup (jobs left
+> queued/running by the dead process are marked **interrupted**). A **queued**
+> job can be cancelled from the Jobs widget — running jobs stay atomic and
+> cannot be torn down mid-run.
 
 ### Accessing the dashboard
 
@@ -493,8 +515,6 @@ moves, or refactors.
   top-3/MAE — per-circuit setup, strategy data, 2026-regs data?
 - **2026 regulation change** is an imminent transfer-risk event for a model
   trained on 2010–2026 (the `points_era` split only covers pre/post-2019).
-- **No UI test suite** exists (only an `oxlint` config) — vitest coverage of
-  `f1web/ui` is the largest test gap.
 - **Consider serving distributions** of race outcomes rather than point
   estimates as a differentiator over the grid baseline.
 
@@ -502,6 +522,9 @@ moves, or refactors.
 - Tests: `uv run pytest -q` — fully offline (recorded fixtures, no network). The
   suite is enforced deprecation-free (`filterwarnings = ["error::DeprecationWarning"]`
   in `pyproject.toml`).
+- UI tests: `npm test` in `f1web/ui` — vitest + @testing-library/preact
+  component/lib suites (offline, jsdom); `npm run build` + `npm run lint` are
+  the type/bundle and oxlint gates. CI runs all three plus pytest/ruff.
 - `tests/test_e2e.py` runs the **full pipeline end-to-end** (fetch →
   assemble → features → train → predict → report) offline against a synthetic
   API session, so CI exercises the whole chain, not just pieces.
