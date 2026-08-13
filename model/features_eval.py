@@ -10,7 +10,7 @@ is compute-heavy (one walk-forward per candidate) and streams progress lines.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -107,11 +107,11 @@ def evaluate_feature_deltas(
 
 def run(
     *,
-    start: int = 2010,
-    end: int = 2026,
+    start: int | None = None,
+    end: int | None = None,
     refresh: bool = False,
-    cache_dir: str = "data/raw",
-    dataset: str = "data/features.parquet",
+    cache_dir: str | None = None,
+    dataset: str | None = None,
     max_test_season: int | None = None,
     model_path: str | None = None,
     enable_features: Sequence[str] = (),
@@ -126,9 +126,23 @@ def run(
     stored features); otherwise the config feature selection (plus the
     ``enable_features``/``disable_features`` toggles) is the baseline. The
     hyperparameters come from ``[model.params]`` either way.
+
+    Every path/season argument defaults to ``None`` and resolves from the
+    config (``[data]`` seasons/cache/dataset).
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    # Config values are validated as the cast types (see validate_config); the
+    # casts keep the declared types after the None-guards so downstream calls
+    # don't carry Optional[None].
+    if start is None:
+        start = cast(int, cfg["data"]["start_season"])
+    if end is None:
+        end = cast(int, cfg["data"]["end_season"])
+    if cache_dir is None:
+        cache_dir = cast(str, cfg["data"]["cache_dir"])
+    if dataset is None:
+        dataset = cast(str, cfg["data"]["dataset"])
     if end < start:
         raise ValueError(
             f"feature evaluation: end season {end} is before start season {start}"
