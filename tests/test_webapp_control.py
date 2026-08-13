@@ -3,6 +3,7 @@ and prediction with ephemeral overrides."""
 
 from __future__ import annotations
 
+import json
 import time
 
 import pandas as pd
@@ -158,6 +159,55 @@ def test_job_failure_is_recorded(tmp_path, monkeypatch):
     assert "dataset too small" in job["error"]
 
 
+def test_cancel_queued_job_never_runs(tmp_path, monkeypatch):
+    """A queued job can be cancelled; the worker must skip it entirely.
+    Running/done jobs are not cancellable (409) and unknown ids are 404."""
+    import threading
+
+    import f1web.jobs as jobs_module
+
+    monkeypatch.setattr(jobs_module, "JOBS_DIR", tmp_path / "reports" / "jobs")
+    manager = JobManager()
+    started = threading.Event()
+    release = threading.Event()
+    ran = []
+
+    def slow_handler(payload, log):
+        ran.append(payload.get("quantize"))
+        started.set()
+        release.wait(timeout=10)
+
+    manager.register("backtest", slow_handler)
+    client = TestClient(create_app(job_manager=manager))
+
+    first = client.post(
+        "/api/jobs", json={"type": "backtest", "payload": {"quantize": True}}
+    ).json()["id"]
+    second = client.post(
+        "/api/jobs", json={"type": "backtest", "payload": {"quantize": False}}
+    ).json()["id"]
+    assert started.wait(timeout=10)  # first job is now running, second is queued
+
+    # Running jobs are atomic: cancelling one is a 409.
+    resp = client.post(f"/api/jobs/{first}/cancel")
+    assert resp.status_code == 409
+    assert "running" in resp.json()["error"]
+
+    # The queued job cancels cleanly.
+    resp = client.post(f"/api/jobs/{second}/cancel")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+    # Unknown ids are 404; re-cancelling the finished cancel is a 409.
+    assert client.post("/api/jobs/nope/cancel").status_code == 404
+    assert client.post(f"/api/jobs/{second}/cancel").status_code == 409
+
+    release.set()
+    assert _wait_for(client, first)["status"] == "done"
+    assert ran == [True]  # the cancelled job's handler never executed
+    assert client.get(f"/api/jobs/{second}").json()["status"] == "cancelled"
+
+
 def test_unknown_job_type_is_404(tmp_path, monkeypatch):
     client = _jobs_client(tmp_path, monkeypatch)
     resp = client.post("/api/jobs", json={"type": "nope"})
@@ -168,6 +218,59 @@ def test_unknown_job_type_is_404(tmp_path, monkeypatch):
 def test_unknown_job_id_is_404(tmp_path, monkeypatch):
     client = _jobs_client(tmp_path, monkeypatch)
     assert client.get("/api/jobs/doesnotexist").status_code == 404
+
+
+def test_job_manager_reloads_history_and_marks_interrupted(tmp_path, monkeypatch):
+    """reports/jobs/*.json survives restarts: a fresh JobManager reloads the
+    durable history into memory, and jobs the dead process left queued/running
+    are marked interrupted instead of claiming completion."""
+    import f1web.jobs as jobs_module
+
+    jobs_dir = tmp_path / "reports" / "jobs"
+    jobs_dir.mkdir(parents=True)
+    (jobs_dir / "a.json").write_text(
+        json.dumps(
+            {
+                "id": "done-job",
+                "type": "fetch",
+                "label": "Fetch data",
+                "status": "done",
+                "log": ["started"],
+                "result": {"ok": 1},
+                "created_at": 1.0,
+                "started_at": 1.0,
+                "finished_at": 2.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (jobs_dir / "b.json").write_text(
+        json.dumps(
+            {
+                "id": "orphan-job",
+                "type": "train",
+                "label": "Train",
+                "status": "running",
+                "log": ["building dataset"],
+                "created_at": 1.0,
+                "started_at": 1.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    # A corrupt record must be skipped, not crash the reload.
+    (jobs_dir / "c.json").write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr(jobs_module, "JOBS_DIR", jobs_dir)
+
+    manager = JobManager()
+    jobs = {job["id"]: job for job in manager.list()}
+
+    assert jobs["done-job"]["status"] == "done"
+    assert jobs["done-job"]["result"] == {"ok": 1}
+    assert jobs["orphan-job"]["status"] == "interrupted"
+    assert "restarted" in jobs["orphan-job"]["error"]
+    assert jobs["orphan-job"]["finished_at"] is not None
+    assert set(jobs) == {"done-job", "orphan-job"}
 
 
 def test_worker_survives_handler_systemexit(tmp_path, monkeypatch):
@@ -357,6 +460,49 @@ def test_train_handler_calibration_failure_keeps_model(tmp_path, monkeypatch):
     assert result["calibrated"] is False
     assert "no out-of-sample" in result["calibrate_error"]
     assert result["checkpoint"]  # the train result is preserved
+
+
+def test_calibrate_handler_forwards_windows_and_model_path(tmp_path, monkeypatch):
+    """The standalone calibrate job mirrors `f1 calibrate`: fit_through/
+    eval_from/model_path reach the shared wrapper; blank values coerce to
+    None; the shared [model] calibrators path is the default output."""
+    import f1web.jobs as jobs_module
+    import model.calibrate as calibrate_module
+    from f1core.config import config_to_toml, load_config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(config_to_toml(load_config()), encoding="utf-8")
+    monkeypatch.setattr(jobs_module, "REPO_ROOT", tmp_path)
+    calls = {}
+
+    def fake_calibrate(**kw):
+        calls.update(kw)
+        return {"calibrators": kw["out"], "deployed": ["win"]}
+
+    monkeypatch.setattr(calibrate_module, "run", fake_calibrate)
+    cfg = load_config(cfg_path)
+    result = jobs_module._calibrate_handler(
+        {
+            "start": 2010, "end": 2024,
+            "fit_through_season": 2021, "eval_from_season": 2022,
+            "model_path": "data/model/other.joblib",
+        },
+        lambda line: None,
+    )
+    assert calls["start"] == 2010 and calls["end"] == 2024
+    assert calls["fit_through_season"] == 2021
+    assert calls["eval_from_season"] == 2022
+    assert calls["model_path"] == "data/model/other.joblib"
+    assert calls["out"] == cfg["model"]["calibrators"]
+    assert result["calibrators"] == cfg["model"]["calibrators"]
+
+    # Blank/absent window values coerce to None (the wrapper's own defaults).
+    jobs_module._calibrate_handler(
+        {"fit_through_season": "", "eval_from_season": ""}, lambda line: None
+    )
+    assert calls["fit_through_season"] is None
+    assert calls["eval_from_season"] is None
+    assert calls["model_path"] is None
 
 
 def test_job_feature_toggles_must_be_list_of_strings(tmp_path, monkeypatch):
@@ -561,11 +707,42 @@ def test_predict_forwards_refresh_and_model_path(tmp_path, monkeypatch):
     assert seen["model_path"] == "data/model/other.joblib"
 
 
+def test_predict_uses_disk_cache_unless_refresh(tmp_path, monkeypatch):
+    """Override predictions reuse the shared disk cache; refresh bypasses it."""
+    import f1web.app as app_module
+
+    client = _config_client(tmp_path, monkeypatch)
+    seen = {}
+
+    def fake_prediction(**kw):
+        seen.update(kw)
+        return _canned_prediction()
+
+    monkeypatch.setattr(app_module, "get_prediction", fake_prediction)
+    resp = client.post("/api/predict", json={"season": 2024, "round": 1})
+    assert resp.status_code == 200
+    assert seen["cache_dir"] == app_module.PREDICTION_CACHE_DIR
+
+    resp = client.post("/api/predict", json={"season": 2024, "round": 1, "refresh": True})
+    assert resp.status_code == 200
+    assert seen["cache_dir"] is None
+
+
 def test_predict_rejects_bad_override_types(tmp_path, monkeypatch):
     client = _config_client(tmp_path, monkeypatch)
     assert client.post("/api/predict", json={"refresh": "yes"}).status_code == 400
     assert client.post("/api/predict", json={"model_path": 42}).status_code == 400
     assert client.post("/api/predict", json={"write_report": "yep"}).status_code == 400
+
+
+def test_predict_rejects_unknown_feature_id(tmp_path, monkeypatch):
+    client = _config_client(tmp_path, monkeypatch)
+    resp = client.post("/api/predict", json={"enable_features": ["not_a_feature"]})
+    assert resp.status_code == 422
+    assert "unknown feature" in resp.json()["error"]
+    resp = client.post("/api/predict", json={"disable_features": ["also_bogus"]})
+    assert resp.status_code == 422
+    assert "unknown feature" in resp.json()["error"]
 
 
 def test_predict_write_report_writes_markdown(tmp_path, monkeypatch):

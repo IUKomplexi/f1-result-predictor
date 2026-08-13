@@ -31,6 +31,7 @@ JSON API (all errors share the shape ``{"error": ...}``)::
                                             (see f1web/jobs.JOB_PAYLOAD_KEYS)
     GET  /api/jobs                         job history
     GET  /api/jobs/{id}                    job status + log + result
+    POST /api/jobs/{id}/cancel             cancel a queued job (409 if running/done)
 
 The prediction is computed on demand through ``predict.get_prediction`` (the
 same code path as the CLI) and cached in memory for a short TTL; the other
@@ -355,6 +356,16 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
             return _error(f"job not found: {job_id}", 404)
         return job
 
+    @app.post("/api/jobs/{job_id}/cancel")
+    def job_cancel(job_id: str):
+        """Cancel a queued job (running jobs are atomic and cannot be torn down)."""
+        error = manager.cancel(job_id)
+        if error is not None:
+            if error.startswith("job not found"):
+                return _error(error, 404)
+            return _error(error, 409)
+        return {"id": job_id, "status": "cancelled"}
+
     # -------------------------------------------------------------- prediction
 
     @app.get("/api/prediction")
@@ -422,6 +433,13 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         for name, group in (("enable_features", enable), ("disable_features", disable)):
             if not isinstance(group, list) or not all(isinstance(f, str) for f in group):
                 return _error(f"'{name}' must be a list of strings", 400)
+        # Unknown feature ids fail fast (mirrors POST /api/jobs) instead of
+        # surfacing mid-prediction.
+        known_features = set(all_feature_ids())
+        for name, group in (("enable_features", enable), ("disable_features", disable)):
+            unknown = sorted(set(group) - known_features)
+            if unknown:
+                return _error(f"{name}: unknown feature(s): {unknown}", 422)
 
         refresh = body.get("refresh", False)
         model_path = body.get("model_path")
@@ -448,6 +466,11 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
                 season=season, round_=round_, grid_csv=grid_path,
                 enable_features=enable, disable_features=disable,
                 refresh=refresh, model_path=model_path, quiet=True,
+                # Cache override predictions on disk (keyed by season/round/
+                # features/params/model/grid) so a repeated request with the
+                # same model + grid is instant. On refresh the raw-data cache
+                # is bypassed, so the prediction cache must be too.
+                cache_dir=None if refresh else PREDICTION_CACHE_DIR,
             )
         except SystemExit as exc:
             return _error(str(exc), 409)

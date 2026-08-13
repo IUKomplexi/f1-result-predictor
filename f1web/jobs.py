@@ -7,8 +7,10 @@ artifacts, so only one runs at a time) and records progress + JSON-safe
 results in memory plus a durable ``reports/jobs/*.json`` history.
 
 Jobs are tied to the server process lifetime: uvicorn ``--reload`` restarts
-kill in-flight jobs. The ``reports/jobs/*.json`` history survives restarts as a
-record of what ran, but is not automatically reloaded into memory.
+kill in-flight jobs. The ``reports/jobs/*.json`` history survives restarts and
+is reloaded into memory at startup — finished jobs reappear in the dashboard,
+while jobs left ``queued``/``running`` by the dead process are marked
+``interrupted`` (they never ran to completion).
 """
 
 from __future__ import annotations
@@ -35,6 +37,10 @@ JOB_TYPES: dict[str, str] = {
     "calibrate": "Calibrate",
     "backtest": "Backtest",
 }
+
+# Terminal states a job can be in when the server restarts; anything else is
+# a job the dead process never finished.
+_FINISHED_STATUSES = ("done", "failed", "interrupted", "cancelled")
 
 # Payload keys each job type accepts (defaults are read from config / sensible
 # fallbacks; only these keys are passed through to the underlying ``run_*``).
@@ -69,6 +75,7 @@ class JobManager:
             target=self._run_loop, name="pipeline-jobs", daemon=True
         )
         self._worker.start()
+        self._reload_history()
 
     def register(self, job_type: str, handler: Callable) -> None:
         """Register the callable that runs a job type: ``handler(payload, log) -> dict``."""
@@ -101,6 +108,24 @@ class JobManager:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def cancel(self, job_id: str) -> str | None:
+        """Cancel a queued job; returns an error message, or None on success.
+
+        Only queued jobs can be cancelled safely — a running job is atomic
+        (pipeline steps share ``data/`` artifacts and cannot be torn down
+        mid-run). The worker skips cancelled jobs when it dequeues them.
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return f"job not found: {job_id}"
+            if job["status"] != "queued":
+                return f"job is {job['status']}; only queued jobs can be cancelled"
+            job["status"] = "cancelled"
+            job["finished_at"] = time.time()
+        self._persist(job_id)
+        return None
+
     def list(self) -> list[dict]:
         with self._lock:
             return sorted(
@@ -109,7 +134,12 @@ class JobManager:
 
     def _run_loop(self) -> None:
         while True:
-            self._process(self._queue.get())
+            job_id = self._queue.get()
+            job = self.get(job_id)
+            # A job cancelled while queued must never run.
+            if job is None or job["status"] != "queued":
+                continue
+            self._process(job_id)
 
     def _process(self, job_id: str) -> None:
         job = self.get(job_id)
@@ -150,6 +180,33 @@ class JobManager:
             # Disk or serialization failure in the durable history must not
             # kill the worker; the in-memory job record is still authoritative.
             pass
+
+    def _reload_history(self) -> None:
+        """Reload the durable ``reports/jobs/*.json`` history into memory.
+
+        Finished jobs reappear in the dashboard after a server restart. Jobs
+        the dead process left ``queued``/``running`` are marked
+        ``interrupted`` (jobs never run across process lifetimes), so the
+        history does not claim they completed. Reloaded jobs are never
+        re-queued.
+        """
+        if not JOBS_DIR.is_dir():
+            return
+        for path in sorted(JOBS_DIR.glob("*.json")):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(record, dict) or not isinstance(record.get("id"), str):
+                continue
+            status = record.get("status")
+            if status in ("queued", "running"):
+                record["status"] = "interrupted"
+                record["error"] = record.get("error") or (
+                    f"server restarted while this job was {status}"
+                )
+                record["finished_at"] = record.get("finished_at") or time.time()
+            self._jobs[record["id"]] = record
 
 
 # --------------------------------------------------------------------------

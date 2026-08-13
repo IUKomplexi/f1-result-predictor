@@ -385,6 +385,55 @@ def test_prediction_cache_key_distinguishes_season_round_fingerprint_params():
     assert len(distinct) == 5
 
 
+def test_prediction_cache_key_distinguishes_model_and_grid_overrides():
+    """A --model or grid-CSV override must never share a cached payload."""
+    from f1core.predict import prediction_cache_key
+
+    base = prediction_cache_key(2024, 1, "fpA", "pA")
+    assert base == prediction_cache_key(2024, 1, "fpA", "pA", None, None)
+    distinct = {
+        base,
+        prediction_cache_key(2024, 1, "fpA", "pA", model_id="data/model/other.joblib"),
+        prediction_cache_key(2024, 1, "fpA", "pA", model_id="data/model/third.joblib"),
+        prediction_cache_key(2024, 1, "fpA", "pA", grid_hash="gA"),
+        prediction_cache_key(2024, 1, "fpA", "pA", model_id="m", grid_hash="gA"),
+        prediction_cache_key(2024, 1, "fpA", "pA", model_id="m", grid_hash="gB"),
+    }
+    assert len(distinct) == 6
+
+
+def test_grid_hash_is_stable_content_hash(tmp_path):
+    from f1core.predict import _grid_hash
+
+    a = tmp_path / "grid.csv"
+    b = tmp_path / "other.csv"
+    a.write_text("driver_id,grid\nrussell,1\n", encoding="utf-8")
+    b.write_text("driver_id,grid\nrussell,1\n", encoding="utf-8")
+    assert _grid_hash(str(a)) == _grid_hash(str(b))  # same content, same hash
+    b.write_text("driver_id,grid\nrussell,2\n", encoding="utf-8")
+    assert _grid_hash(str(a)) != _grid_hash(str(b))  # different grid, different hash
+    assert _grid_hash(None) is None
+    assert _grid_hash("") is None
+    assert _grid_hash(str(tmp_path / "missing.csv")) is None
+
+
+def test_model_cache_id_tracks_checkpoint_mtime(tmp_path, monkeypatch):
+    from f1core.predict import _model_cache_id
+
+    p = tmp_path / "hurdle.joblib"
+    p.write_bytes(b"v1")
+    first = _model_cache_id({}, str(p))
+    assert first is not None and str(p.resolve()) in first
+    monkeypatch.setattr("pathlib.Path.stat", lambda self: type("St", (), {"st_mtime_ns": 999})())
+    # Only the mtime differs -> the identity changes, so a retrained
+    # checkpoint invalidates cached predictions even with identical features.
+    assert _model_cache_id({}, str(p)) != first
+    # The config-default model has no explicit identity (params + features
+    # already cover it).
+    assert _model_cache_id({}, None) is None
+    assert _model_cache_id({}, "") is None
+
+
 def test_season_cache_key_distinguishes_season_fingerprint_params():
     from f1core.predict import season_cache_key
 

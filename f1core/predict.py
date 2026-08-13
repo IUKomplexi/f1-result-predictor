@@ -292,16 +292,57 @@ def _params_hash(cfg: dict) -> str:
     return hashlib.sha256(payload).hexdigest()[:12]
 
 
+def _model_cache_id(cfg: dict, model_path: str | None) -> str | None:
+    """Identity of the checkpoint a prediction loads (cache-key part).
+
+    None for the config-default model — the params hash + feature fingerprint
+    already identify it. For an explicit ``--model`` the resolved path plus
+    file mtime are used, so retraining a named checkpoint with unchanged
+    features/params still bypasses (and replaces) its cached predictions.
+    """
+    if not model_path:
+        return None
+    path = Path(model_path)
+    try:
+        return f"{path.resolve()}:{path.stat().st_mtime_ns}"
+    except OSError:
+        return f"{path.resolve()}"
+
+
+def _grid_hash(grid_csv: str | None) -> str | None:
+    """Short hash of a grid-CSV file's content (cache-key part), None if absent."""
+    if not grid_csv:
+        return None
+    try:
+        content = Path(grid_csv).read_bytes()
+    except OSError:
+        return None
+    return hashlib.sha256(content).hexdigest()[:16]
+
+
 def prediction_cache_key(
-    season: int, round_: int, feats_fingerprint: str, params_hash: str
+    season: int,
+    round_: int,
+    feats_fingerprint: str,
+    params_hash: str,
+    model_id: str | None = None,
+    grid_hash: str | None = None,
 ) -> str:
-    """Cache filename key for ``(season, round)`` given the feature fingerprint.
+    """Cache filename key for ``(season, round)`` given the prediction inputs.
 
     A feature-selection or ``[model.params]`` change alters the fingerprint /
     params hash, so stale entries are naturally bypassed (never read, never
-    written over) rather than invalidated eagerly.
+    written over) rather than invalidated eagerly. ``model_id`` disambiguates
+    explicit ``--model`` overrides (path + mtime, see :func:`_model_cache_id`)
+    and ``grid_hash`` grid-CSV overrides (content hash, see
+    :func:`_grid_hash`), so a model or grid override never shares a cached
+    payload with another prediction for the same race.
     """
     payload = f"{season}|{round_}|{feats_fingerprint}|{params_hash}".encode()
+    if model_id:
+        payload += f"|model:{model_id}".encode()
+    if grid_hash:
+        payload += f"|grid:{grid_hash}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -609,9 +650,12 @@ def get_prediction(
     ``client`` injects an F1Client (tests); the default is built from ``cfg``.
     ``enable_features``/``disable_features`` override the config feature
     selection. When ``cache_dir`` is given, the JSON payload is cached on disk
-    keyed by ``(season, round, feature-fingerprint, params-hash)`` so repeat
-    calls (and the web dashboard) are instant; a feature-selection or
-    ``[model.params]`` change bypasses stale entries automatically. Returns a
+    keyed by ``(season, round, feature-fingerprint, params-hash)`` — plus the
+    resolved checkpoint (path + mtime) when ``model_path`` overrides the
+    default model and the grid-CSV content hash when one is supplied — so
+    repeat calls (and the web dashboard) are instant; a feature-selection,
+    ``[model.params]``, model or grid change bypasses stale entries
+    automatically. Returns a
     dict with: ``result`` (DataFrame from :func:`predict_race`), ``meta``
     (race_name/circuit_id/date), ``season``, ``round``, ``synthetic``,
     ``verified``, ``calibrated``, ``checkpoint``, ``features``.
@@ -638,7 +682,12 @@ def get_prediction(
 
     if cache_dir is not None:
         key = prediction_cache_key(
-            target_season, target_round, feature_fingerprint(feats), _params_hash(cfg)
+            target_season,
+            target_round,
+            feature_fingerprint(feats),
+            _params_hash(cfg),
+            model_id=_model_cache_id(cfg, model_path),
+            grid_hash=_grid_hash(grid_csv),
         )
         cached = load_cached_prediction(cache_dir, key)
         if cached is not None:
