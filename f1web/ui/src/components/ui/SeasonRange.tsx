@@ -1,4 +1,4 @@
-import { getConfig } from '../../api/client'
+import { getStatus } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import './JobOptions.css'
 
@@ -21,13 +21,15 @@ export function seasonPayload(range: SeasonRangeValue): Record<string, number> {
 /**
  * Season-range inputs (CLI --start/--end). Empty inputs fall back to the
  * config season range at job-submit time (see f1web/jobs._cfg_start_end);
- * placeholders show the configured defaults once /api/config is loaded.
+ * placeholders show the configured defaults (`[data] start_season` /
+ * `end_season`) once /api/status is loaded.
  *
  * The allowed window is clamped: the start floor is the modern era (2014,
  * `seasons.data_start`) and the end ceiling is the latest season with fetched
  * data (`seasons.data_end`), so a pipeline run never silently references
  * seasons that have no data. Pages that fetch *new* seasons (the Data tab)
- * pass explicit `min`/`max` to widen the window.
+ * pass explicit `min`/`max` to widen the window (down to the configured start,
+ * up to the configured end).
  */
 export function SeasonRange({
   value,
@@ -42,17 +44,17 @@ export function SeasonRange({
   /** Override the end ceiling (default: latest season with fetched data). */
   max?: number
 }) {
-  const { state } = useApi('season-range-meta', () => getConfig())
+  const { state } = useApi('season-range-meta', () => getStatus())
   const seasons = state.phase === 'ready' ? state.data.seasons : null
   const floor = min ?? seasons?.data_start ?? 2014
-  const ceiling = max ?? seasons?.data_end ?? seasons?.max
+  const ceiling = max ?? seasons?.data_end ?? seasons?.end
   const set = (field: 'start' | 'end', text: string) =>
     onChange({ ...value, [field]: text === '' ? null : Number(text) })
   const clamp = (field: 'start' | 'end') => () => {
     const current = value[field]
     if (current === null) return
-    const lower = field === 'start' ? floor : seasons?.min
-    const upper = field === 'start' ? ceiling : ceiling
+    const lower = field === 'start' ? floor : seasons?.start
+    const upper = ceiling
     if (current < lower || current > upper) {
       onChange({ ...value, [field]: Math.min(Math.max(current, lower), upper) })
     }
@@ -68,7 +70,7 @@ export function SeasonRange({
           type="number"
           min={floor}
           max={ceiling}
-          placeholder={seasons ? String(seasons.min) : 'start'}
+          placeholder={seasons ? String(seasons.start) : 'start'}
           value={value.start ?? ''}
           onChange={(e) => set('start', e.target.value)}
           onBlur={clamp('start')}
@@ -81,9 +83,9 @@ export function SeasonRange({
         <input
           id="job-end-season"
           type="number"
-          min={seasons?.min}
+          min={seasons?.start}
           max={ceiling}
-          placeholder={seasons ? String(seasons.max) : 'end'}
+          placeholder={seasons ? String(seasons.end) : 'end'}
           value={value.end ?? ''}
           onChange={(e) => set('end', e.target.value)}
           onBlur={clamp('end')}
@@ -91,8 +93,8 @@ export function SeasonRange({
       </div>
       {seasons ? (
         <p className="job-option-hint">
-          Allowed window: {floor}–{ceiling} (modern era up to the latest season
-          with fetched data).
+          Allowed window: {floor}–{ceiling}; blank uses the configured range{' '}
+          {seasons.start}–{seasons.end}.
         </p>
       ) : null}
     </>

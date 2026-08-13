@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   getBacktest,
   getModels,
@@ -52,30 +52,60 @@ const METRICS: { key: keyof BacktestMetricRow; label: string }[] = [
   { key: 'mae', label: 'MAE' },
 ]
 
-/** The "deployed config model" pseudo-choice in the model checkbox list. */
+/** The "deployed config model" pseudo-choice, only when it is not a saved model. */
 const DEFAULT_MODEL = 'default'
 
+/** Normalize a checkpoint path for identity comparison (Windows separators). */
+function normPath(path: string | null | undefined): string | null {
+  if (!path) return null
+  return path.replace(/\\/g, '/').toLowerCase()
+}
+
 interface ModelChoice {
+  /** Selection value: a saved model name, or DEFAULT_MODEL for the config default. */
   value: string
   label: string
-  /** Checkpoint path for saved models; null for the config default. */
-  checkpoint: string | null
+}
+
+/** The saved model whose checkpoint equals the config default, if any. */
+function deployedName(models: ModelsResponse | null): string | null {
+  if (!models) return null
+  const target = normPath(models.default)
+  if (!target) return null
+  for (const [name, info] of Object.entries(models.models)) {
+    if (normPath(info.checkpoint) === target) return name
+  }
+  return null
 }
 
 function modelChoices(models: ModelsResponse | null): ModelChoice[] {
   const saved = models ? Object.keys(models.models).sort() : []
-  return [
-    { value: DEFAULT_MODEL, label: 'config default (deployed)', checkpoint: models?.default ?? null },
-    ...saved.map((name) => ({ value: name, label: name, checkpoint: models?.models[name]?.checkpoint ?? null })),
-  ]
+  const deployed = deployedName(models)
+  const choices: ModelChoice[] = saved.map((name) => ({
+    value: name,
+    label: deployed === name ? `${name} (deployed)` : name,
+  }))
+  if (!models || deployed !== null) return choices
+  // The config default points at a checkpoint that is not in the saved index
+  // (CLI-trained, or the [model] checkpoint was edited in Settings): keep a
+  // pseudo-entry so that model stays selectable. When it IS a saved model we
+  // skip this — that model is already listed once, marked (deployed).
+  return [{ value: DEFAULT_MODEL, label: 'config default (deployed)' }, ...choices]
 }
 
 function selectedPaths(models: ModelsResponse | null, checked: string[]): string[] {
   if (!models) return []
-  const paths = checked.map((value) =>
-    value === DEFAULT_MODEL ? models.default : models.models[value]?.checkpoint,
-  )
-  return paths.filter((path): path is string => typeof path === 'string' && path.length > 0)
+  const seen = new Set<string>()
+  const paths: string[] = []
+  for (const value of checked) {
+    const path = value === DEFAULT_MODEL ? models.default : models.models[value]?.checkpoint
+    if (typeof path !== 'string' || path.length === 0) continue
+    const key = normPath(path)
+    if (key === null || seen.has(key)) continue
+    seen.add(key)
+    paths.push(path)
+  }
+  return paths
 }
 
 function defaultStem(models: ModelsResponse | null): string | null {
@@ -92,7 +122,7 @@ function defaultStem(models: ModelsResponse | null): string | null {
  * Advanced.
  */
 export function Backtest() {
-  const [checked, setChecked] = useState<string[]>([DEFAULT_MODEL])
+  const [checked, setChecked] = useState<string[]>([])
   const [walkForward, setWalkForward] = useState(false)
   const [quantize, setQuantize] = useState(true)
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
@@ -104,8 +134,18 @@ export function Backtest() {
   const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
   const { state, retry } = useApi(`backtest-${version}`, () => getBacktest())
   const choices = modelChoices(models)
+  const deployed = deployedName(models)
+  // Guards the default selection: once the model index loads, preselect the
+  // deployed model, but never clobber a selection the user made themselves.
+  const userTouched = useRef(false)
+
+  useEffect(() => {
+    if (userTouched.current || models === null) return
+    setChecked([deployed ?? DEFAULT_MODEL])
+  }, [models, deployed])
 
   function toggleModel(value: string, on: boolean) {
+    userTouched.current = true
     setChecked((current) => (on ? [...current, value] : current.filter((v) => v !== value)))
   }
 
@@ -216,7 +256,7 @@ function ModelsOverview({ models }: { models: ModelsResponse | null }) {
   const entries = models
     ? Object.entries(models.models).sort(([a], [b]) => a.localeCompare(b))
     : []
-  const deployed = defaultStem(models)
+  const deployed = deployedName(models)
   return (
     <section className="card">
       <h2 className="card-title">Saved models</h2>
@@ -239,7 +279,7 @@ function ModelsOverview({ models }: { models: ModelsResponse | null }) {
             </thead>
             <tbody>
               {entries.map(([name, info]) => (
-                <ModelRow key={name} name={name} info={info} deployed={name === deployed} />
+                <ModelRow key={name} name={name} info={info} deployed={deployed === name} />
               ))}
             </tbody>
           </table>

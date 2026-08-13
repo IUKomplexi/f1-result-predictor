@@ -26,11 +26,13 @@ export function Data() {
         options={
           <>
             {/* Fetch is the one place that pulls NEW seasons, so the end
-                ceiling is the configured end season, not the cached max. */}
+                ceiling is the configured end season (not the cached max) and
+                the start floor is the configured start (not the modern-era
+                clamp), so older seasons like 2010 can be fetched too. */}
             <SeasonRange
               value={range}
               onChange={setRange}
-              min={seasons?.data_start}
+              min={seasons?.start}
               max={seasons?.end}
             />
             <RefreshToggle value={refresh} onChange={setRefresh} />
