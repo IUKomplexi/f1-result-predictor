@@ -10,12 +10,10 @@ import {
   seasonPayload,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
-import { RefreshToggle } from '../ui/RefreshToggle'
 
 export function Train() {
   const status = useApi('status', () => getStatus())
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
-  const [refresh, setRefresh] = useState(false)
   const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [name, setName] = useState('')
   const suggestion =
@@ -27,7 +25,6 @@ export function Train() {
         runLabel="Train model"
       buildPayload={() => ({
         ...seasonPayload(range),
-        refresh,
         ...(name.trim() !== '' ? { name: name.trim() } : {}),
         enable_features: features.enable,
         disable_features: features.disable,
@@ -35,6 +32,10 @@ export function Train() {
       options={
         <>
           <SeasonRange value={range} onChange={setRange} />
+          <p className="job-option-hint">
+            New raw data fetched on the Data tab is picked up automatically —
+            the dataset rebuilds whenever the raw cache is newer.
+          </p>
           <div className="job-option">
             <label className="field-label" htmlFor="train-name">Model name</label>
             <input
@@ -52,7 +53,6 @@ export function Train() {
               allowed — other characters are stripped as you type.
             </p>
           </div>
-          <RefreshToggle value={refresh} onChange={setRefresh} />
           <FeatureToggles value={features} onChange={setFeatures} />
         </>
       }

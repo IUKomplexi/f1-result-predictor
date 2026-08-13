@@ -204,3 +204,50 @@ def test_dataset_cache_fingerprint_roundtrip(tmp_path):
         assert monkeypatch_seen == [2020, 2020]
     finally:
         monkeypatch.undo()
+
+
+def test_dataset_cache_rebuilds_when_raw_cache_is_newer(tmp_path):
+    """Newer raw responses than the parquet force a rebuild (fresh race data).
+
+    ``f1 fetch`` after a race weekend adds raw JSON without changing the
+    feature fingerprint or season coverage; the dataset must still rebuild.
+    """
+    import os
+
+    from features import build as fb
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    class FakeClient:
+        def __init__(self, cache_dir):
+            self.cache_dir = cache_dir
+
+    mini = {
+        "calendar": [{"round": 1, "date": "2020-03-01", "circuit_id": "c1",
+                      "race_name": "R1", "is_sprint_round": False}],
+        "results": {1: [{"season": 2020, "round": 1, "position": 1, "grid": 1,
+                         "points": 25.0, "status": "Finished", "driver_id": "a",
+                         "constructor_id": "t1"}]},
+        "qualifying": {}, "sprints": {},
+    }
+    monkeypatch_seen = []
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(fb, "fetch_season",
+                        lambda client, s: (monkeypatch_seen.append(s), mini)[1])
+    try:
+        cache = tmp_path / "feat.parquet"
+        client = FakeClient(raw_dir)
+        fb.build_dataset(client, [2020], cache_path=cache)
+        assert monkeypatch_seen == [2020]
+        # No new raw data: the cache is reused.
+        fb.build_dataset(client, [2020], cache_path=cache)
+        assert monkeypatch_seen == [2020]
+        # A new raw response, deterministically newer than the parquet.
+        fresh = raw_dir / "fresh.json"
+        fresh.write_text("{}")
+        os.utime(fresh, (cache.stat().st_mtime + 10, cache.stat().st_mtime + 10))
+        fb.build_dataset(client, [2020], cache_path=cache)
+        assert monkeypatch_seen == [2020, 2020]
+    finally:
+        monkeypatch.undo()

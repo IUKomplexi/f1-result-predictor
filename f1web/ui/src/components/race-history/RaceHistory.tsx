@@ -106,7 +106,12 @@ export function RaceHistory({ onNavigate }: TabProps) {
           options={
             <>
               <SeasonRange value={range} onChange={setRange} />
-              <RefreshToggle value={refresh} onChange={setRefresh} />
+              <RefreshToggle
+                value={refresh}
+                onChange={setRefresh}
+                label="Recompute all races (ignore prediction cache)"
+                hint="Off by default: Race History reuses the cached season snapshots in data/predictions. Turn on after a re-fetch or retrain to recompute every round."
+              />
             </>
           }
           renderResult={(job) => <HistoryRunResult job={job} />}

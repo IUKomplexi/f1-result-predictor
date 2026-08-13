@@ -1,32 +1,30 @@
 import './JobOptions.css'
 
 /**
- * Re-fetch from the API instead of reusing cached data (CLI --refresh): when
- * checked the pipeline re-downloads raw responses from Jolpica, ignoring
- * everything in data/raw. Leave unchecked for the fast cached path; check it
- * after a race weekend (or an upstream data fix) to pick up new results.
+ * Refresh option for pipeline jobs: when checked, the job ignores its cache
+ * and re-derives from the source of truth. Off by default (the fast cached
+ * path). The default wording matches the CLI --refresh re-download semantic;
+ * pages whose refresh clears a different cache (e.g. the prediction cache)
+ * override the label/hint.
  */
 export function RefreshToggle({
   value,
   onChange,
+  label = 'Re-fetch from API (ignore cache)',
+  hint = 'Off by default: pipeline steps reuse the cached data in data/raw. Turn on to re-download from Jolpica — needed after a race weekend or an upstream data fix so new results are picked up.',
 }: {
   value: boolean
   onChange: (value: boolean) => void
+  label?: string
+  hint?: string
 }) {
   return (
     <div className="job-option">
-      <label
-        className="refresh-check"
-        title="Re-download raw data from Jolpica instead of reusing the cached data/raw files (CLI --refresh)."
-      >
+      <label className="refresh-check" title={label}>
         <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
-        Re-fetch from API (ignore cache)
+        {label}
       </label>
-      <p className="job-option-hint">
-        Off by default: pipeline steps reuse the cached data in <code>data/raw</code>.
-        Turn on to re-download from Jolpica — needed after a race weekend or an
-        upstream data fix so new results are picked up.
-      </p>
+      <p className="job-option-hint">{hint}</p>
     </div>
   )
 }

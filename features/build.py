@@ -400,6 +400,27 @@ def _write_parquet(df: pd.DataFrame, path: Path, fingerprint: str) -> None:
     pq.write_table(table.replace_schema_metadata(meta), path)
 
 
+def _raw_cache_newer_than(client: F1Client, cache: Path) -> bool:
+    """True when any cached raw response is newer than the parquet cache.
+
+    ``f1 fetch`` after a race weekend adds raw JSON without changing the
+    feature fingerprint or the season coverage, so the parquet would otherwise
+    look valid and be silently stale. Comparing file mtimes closes that gap:
+    new raw data forces a dataset rebuild.
+    """
+    cache_dir = getattr(client, "cache_dir", None)
+    if not cache_dir:
+        return False
+    raw = Path(cache_dir)
+    try:
+        if not raw.is_dir():
+            return False
+        newest = max((p.stat().st_mtime for p in raw.rglob("*.json")), default=0.0)
+        return cache.exists() and newest > cache.stat().st_mtime
+    except OSError:
+        return False
+
+
 def build_dataset(
     client: F1Client,
     seasons: Iterable[int],
@@ -429,15 +450,16 @@ def build_dataset(
         try:
             cached = pd.read_parquet(cache)
             cached_seasons = set(cached["season"]) if "season" in cached else set()
-            if (set(required) <= set(cached.columns)
+            if (not _raw_cache_newer_than(client, cache)
+                    and set(required) <= set(cached.columns)
                     and cached_seasons >= set(seasons)
                     and _read_cache_fingerprint(cache) == fingerprint):
                 logger.info("Loading cached dataset from %s", cache)
                 df = cached
             else:
                 logger.warning(
-                    "Cached dataset %s is stale (missing features, seasons, or "
-                    "feature fingerprint); rebuilding",
+                    "Cached dataset %s is stale (missing features, seasons, "
+                    "newer raw data, or feature fingerprint); rebuilding",
                     cache,
                 )
                 df = _build_fresh(client, seasons, cache, fingerprint)

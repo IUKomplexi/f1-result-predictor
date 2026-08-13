@@ -5,7 +5,6 @@ import { ErrorState, Skeleton } from '../ui/DataState'
 import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { JobRunner } from '../ui/JobRunner'
 import { PrereqHint } from '../ui/PrereqHint'
-import { RefreshToggle } from '../ui/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
@@ -31,7 +30,6 @@ export function Backtest() {
   const [walkForward, setWalkForward] = useState(false)
   const [quantize, setQuantize] = useState(true)
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
-  const [refresh, setRefresh] = useState(false)
   const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [version, setVersion] = useState(0)
   const status = useApi('status', () => getStatus())
@@ -63,7 +61,6 @@ export function Backtest() {
         onDone={() => setVersion((v) => v + 1)}
         buildPayload={() => ({
           ...seasonPayload(range),
-          refresh,
           quantize,
           // Walk-forward retraining is the explicit advanced opt-in; otherwise
           // the selected saved models are scored with their own features.
@@ -96,7 +93,6 @@ export function Backtest() {
               </p>
             </div>
             <SeasonRange value={range} onChange={setRange} />
-            <RefreshToggle value={refresh} onChange={setRefresh} />
             <details className="advanced-options">
               <summary>Advanced</summary>
               <div className="job-options-inner">
