@@ -52,6 +52,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.gzip import GZipMiddleware
 
 from f1core.config import (
     DATA_START_FLOOR,
@@ -128,6 +129,14 @@ def _read_json(path: Path) -> dict | None:
         return None
 
 
+# Memoized latest-data season: the raw cache dir's mtime changes exactly when
+# files are added/removed (the only way the season set can change), so the
+# ~hundreds-of-files glob runs once per directory change instead of on every
+# /api/config and /api/status call. Keyed on the cache_dir string too, so a
+# different configured cache_dir never reads another dir's result.
+_data_end_cache: tuple[str, int, int] | None = None  # (cache_dir string, mtime_ns, result)
+
+
 def _data_end_season(cfg: dict) -> int:
     """Latest season with cached raw data (fallback: the configured end).
 
@@ -137,13 +146,27 @@ def _data_end_season(cfg: dict) -> int:
     seasons is the Data page's job, which uses the *configured* end instead.
     """
     cache_dir = REPO_ROOT / cfg["data"]["cache_dir"]
+    if not cache_dir.is_dir():
+        return int(cfg["data"]["end_season"])
+    try:
+        mtime = cache_dir.stat().st_mtime_ns
+    except OSError:
+        return int(cfg["data"]["end_season"])
+    # Keyed on the config string (not resolve(), which costs ~0.2ms per call):
+    # the same configured cache_dir always maps to the same dir, and a
+    # different configured dir has a different key, so results never bleed
+    # across configs.
+    global _data_end_cache
+    if _data_end_cache is not None and _data_end_cache[:2] == (str(cache_dir), mtime):
+        return _data_end_cache[2]
     seasons: set[int] = set()
-    if cache_dir.is_dir():
-        for entry in cache_dir.glob("*.json"):
-            match = re.search(r"f1_(\d{4})", entry.name)
-            if match:
-                seasons.add(int(match.group(1)))
-    return max(seasons) if seasons else int(cfg["data"]["end_season"])
+    for entry in cache_dir.glob("*.json"):
+        match = re.search(r"f1_(\d{4})", entry.name)
+        if match:
+            seasons.add(int(match.group(1)))
+    result = max(seasons) if seasons else int(cfg["data"]["end_season"])
+    _data_end_cache = (str(cache_dir), mtime, result)
+    return result
 
 
 def _data_client() -> F1Client:
@@ -205,8 +228,19 @@ def _slim_job(job: dict, now: float | None = None) -> dict:
     }
 
 
+# Hashed SPA assets are immutable (Vite content-hashes filenames) and cached
+# for a year; index.html is revalidated so new asset hashes propagate.
+_CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
+_CACHE_SHORT = "public, max-age=86400"  # unhashed favicon
+_CACHE_INDEX = "no-cache"  # revalidate: hashed asset names may change
+
+
 def create_app(job_manager: JobManager | None = None) -> FastAPI:
     app = FastAPI(title="F1 Result Predictor", version="0.1.0")
+    # Gzip every response >= 1KB when the client accepts it (API JSON and the
+    # SPA chunks are the bulk of dashboard transfer; small responses pass
+    # through untouched).
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
     manager = job_manager or register_default_handlers(JobManager())
     app.state.jobs = manager
 
@@ -230,7 +264,7 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
                 "Dashboard not built - run `npm run build` in f1web/ui (see README)",
                 503,
             )
-        return FileResponse(UI_DIST_INDEX)
+        return FileResponse(UI_DIST_INDEX, headers={"Cache-Control": _CACHE_INDEX})
 
     @app.get("/assets/{file_path:path}", include_in_schema=False)
     def spa_assets(file_path: str):
@@ -241,14 +275,14 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         target = (UI_ASSETS_DIR / file_path).resolve()
         if not target.is_relative_to(UI_ASSETS_DIR.resolve()) or not target.is_file():
             return _error("not found", 404)
-        return FileResponse(target)
+        return FileResponse(target, headers={"Cache-Control": _CACHE_IMMUTABLE})
 
     @app.get("/favicon.svg", include_in_schema=False)
     def favicon():
         icon = UI_DIST / "favicon.svg"
         if not icon.is_file():
             return _error("not found", 404)
-        return FileResponse(icon)
+        return FileResponse(icon, headers={"Cache-Control": _CACHE_SHORT})
 
     # ------------------------------------------------------------------ config
 

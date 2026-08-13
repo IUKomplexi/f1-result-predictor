@@ -74,12 +74,33 @@ MODEL_PARAM_KEYS = {"max_iter", "learning_rate", "max_depth",
                     "l2_regularization", "min_samples_leaf"}
 
 
+# Memoized config per file: keyed on (path string, mtime_ns), so a Settings
+# write (save_config → os.replace) invalidates it automatically. The cached
+# dict is deep-copied on every return, so callers may mutate it freely.
+_config_cache: tuple[str, int, dict[str, dict[str, Any]]] | None = None
+
+
 def load_config(path: str | Path = "config.toml") -> dict[str, dict[str, Any]]:
-    """Load ``config.toml`` merged over :data:`DEFAULTS` (section-wise)."""
-    cfg = copy.deepcopy(DEFAULTS)
+    """Load ``config.toml`` merged over :data:`DEFAULTS` (section-wise).
+
+    The parsed result is memoized per file (path string + mtime) and
+    deep-copied on return; the web server calls this on every request, so the
+    memo turns a TOML re-parse into a cheap copy.
+    """
     p = Path(path)
     if not p.exists():
-        return cfg
+        return copy.deepcopy(DEFAULTS)
+    try:
+        mtime = p.stat().st_mtime_ns
+    except OSError:
+        mtime = -1
+    # Keyed on the path string (not resolve(), which costs ~0.2ms per call);
+    # callers pass one stable spelling per file (CLI "config.toml", web
+    # CONFIG_TOML absolute), so a single slot serves the hot paths.
+    global _config_cache
+    if _config_cache is not None and _config_cache[:2] == (str(p), mtime):
+        return copy.deepcopy(_config_cache[2])
+    cfg = copy.deepcopy(DEFAULTS)
     with p.open("rb") as fh:
         user = tomllib.load(fh)
     for section, values in user.items():
@@ -87,6 +108,7 @@ def load_config(path: str | Path = "config.toml") -> dict[str, dict[str, Any]]:
             cfg[section].update(values)
         else:
             cfg[section] = values
+    _config_cache = (str(p), mtime, cfg)
     return cfg
 
 
@@ -342,4 +364,8 @@ def save_config(cfg: dict, path: str | Path = "config.toml") -> Path:
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(tmp, p)
+    # Invalidate the load_config memo (mtime would also change, but clear
+    # explicitly so a write is visible even on coarse-mtime filesystems).
+    global _config_cache
+    _config_cache = None
     return p
