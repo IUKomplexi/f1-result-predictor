@@ -200,11 +200,10 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
 
     @app.get("/assets/{file_path:path}", include_in_schema=False)
     def spa_assets(file_path: str):
-        if not UI_DIST_INDEX.exists():
-            return _error(
-                "Dashboard not built - run `npm run build` in f1web/ui (see README)",
-                503,
-            )
+        # Assets are static chunks served independently of whether index.html
+        # has been written yet, so this route must NOT gate on UI_DIST_INDEX
+        # existing. The result_path guard below still prevents escaping the
+        # assets dir (and non-existent files 404), so there is no traversal hole.
         target = (UI_ASSETS_DIR / file_path).resolve()
         if not target.is_relative_to(UI_ASSETS_DIR.resolve()) or not target.is_file():
             return _error("not found", 404)
