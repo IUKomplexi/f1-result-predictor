@@ -584,6 +584,16 @@ def test_predict_rejects_non_integer_grid(tmp_path, monkeypatch):
     assert "integer" in resp.json()["error"]
 
 
+def test_predict_rejects_zero_grid_position(tmp_path, monkeypatch):
+    client = _config_client(tmp_path, monkeypatch)
+    resp = client.post(
+        "/api/predict",
+        json={"grid_csv": "driver_id,grid\nrussell,0"},
+    )
+    assert resp.status_code == 400
+    assert "positive" in resp.json()["error"]
+
+
 # ------------------------------------------------------------------ predict
 
 

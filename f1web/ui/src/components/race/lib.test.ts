@@ -29,6 +29,13 @@ describe('checkGrid', () => {
     expect(check.error).toContain('hamilton')
     expect(check.error).toContain('positive integer')
   })
+
+  it('rejects zero — a grid position must be a positive integer', () => {
+    const check = checkGrid({ russell: '0' })
+    expect(check.csv).toBeNull()
+    expect(check.error).toContain('russell')
+    expect(check.error).toContain('positive integer')
+  })
 })
 
 describe('racePredictBody', () => {

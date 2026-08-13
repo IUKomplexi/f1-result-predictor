@@ -36,7 +36,7 @@ export function checkGrid(rows: Record<string, string>): GridCheck {
   for (const [driverId, position] of Object.entries(rows)) {
     const trimmed = position.trim()
     if (trimmed === '') continue
-    if (!/^\d+$/.test(trimmed)) {
+    if (!/^[1-9]\d*$/.test(trimmed)) {
       return {
         csv: null,
         error: `grid position for ${driverId} must be a positive integer`,

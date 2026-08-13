@@ -178,6 +178,8 @@ def _grid_path_from_text(text: str) -> str:
         grid = np.asarray(pd.to_numeric(table["grid"], errors="raise"), dtype=float)
         if not np.all(grid == np.floor(grid)):
             raise ValueError("grid CSV 'grid' column must be integers")
+        if np.any(grid < 1):
+            raise ValueError("grid CSV 'grid' column must be positive (1 or more)")
     except Exception as exc:
         Path(path).unlink(missing_ok=True)
         if isinstance(exc, ValueError):

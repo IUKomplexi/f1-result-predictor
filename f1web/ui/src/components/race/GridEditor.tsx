@@ -22,7 +22,7 @@ export function GridEditor({
   onReset: () => void
 }) {
   const isDirty = values !== null
-  const invalid = (value: string) => value.trim() !== '' && !/^\d+$/.test(value.trim())
+  const invalid = (value: string) => value.trim() !== '' && !/^[1-9]\d*$/.test(value.trim())
   return (
     <div className="job-option grid-editor">
       <div className="feature-toggle-head">
