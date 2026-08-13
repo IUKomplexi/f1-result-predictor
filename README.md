@@ -124,10 +124,11 @@ so every CLI predict override is available): a **model picker** (`--model`,
 defaults to the deployed checkpoint; named models keep their own calibrators),
 an interactive **qualifying-grid editor** for upcoming races (`--grid` —
 per-driver grid inputs seeded from the model's grid, with a reset button and
-invalid-input highlighting), per-race **feature overrides**
-(`--enable/--disable-features`), a **Write report** checkbox (the same
+invalid-input highlighting), a **Write report** checkbox (the same
 `reports/prediction.md` the CLI `--out` produces), and the existing
-"Re-fetch from API" refresh toggle. Edits stay local until **Apply changes**;
+"Re-fetch from API" refresh toggle. Feature overrides are NOT offered here —
+any changed features require a model retrained with them (Train tab). Edits
+stay local until **Apply changes**;
 override predictions are cached on disk per model + grid, so repeats are
 instant and different models/grids never share a cached payload.
 

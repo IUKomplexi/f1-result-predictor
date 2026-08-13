@@ -1,6 +1,5 @@
 import type { ModelsResponse, PredictOverrides } from '../../api/client'
 import { DEFAULT_MODEL } from '../backtest/lib'
-import type { FeatureOverride } from '../ui/FeatureToggles'
 
 /** The "config default model" pseudo-choice (no model_path is sent). */
 export const RACE_DEFAULT_MODEL = DEFAULT_MODEL
@@ -13,8 +12,6 @@ export interface RaceOverrides {
   refresh: boolean
   /** Model choice: a saved model name or RACE_DEFAULT_MODEL. */
   model: string
-  /** Per-request feature toggles (CLI --enable/--disable-features). */
-  features: FeatureOverride
   /** Editable grid rows (driver_id -> position text); null = no override. */
   gridRows: Record<string, string> | null
   /** Also write reports/prediction.md (CLI --out). */
@@ -62,7 +59,9 @@ export function modelPathFor(models: ModelsResponse | null, choice: string): str
 /**
  * Build the POST /api/predict body for the current Race-tab overrides
  * (mirrors the CLI's predict flags). ``error`` carries a user-facing message
- * when the grid is invalid; the body is then not meant to be sent.
+ * when the grid is invalid; the body is then not meant to be sent. Feature
+ * toggles are intentionally not part of the body — they only matter at
+ * training time (Train tab).
  */
 export function racePredictBody(
   models: ModelsResponse | null,
@@ -74,8 +73,6 @@ export function racePredictBody(
     refresh: overrides.refresh || undefined,
     model_path: modelPathFor(models, overrides.model),
     write_report: overrides.writeReport || undefined,
-    enable_features: overrides.features.enable.length > 0 ? overrides.features.enable : undefined,
-    disable_features: overrides.features.disable.length > 0 ? overrides.features.disable : undefined,
   }
   if (overrides.gridRows !== null) {
     const check = checkGrid(overrides.gridRows)

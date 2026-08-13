@@ -37,7 +37,6 @@ describe('racePredictBody', () => {
     round: 5,
     refresh: false,
     model: 'default',
-    features: { enable: [], disable: [] },
     gridRows: null,
     writeReport: false,
   }
@@ -53,13 +52,12 @@ describe('racePredictBody', () => {
     expect(body.model_path).toBe('data/model/alpha.joblib')
   })
 
-  it('attaches refresh, write_report, feature toggles and the grid CSV', () => {
+  it('attaches refresh, write_report and the grid CSV (no feature toggles)', () => {
     const { body, error } = racePredictBody(models, {
       ...base,
       model: 'beta',
       refresh: true,
       writeReport: true,
-      features: { enable: ['grid'], disable: ['season'] },
       gridRows: { russell: '3' },
     })
     expect(error).toBeNull()
@@ -69,10 +67,12 @@ describe('racePredictBody', () => {
       refresh: true,
       write_report: true,
       model_path: 'data/model/beta.joblib',
-      enable_features: ['grid'],
-      disable_features: ['season'],
       grid_csv: 'driver_id,grid\nrussell,3',
     })
+    // Feature overrides only make sense at training time (Train tab), so the
+    // per-race body never carries them.
+    expect(body.enable_features).toBeUndefined()
+    expect(body.disable_features).toBeUndefined()
   })
 
   it('returns a user-facing error for an invalid grid instead of a body to send', () => {

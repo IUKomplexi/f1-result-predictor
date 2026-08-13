@@ -13,7 +13,6 @@ import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
 import { deployedName } from '../backtest/lib'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
-import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
 import { ProbabilityBar } from '../ui/ProbabilityBar'
 import { GridEditor } from './GridEditor'
 import { ModelPicker, RACE_DEFAULT_MODEL } from './ModelPicker'
@@ -126,16 +125,16 @@ export function Race({ navState }: TabProps) {
 
 /**
  * One race's prediction via POST /api/predict so every per-request CLI
- * override is available: model checkpoint, feature toggles, a qualifying
- * grid, refresh and report writing. Edits are local until "Apply changes";
- * the request is cached server-side per override combination.
+ * override is available: model checkpoint, a qualifying grid, refresh and
+ * report writing. Feature overrides are NOT offered here — they only matter
+ * at training time (Train tab). Edits are local until "Apply changes"; the
+ * request is cached server-side per override combination.
  */
 function RacePanel({ season, round }: { season: number; round: number }) {
   const [refresh, setRefresh] = useState(false)
   const [model, setModel] = useState<string>(RACE_DEFAULT_MODEL)
   const [defaultModel, setDefaultModel] = useState<string>(RACE_DEFAULT_MODEL)
   const [modelTouched, setModelTouched] = useState(false)
-  const [features, setFeatures] = useState<FeatureOverride>(NO_FEATURE_OVERRIDES)
   const [writeReport, setWriteReport] = useState(false)
   const [gridRows, setGridRows] = useState<Record<string, string> | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
@@ -166,7 +165,6 @@ function RacePanel({ season, round }: { season: number; round: number }) {
         round,
         refresh,
         model,
-        features,
         gridRows,
         writeReport,
       })
@@ -186,7 +184,6 @@ function RacePanel({ season, round }: { season: number; round: number }) {
       round,
       refresh,
       model,
-      features,
       gridRows,
       writeReport,
     })
@@ -240,7 +237,6 @@ function RacePanel({ season, round }: { season: number; round: number }) {
         <details className="advanced-options">
           <summary>Advanced</summary>
           <div className="job-options-inner">
-            <FeatureToggles value={features} onChange={setFeatures} />
             {last !== null && !last.verified ? (
               <GridEditor
                 drivers={last.drivers}
