@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -107,7 +107,7 @@ def _collect_metric_rows(df: pd.DataFrame) -> list[dict]:
             sub = race.copy()
             sub["pred_points"] = sub[col]
             m = race_metrics(sub)
-            m.update({"season": int(season), "round": int(round_), "baseline": name})
+            m.update({"season": int(season), "round": int(round_), "baseline": name})  # type: ignore[reportArgumentType]  # groupby keys are ints at runtime (pandas untyped)
             rows.append(m)
     return rows
 
@@ -289,16 +289,19 @@ def run(
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    # Config values are validated as the cast types (see validate_config); the
+    # casts keep the declared types after the None-guards so downstream calls
+    # don't carry Optional[None].
     if start is None:
-        start = cfg["data"]["start_season"]
+        start = cast(int, cfg["data"]["start_season"])
     if end is None:
-        end = cfg["data"]["end_season"]
+        end = cast(int, cfg["data"]["end_season"])
     if cache_dir is None:
-        cache_dir = cfg["data"]["cache_dir"]
+        cache_dir = cast(str, cfg["data"]["cache_dir"])
     if dataset is None:
-        dataset = cfg["data"]["dataset"]
+        dataset = cast(str, cfg["data"]["dataset"])
     if out is None:
-        out = cfg["report"]["backtest"]
+        out = cast(str, cfg["report"]["backtest"])
     if out_json is None:
         out_json = str(Path(out).with_suffix(".json"))
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
@@ -322,18 +325,22 @@ def run(
                 # The primary tables show the first compared model vs the baselines.
                 overall, by_season = overall_i, by_season_i
         checkpoint = paths[0]
-        feats = list(checkpoint_meta(checkpoint)["features"])
+        meta = checkpoint_meta(checkpoint)
+        assert meta is not None  # checkpoints written by train always carry meta
+        feats = list(meta["features"])
         assert overall is not None and by_season is not None
     elif model_path:
         from model.train import checkpoint_meta
 
         checkpoint = model_path
         overall, by_season = _fixed_model_backtest(df, checkpoint, quantize, log)
-        feats = list(checkpoint_meta(checkpoint)["features"])
+        meta = checkpoint_meta(checkpoint)
+        assert meta is not None  # checkpoints written by train always carry meta
+        feats = list(meta["features"])
     elif use_checkpoint:
         from model.train import load_checkpoint
 
-        checkpoint = cfg["model"]["checkpoint"]
+        checkpoint = cast(str, cfg["model"]["checkpoint"])
         model = load_checkpoint(checkpoint, expected=feats)
         log(
             f"Scoring with deployed checkpoint {checkpoint} "

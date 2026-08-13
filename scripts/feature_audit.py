@@ -157,7 +157,7 @@ def correlation_clusters(
 
     for i in range(len(num)):
         for j in range(i + 1, len(num)):
-            if corr.iloc[i, j] >= threshold:
+            if corr.iloc[i, j] >= threshold:  # type: ignore[reportOperatorIssue]  # pandas iloc returns an untyped Scalar
                 union(i, j)
 
     members: dict[int, list[str]] = {}
@@ -263,7 +263,7 @@ def _component_importances(
         if mask.sum() > 1:
             reg_grp[key] = float(
                 group_permutation_importance(
-                    model.points_if_scored, X_reg, y_reg, group,
+                    model.points_if_scored, X_reg, y_reg, group,  # type: ignore[reportPossiblyUnboundVariable]  # X_reg/y_reg are bound whenever mask.sum() > 0
                     n_repeats, seed, reg_scorer
                 ).mean()
             )

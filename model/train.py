@@ -10,7 +10,7 @@ import time
 import warnings
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import numpy as np
@@ -416,16 +416,19 @@ def run(
     """
     log = log or (lambda msg: logger.info(msg))
     cfg = cfg or load_config()
+    # Config values are validated as the cast types (see validate_config); the
+    # casts keep the declared types after the None-guards so downstream calls
+    # don't carry Optional[None].
     if start is None:
-        start = cfg["data"]["start_season"]
+        start = cast(int, cfg["data"]["start_season"])
     if end is None:
-        end = cfg["data"]["end_season"]
+        end = cast(int, cfg["data"]["end_season"])
     if cache_dir is None:
-        cache_dir = cfg["data"]["cache_dir"]
+        cache_dir = cast(str, cfg["data"]["cache_dir"])
     if dataset is None:
-        dataset = cfg["data"]["dataset"]
+        dataset = cast(str, cfg["data"]["dataset"])
     if out is None:
-        out = cfg["model"]["checkpoint"]
+        out = cast(str, cfg["model"]["checkpoint"])
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
     log(f"Building dataset {start}-{end} ...")
     df = build_dataset(client, range(start, end + 1), cache_path=dataset)
@@ -448,7 +451,7 @@ def run(
         "fingerprint": feature_fingerprint(feats),
         "season_range": list(actual_range),
         "rows": len(df),
-        "seasons": int(df["season"].nunique()),
+        "seasons": int(df["season"].nunique()),  # type: ignore[reportArgumentType]  # nunique on an untyped Series is Unknown
         "trained_at": time.time(),
     })
     log(f"Saved checkpoint to {out}")

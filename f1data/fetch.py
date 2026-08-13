@@ -9,6 +9,7 @@ being importable (the Docker image only installs declared packages).
 from __future__ import annotations
 
 import time
+from typing import cast
 
 from f1core.config import load_config
 from f1data import F1Client, fetch_season
@@ -35,14 +36,17 @@ def run(
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    # Config values are validated as the cast types (see validate_config); the
+    # casts keep the declared types after the None-guards so downstream calls
+    # don't carry Optional[None].
     if start is None:
-        start = cfg["data"]["start_season"]
+        start = cast(int, cfg["data"]["start_season"])
     if end is None:
-        end = cfg["data"]["end_season"]
+        end = cast(int, cfg["data"]["end_season"])
     if cache_dir is None:
-        cache_dir = cfg["data"]["cache_dir"]
+        cache_dir = cast(str, cfg["data"]["cache_dir"])
     if sleep is None:
-        sleep = cfg["api"]["sleep_seconds"]
+        sleep = cast(float, cfg["api"]["sleep_seconds"])
     client = F1Client(
         cache_dir=cache_dir, refresh=refresh, sleep_seconds=sleep,
         user_agent=cfg["api"]["user_agent"],

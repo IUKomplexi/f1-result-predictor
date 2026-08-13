@@ -17,7 +17,7 @@ representative window). The best configuration is printed; write it to
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -140,14 +140,17 @@ def run(
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    # Config values are validated as the cast types (see validate_config); the
+    # casts keep the declared types after the None-guards so downstream calls
+    # don't carry Optional[None].
     if start is None:
-        start = cfg["data"]["start_season"]
+        start = cast(int, cfg["data"]["start_season"])
     if end is None:
-        end = cfg["data"]["end_season"]
+        end = cast(int, cfg["data"]["end_season"])
     if cache_dir is None:
-        cache_dir = cfg["data"]["cache_dir"]
+        cache_dir = cast(str, cfg["data"]["cache_dir"])
     if dataset is None:
-        dataset = cfg["data"]["dataset"]
+        dataset = cast(str, cfg["data"]["dataset"])
     if end < start:
         raise ValueError(f"search: end season {end} is before start season {start}")
     n_seasons = end - start + 1

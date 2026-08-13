@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -348,16 +349,19 @@ def run(
     """
     log = log or (lambda msg: print(msg, flush=True))
     cfg = cfg or load_config()
+    # Config values are validated as the cast types (see validate_config); the
+    # casts keep the declared types after the None-guards so downstream calls
+    # don't carry Optional[None].
     if start is None:
-        start = cfg["data"]["start_season"]
+        start = cast(int, cfg["data"]["start_season"])
     if end is None:
-        end = cfg["data"]["end_season"]
+        end = cast(int, cfg["data"]["end_season"])
     if cache_dir is None:
-        cache_dir = cfg["data"]["cache_dir"]
+        cache_dir = cast(str, cfg["data"]["cache_dir"])
     if dataset is None:
-        dataset = cfg["data"]["dataset"]
+        dataset = cast(str, cfg["data"]["dataset"])
     if out is None:
-        out = cfg["model"]["calibrators"]
+        out = cast(str, cfg["model"]["calibrators"])
     if out_json is None:
         out_json = "reports/calibration.json"
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
@@ -398,7 +402,7 @@ def run(
                 "model with an earlier end season (leave the newest season "
                 "out), or fetch newer data first."
             )
-        oos_seasons = sorted(int(s) for s in oos["season"].unique())
+        oos_seasons = sorted(int(s) for s in oos["season"].unique())  # type: ignore[reportAttributeAccessIssue]  # oos is a DataFrame at runtime (pandas untyped)
         log(f"Out-of-sample seasons for this model: {oos_seasons}")
         # The model is always judged on the newest season: fit calibrators on
         # every earlier OOS season, evaluate the deployment decision on the
@@ -417,14 +421,14 @@ def run(
         )
         oos = collect_oos_scores(df, feats)
     # Deployment calibrators: fit on ALL out-of-sample scores (most data).
-    calibrators = fit_calibrators(oos)
+    calibrators = fit_calibrators(oos)  # type: ignore[reportArgumentType]  # oos is a DataFrame at runtime (pandas untyped)
     save_calibrators(calibrators, cal_out, features=feats)
 
     # Honest evaluation: fit calibrators on the earlier OOS seasons only and
     # evaluate on the later ones, so the reported Brier deltas are not
     # in-sample for the calibration step. An explicit split (fit through /
     # evaluate from) overrides the default two-thirds chronological split.
-    fit_oos, eval_oos = _holdout_split(oos, fit_through_season, eval_from_season)
+    fit_oos, eval_oos = _holdout_split(oos, fit_through_season, eval_from_season)  # type: ignore[reportArgumentType]  # oos is a DataFrame at runtime (pandas untyped)
     if len(eval_oos) < 200 or fit_oos.empty:
         eval_oos = oos
         context = f"in-sample (too few hold-out rows; fit+eval on the same {len(oos)} OOS rows)"
