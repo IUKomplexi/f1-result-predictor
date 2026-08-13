@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from 'react'
 import './Chart.css'
 
 /**
@@ -59,6 +59,7 @@ export function Chart({
   valueFormat = (v) => v.toFixed(3),
 }: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(0)
   const [hover, setHover] = useState<number | null>(null)
 
@@ -146,10 +147,13 @@ export function Chart({
     return { plot: { width: plotWidth, height: plotHeight }, xScale, yScale, yTicks, xTicks, lines }
   }, [width, height, data, xKey, xType, xDomain, yDomain, series, referenceLine])
 
-  const handleMove = (e: MouseEvent<SVGSVGElement>) => {
-    const svg = e.currentTarget
+  /** Shared pointer logic: mouse (clientX) and touch (touches[0].clientX) both
+   *  land here so tooltips behave identically on touch devices. */
+  const handleMove = (clientX: number) => {
+    const svg = svgRef.current
+    if (!svg) return
     const rect = svg.getBoundingClientRect()
-    const mx = e.clientX - rect.left
+    const mx = clientX - rect.left
     if (mx < PAD.left || mx > width - PAD.right) {
       setHover(null)
       return
@@ -174,6 +178,12 @@ export function Chart({
     }
   }
 
+  const onMouseMove = (e: MouseEvent<SVGSVGElement>) => handleMove(e.clientX)
+  const onTouchMove = (e: TouchEvent<SVGSVGElement>) => {
+    const touch = e.touches[0]
+    if (touch) handleMove(touch.clientX)
+  }
+
   const hoverRow = hover !== null ? data[hover] : undefined
 
   return (
@@ -181,12 +191,16 @@ export function Chart({
       <div ref={wrapRef} className="chart-canvas" style={{ height }}>
         {width > 0 && (
           <svg
+            ref={svgRef}
             width={width}
             height={height}
             className="chart-svg"
             role="img"
-            onMouseMove={handleMove}
+            onMouseMove={onMouseMove}
             onMouseLeave={() => setHover(null)}
+            onTouchStart={onTouchMove}
+            onTouchMove={onTouchMove}
+            onTouchEnd={() => setHover(null)}
           >
             {/* horizontal grid + y ticks */}
             {yTicks.map((t, i) => (
