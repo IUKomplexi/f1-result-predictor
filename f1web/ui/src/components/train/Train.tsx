@@ -41,12 +41,15 @@ export function Train() {
               id="train-name"
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setName(e.target.value.replace(/[^A-Za-z0-9._-]/g, ''))}
+              pattern="[A-Za-z0-9._-]*"
               placeholder={suggestion}
             />
             <p className="job-option-hint">
               Blank overwrites the configured checkpoint; a name saves a separate{' '}
               <code>data/model/&lt;name&gt;.joblib</code> you can pick on Specific Race.
+              Only letters, digits, <code>.</code>, <code>_</code> and <code>-</code> are
+              allowed — other characters are stripped as you type.
             </p>
           </div>
           <RefreshToggle value={refresh} onChange={setRefresh} />

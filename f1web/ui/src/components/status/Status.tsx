@@ -1,52 +1,11 @@
 import { useEffect, useState } from 'react'
-import { getStatus, postJob, type Status as PipelineStatus } from '../../api/client'
+import { getStatus, postJob } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { useJobs } from '../../hooks/useJob'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { STEPS, type Step } from './steps'
 import './Status.css'
-
-interface Step {
-  id: string
-  /** Job type to queue when the step is missing (see f1web/jobs.JOB_TYPES). */
-  jobType: string
-  /** Dashboard tab that hosts this step (navigation target). */
-  tab: string
-  tabLabel: string
-  title: string
-  desc: string
-  ready: (status: PipelineStatus) => boolean
-}
-
-const STEPS: Step[] = [
-  {
-    id: 'fetch',
-    jobType: 'fetch',
-    tab: 'data',
-    tabLabel: 'Data',
-    title: 'Fetch raw data',
-    desc: 'Downloads cached race results from the Jolpica API into data/raw. Everything after this works offline.',
-    ready: (s) => s.data.has_raw_cache,
-  },
-  {
-    id: 'train',
-    jobType: 'train',
-    tab: 'train',
-    tabLabel: 'Train',
-    title: 'Train the model',
-    desc: 'Builds the featured dataset (data/features.parquet), trains the hurdle model checkpoint, and fits its probability calibrators.',
-    ready: (s) => s.model.has_checkpoint && s.model.has_calibrators,
-  },
-  {
-    id: 'backtest',
-    jobType: 'backtest',
-    tab: 'backtest',
-    tabLabel: 'Backtest',
-    title: 'Run a backtest',
-    desc: 'Walk-forward validation of the model against grid / championship / zero baselines (reports/backtest.json).',
-    ready: (s) => s.reports.has_backtest,
-  },
-]
 
 /**
  * Pipeline onboarding: which of the three pipeline stages are ready, and a
@@ -132,7 +91,13 @@ export function Status({ onNavigate }: { onNavigate?: (tabId: string) => void })
                     disabled={busy || starting === step.id}
                     onClick={() => run(step)}
                   >
-                    {starting === step.id ? 'Queued…' : 'Run'}
+                    {starting === step.id ? (
+                      <>
+                        <span className="spinner" aria-hidden="true" /> Queued…
+                      </>
+                    ) : (
+                      'Run'
+                    )}
                   </button>
                 )}
               </div>

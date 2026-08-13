@@ -1,11 +1,7 @@
-import { useEffect, useState } from 'react'
-import {
-  getCalendar,
-  getPrediction,
-  getStatus,
-  type Prediction,
-} from '../../api/client'
+import { useState } from 'react'
+import { getPrediction, getStatus, type Prediction } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
+import { useRaceCalendar } from '../../hooks/useRaceCalendar'
 import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
@@ -20,65 +16,14 @@ import './Race.css'
  */
 export function Race() {
   const status = useApi('status', () => getStatus())
-  const [season, setSeason] = useState<number | null>(null)
-  const [round, setRound] = useState<number | null>(null)
-  const [rounds, setRounds] = useState<number[]>([])
-  const [primed, setPrimed] = useState(false)
-
-  // Default to the global "next race" once status is ready.
-  useEffect(() => {
-    if (primed || status.state.phase !== 'ready') return
-    setPrimed(true)
-    const fallbackSeason = status.state.data.seasons.end
-    getPrediction()
-      .then((pred) => {
-        setSeason(pred.season)
-        setRound(pred.round)
-      })
-      .catch(() => {
-        // Fall back to the newest configured season (no round -> snapped below).
-        setSeason(fallbackSeason)
-        setRound(null)
-      })
-  }, [primed, status.state.phase])
-
-  // Load the ordered round list whenever the season changes.
-  useEffect(() => {
-    if (season === null) return
-    let cancelled = false
-    getCalendar(season)
-      .then((data) => {
-        if (cancelled) return
-        setRounds(data.calendar.map((c) => c.round).sort((a, b) => a - b))
-      })
-      .catch(() => {
-        if (!cancelled) setRounds([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [season])
-
-  // Snap to a valid round: if none is selected or the current one is no longer
-  // in this season's calendar, fall back to the most recent round.
-  useEffect(() => {
-    if (season === null || rounds.length === 0) return
-    if (round === null || !rounds.includes(round)) {
-      setRound(rounds[rounds.length - 1])
-    }
-  }, [season, round, rounds])
+  const { season, round, rounds, selected, seasons, selectSeason, setRound } =
+    useRaceCalendar(status.state)
 
   if (status.state.phase === 'loading') return <Skeleton rows={8} />
   if (status.state.phase === 'error') {
     return <ErrorState message={status.state.message} onRetry={status.retry} />
   }
 
-  const { start, end } = status.state.data.seasons
-  const selected = season ?? end
-  const configured = Array.from({ length: end - start + 1 }, (_, i) => end - i)
-  // The default next race can be in a brand-new season beyond the configured
-  // range; keep its season selectable.
-  const seasons = configured.includes(selected) ? configured : [selected, ...configured]
   const idx = round !== null ? rounds.indexOf(round) : -1
   const canPrev = idx > 0
   const canNext = idx >= 0 && idx < rounds.length - 1
@@ -91,11 +36,8 @@ export function Race() {
             <span className="field-label">Season</span>
             <select
               className="select"
-              value={selected}
-              onChange={(event) => {
-                setSeason(Number(event.target.value))
-                setRound(null)
-              }}
+              value={selected ?? ''}
+              onChange={(event) => selectSeason(Number(event.target.value))}
             >
               {seasons.map((s) => (
                 <option key={s} value={s}>
@@ -201,7 +143,7 @@ function RaceTable({ prediction }: { prediction: Prediction }) {
 
       <section className="card">
         <h2 className="card-title">Ranked grid</h2>
-        <div className="table-wrap">
+        <div className="table-wrap table-scroll">
           <table className="data-table grid-table">
             <thead>
               <tr>

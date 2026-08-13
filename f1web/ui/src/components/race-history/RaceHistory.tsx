@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ApiError, getSeasonPredictions, getStatus, type Job, type Prediction } from '../../api/client'
+import { ApiError, getSeasonPredictions, getStatus, type Job } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
+import { analyzeRace, type RaceResult } from '../../lib/analysis'
 import { driverLabel, fmtDate } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
@@ -13,64 +14,6 @@ import {
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
 import './RaceHistory.css'
-
-interface RaceResult {
-  round: number
-  raceName: string
-  date: string
-  predictedWinner: string
-  actualWinner: string | null
-  winnerHit: boolean | null
-  top3Overlap: number | null
-  top3Of: number
-  hasActuals: boolean
-}
-
-function analyzeRace(prediction: Prediction): RaceResult {
-  // Defensive: a malformed/partial prediction must degrade to an empty row,
-  // not throw and take down the tab (see ErrorBoundary).
-  const drivers = Array.isArray(prediction.drivers) ? prediction.drivers : []
-  const race = prediction.race ?? { race_name: null, circuit_id: null, date: null }
-  const sorted = [...drivers].sort((a, b) => a.pred_rank - b.pred_rank)
-  const predictedTop3 = sorted.slice(0, 3).map((row) => row.driver_id)
-  const predictedWinner = predictedTop3[0] ?? ''
-
-  const raced = drivers.filter(
-    (row) => row.actual_position !== null && row.actual_position !== undefined,
-  )
-  const winnerRow = raced.find((row) => row.actual_position === 1)
-  if (!winnerRow) {
-    return {
-      round: prediction.round,
-      raceName: race.race_name ?? `Round ${prediction.round}`,
-      date: race.date ?? '',
-      predictedWinner,
-      actualWinner: null,
-      winnerHit: null,
-      top3Overlap: null,
-      top3Of: 3,
-      hasActuals: false,
-    }
-  }
-  const actualByPosition = new Map(
-    raced.map((row) => [row.actual_position as number, row.driver_id]),
-  )
-  const actualTop3 = [1, 2, 3]
-    .map((pos) => actualByPosition.get(pos))
-    .filter((id): id is string => id !== undefined)
-  const overlap = predictedTop3.filter((id) => actualTop3.includes(id)).length
-  return {
-    round: prediction.round,
-    raceName: race.race_name ?? `Round ${prediction.round}`,
-    date: race.date ?? '',
-    predictedWinner,
-    actualWinner: actualByPosition.get(1) ?? null,
-    winnerHit: actualByPosition.get(1) === predictedWinner,
-    top3Overlap: overlap,
-    top3Of: Math.min(3, actualTop3.length),
-    hasActuals: true,
-  }
-}
 
 type SeasonState =
   | { phase: 'idle' }
@@ -241,20 +184,28 @@ function RaceHistoryTable({ races }: { races: RaceResult[] }) {
   return (
     <>
       <section className="card">
-        <div className="summary-line">
-          <span>
-            {raced.length} of {races.length} races with actuals
-          </span>
-          <span>·</span>
-          <span>
-            Winner hits: {hits}/{raced.length}
-          </span>
-          {avgOverlap !== null ? (
-            <>
-              <span>·</span>
-              <span>Avg top-3 overlap: {avgOverlap.toFixed(2)}</span>
-            </>
-          ) : null}
+        <div className="metrics">
+          <div className="metric">
+            <span className="metric-label">Races with actuals</span>
+            <span className="metric-value">
+              {raced.length}/{races.length}
+            </span>
+            <span className="metric-sub">completed rounds this season</span>
+          </div>
+          <div className="metric">
+            <span className="metric-label">Winner hits</span>
+            <span className="metric-value">
+              {hits}/{raced.length}
+            </span>
+            <span className="metric-sub">predicted winner = actual</span>
+          </div>
+          <div className="metric">
+            <span className="metric-label">Avg top-3 overlap</span>
+            <span className="metric-value">
+              {avgOverlap !== null ? avgOverlap.toFixed(2) : '–'}
+            </span>
+            <span className="metric-sub">predicted ∩ actual podium</span>
+          </div>
         </div>
         <div className="table-wrap">
           <table className="data-table">

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { getStatus, type Job } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
+import { EmptyState } from '../ui/DataState'
 import { JobRunner } from '../ui/JobRunner'
 import {
   DEFAULT_SEASON_RANGE,
@@ -48,6 +49,13 @@ export function Data() {
         to fetch the configured <code>[data]</code> season range. Runs as a
         background job; only one pipeline step runs at a time.
       </p>
+      {status.state.phase === 'ready' && !status.state.data.data.has_raw_cache ? (
+        <EmptyState title="No raw data cached yet">
+          Run <strong>Fetch data</strong> above to download race results from
+          the Jolpica API — every later pipeline step (train, backtest, predict)
+          reads from that cache and works offline afterwards.
+        </EmptyState>
+      ) : null}
     </>
   )
 }
