@@ -22,12 +22,11 @@ hooks:
       - name: Commit
         run: |
           # Stage the intended changes and commit with a Conventional Commit
-          # message using the GitHub CLI (gh). Never stage the untracked
-          # planning docs unless the user asks. Never commit nothing: if
-          # there are no staged changes, skip this step.
+          # message via `git commit` (gh has no commit subcommand). Never
+          # stage the untracked planning docs unless the user asks. Never
+          # commit nothing: if there are no staged changes, skip this step.
           git add <changed sources>
-          gh commit --message "<type>(<scope>): <imperative summary>" \
-                    --body "<optional context>"
+          git commit --message "<type>(<scope>): <imperative summary>"
       - name: Push
         run: |
           # Push the commit(s) to the remote so CI runs against the actual
@@ -69,4 +68,5 @@ commit_convention:
   note: >
     Scope is an optional noun for the module (e.g. fix(features): ...).
     Body/footers are separated from the header by a single blank line.
-    Commit via `gh`, then wait for CI and verify the result (AGENTS.md Notes).
+    Commit via `git commit`, then push and wait for CI, verifying the
+    result (see the hook above and AGENTS.md Notes).
