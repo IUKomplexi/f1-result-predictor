@@ -50,10 +50,6 @@ export function Status({ onNavigate }: { onNavigate?: (tabId: string) => void })
       <div className="status-head">
         <div>
           <h2 className="card-title">Pipeline status</h2>
-          <p className="meta-line">
-            {readyCount} of {STEPS.length} steps ready — each step runs as a background
-            job and builds on the previous one.
-          </p>
         </div>
         <Badge variant={complete ? 'ready' : 'warn'}>
           {complete ? 'Ready to predict' : 'Setup incomplete'}
@@ -107,10 +103,6 @@ export function Status({ onNavigate }: { onNavigate?: (tabId: string) => void })
       </ol>
 
       {error ? <p className="save-status error">{error}</p> : null}
-      <p className="muted status-note">
-        Train also calibrates the model automatically. Optional: Race History
-        can pre-compute past races so they open faster.
-      </p>
     </section>
   )
 }

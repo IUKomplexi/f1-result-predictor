@@ -37,6 +37,10 @@ export function Train() {
           <p className="job-option-hint">
             New data you fetch on the Data tab is picked up automatically.
           </p>
+          <p className="job-option-hint">
+            Training also calibrates the model automatically — no separate
+            calibrate step needed.
+          </p>
           <div className="job-option">
             <label className="field-label" htmlFor="train-name">Model name</label>
             <input
