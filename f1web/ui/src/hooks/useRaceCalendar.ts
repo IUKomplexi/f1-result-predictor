@@ -37,6 +37,11 @@ export function useRaceCalendar(
   const [round, setRound] = useState<number | null>(null)
   const [rounds, setRounds] = useState<number[]>([])
   const [roundNames, setRoundNames] = useState<Map<number, string>>(new Map())
+  // The season the loaded `rounds` list belongs to. The calendar fetch is
+  // async, so `rounds` briefly holds the *previous* season's list after a
+  // switch; snapping against it would land on a round that is invalid (or
+  // just wrong) for the newly selected season.
+  const [roundsSeason, setRoundsSeason] = useState<number | null>(null)
   const [nextRace, setNextRace] = useState<{ season: number; round: number } | null>(null)
   const [primed, setPrimed] = useState(false)
 
@@ -74,27 +79,38 @@ export function useRaceCalendar(
     getCalendar(season)
       .then((data) => {
         if (cancelled) return
+        setRoundsSeason(season)
         setRounds(data.calendar.map((c) => c.round).sort((a, b) => a - b))
         setRoundNames(
           new Map(data.calendar.map((c) => [c.round, c.race_name] as const)),
         )
       })
       .catch(() => {
-        if (!cancelled) setRounds([])
+        if (!cancelled) {
+          setRoundsSeason(null)
+          setRounds([])
+        }
       })
     return () => {
       cancelled = true
     }
   }, [season])
 
-  // Snap to a valid round: if none is selected or the current one is no longer
-  // in this season's calendar, fall back to the most recent round.
+  // Snap to a valid round once this season's calendar has loaded: if none is
+  // selected or the current one is no longer in the calendar, fall back to
+  // the next race (when it is in this season — the useful default) or the
+  // most recent round. Guarded on `roundsSeason` so a stale list from the
+  // previously selected season can never be snapped against.
   useEffect(() => {
-    if (season === null || rounds.length === 0) return
+    if (season === null || roundsSeason !== season || rounds.length === 0) return
     if (round === null || !rounds.includes(round)) {
-      setRound(rounds[rounds.length - 1])
+      const target =
+        nextRace !== null && nextRace.season === season
+          ? nextRace.round
+          : rounds[rounds.length - 1]
+      setRound(target)
     }
-  }, [season, round, rounds])
+  }, [season, round, rounds, roundsSeason, nextRace])
 
   const selected = season ?? configuredEnd
   const configured =
