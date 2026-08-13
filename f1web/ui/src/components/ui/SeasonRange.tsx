@@ -19,10 +19,28 @@ export function seasonPayload(range: SeasonRangeValue): Record<string, number> {
 }
 
 /**
- * Season-range inputs (CLI --start/--end). Empty inputs fall back to the
- * config season range at job-submit time (see f1web/jobs._cfg_start_end);
- * placeholders show the configured defaults (`[data] start_season` /
- * `end_season`) once /api/status is loaded.
+ * Resolve blank inputs to the allowed window (floor–ceiling) so a pipeline
+ * run with empty seasons uses the same range the pickers allow — matching
+ * the hint. Returns the raw range unchanged while status hasn't loaded yet.
+ * The Data tab does NOT use this: fetching new seasons keeps the configured
+ * range (it widens the window to it).
+ */
+export function resolveRange(
+  range: SeasonRangeValue,
+  seasons: { data_start: number; data_end: number } | null,
+): SeasonRangeValue {
+  if (!seasons) return range
+  return {
+    start: range.start ?? seasons.data_start,
+    end: range.end ?? seasons.data_end,
+  }
+}
+
+/**
+ * Season-range inputs (CLI --start/--end). Empty inputs resolve to the
+ * allowed window at job-submit time (see `resolveRange`), so a blank run uses
+ * the same range the pickers allow; placeholders show the configured defaults
+ * (`[data] start_season` / `end_season`) once /api/status is loaded.
  *
  * The allowed window is clamped: the start floor is the modern era (2014,
  * `seasons.data_start`) and the end ceiling is the latest season with fetched
@@ -93,8 +111,7 @@ export function SeasonRange({
       </div>
       {seasons ? (
         <p className="job-option-hint">
-          Allowed window: {floor}–{ceiling}; blank uses the configured range{' '}
-          {seasons.start}–{seasons.end}.
+          Allowed window: {floor}–{ceiling}; blank uses this range.
         </p>
       ) : null}
     </>

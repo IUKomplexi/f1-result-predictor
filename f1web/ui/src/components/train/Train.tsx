@@ -7,6 +7,7 @@ import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../u
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
+  resolveRange,
   seasonPayload,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
@@ -18,13 +19,14 @@ export function Train() {
   const [name, setName] = useState('')
   const suggestion =
     range.start !== null && range.end !== null ? `hurdle-${range.start}-${range.end}` : 'hurdle'
+  const seasons = status.state.phase === 'ready' ? status.state.data.seasons : null
   return (
     <>
       <JobRunner
         type="train"
         runLabel="Train model"
       buildPayload={() => ({
-        ...seasonPayload(range),
+        ...seasonPayload(resolveRange(range, seasons)),
         ...(name.trim() !== '' ? { name: name.trim() } : {}),
         enable_features: features.enable,
         disable_features: features.disable,

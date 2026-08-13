@@ -11,6 +11,7 @@ import { RefreshToggle } from '../ui/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
+  resolveRange,
   seasonPayload,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
@@ -70,6 +71,7 @@ export function RaceHistory({ onNavigate }: TabProps) {
   const { state, retry } = useSeasonResults(season)
 
   const statusState = status.state
+  const seasons = statusState.phase === 'ready' ? statusState.data.seasons : null
   // Default the precompute range to the most recent three seasons.
   useEffect(() => {
     if (primed.current || statusState.phase !== 'ready') return
@@ -102,7 +104,7 @@ export function RaceHistory({ onNavigate }: TabProps) {
           type="history"
           runLabel="Precompute race history"
           onDone={handlePrecomputed}
-          buildPayload={() => ({ ...seasonPayload(range), refresh })}
+          buildPayload={() => ({ ...seasonPayload(resolveRange(range, seasons)), refresh })}
           options={
             <>
               <SeasonRange value={range} onChange={setRange} />

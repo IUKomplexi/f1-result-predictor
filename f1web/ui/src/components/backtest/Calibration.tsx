@@ -17,6 +17,7 @@ import { PrereqHint } from '../ui/PrereqHint'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
+  resolveRange,
   seasonPayload,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
@@ -47,6 +48,7 @@ export function Calibration() {
   const status = useApi('status', () => getStatus())
   const modelsState = useApi<ModelsResponse>('models', getModels)
   const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
+  const seasons = status.state.phase === 'ready' ? status.state.data.seasons : null
   const { state, retry } = useApi(`calibration-${version}`, () => getCalibration())
 
   return (
@@ -57,7 +59,7 @@ export function Calibration() {
           runLabel="Run calibration"
           onDone={() => setVersion((v) => v + 1)}
           buildPayload={() => ({
-            ...seasonPayload(range),
+            ...seasonPayload(resolveRange(range, seasons)),
             ...(modelChoice !== DEFAULT_CALIBRATION_MODEL
               ? { model_path: models?.models[modelChoice]?.checkpoint ?? undefined }
               : {}),
