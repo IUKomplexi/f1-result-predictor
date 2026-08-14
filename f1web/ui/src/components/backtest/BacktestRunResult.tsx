@@ -1,8 +1,12 @@
+import { METRICS } from './lib'
+import { MetricCell } from './MetricCell'
+
 /** The result block of a finished backtest job (overall table + compared models). */
 export function BacktestRunResult({ job }: { job: { result: Record<string, unknown> | null; log: string[] } }) {
   const overall = (job.result?.overall ?? {}) as Record<string, Record<string, number>>
   const checkpoint = job.result?.checkpoint as string | undefined
   const compared = (job.result?.models ?? []) as string[]
+  const names = Object.keys(overall)
   return (
     <div className="result-block">
       <h3 className="card-title">Backtest run</h3>
@@ -29,25 +33,34 @@ export function BacktestRunResult({ job }: { job: { result: Record<string, unkno
           <thead>
             <tr>
               <th scope="col">Baseline</th>
-              <th scope="col" className="num">Winner hit</th>
-              <th scope="col" className="num">Top3 overlap</th>
-              <th scope="col" className="num">Spearman</th>
-              <th scope="col" className="num">MAE</th>
+              {METRICS.map((metric) => (
+                <th key={metric.key} scope="col" className="num">
+                  {metric.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {Object.entries(overall).map(([name, m]) => (
+            {names.map((name) => (
               <tr key={name}>
                 <td>{name}</td>
-                <td className="num">{m.winner_hit?.toFixed(3)}</td>
-                <td className="num">{m.top3_overlap?.toFixed(3)}</td>
-                <td className="num">{m.spearman?.toFixed(3)}</td>
-                <td className="num">{m.mae?.toFixed(3)}</td>
+                {METRICS.map((metric) => (
+                  <MetricCell
+                    key={metric.key}
+                    metric={metric.key}
+                    values={names.map((n) => overall[n]?.[metric.key] ?? NaN)}
+                    value={overall[name]?.[metric.key]}
+                  />
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <p className="cell-tone-legend">
+        Green = best in the column, red = worst, orange = in between, white =
+        tied. MAE is lower-better; the other metrics are higher-better.
+      </p>
     </div>
   )
 }

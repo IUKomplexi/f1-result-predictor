@@ -4,18 +4,20 @@ import { Badge } from '../ui/Badge'
 import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import {
   BASELINES,
-  BASELINE_COLOR,
+  BASELINE_HELP,
   BASELINE_LABEL,
   METRICS,
   allSeasons,
   deltaVs,
 } from './lib'
+import { MetricCell } from './MetricCell'
 import { ModelComparison } from './ModelComparison'
 
 /** Plain-language meaning of each metric (shown under the mean table). */
 const METRIC_HELP: Record<string, string> = {
   winner_hit: 'how often the predicted winner actually won',
   top3_overlap: 'share of the actual podium the model named',
+  top10_overlap: 'share of the actual top 10 the model named',
   spearman: 'rank correlation of predicted vs actual points order',
   mae: 'mean absolute error of predicted points',
 }
@@ -24,7 +26,7 @@ function metricLabel(metric: keyof BacktestMetricRow): string {
   return METRICS.find((m) => m.key === metric)?.label ?? String(metric)
 }
 
-/** The persisted backtest report: mean table, model comparison, trend + edge charts. */
+/** The persisted backtest report: mean table, model comparison, edge charts. */
 export function BacktestView({ backtest, reference }: { backtest: Backtest; reference: string | null }) {
   const seasons = allSeasons(backtest.by_season)
 
@@ -45,30 +47,47 @@ export function BacktestView({ backtest, reference }: { backtest: Backtest; refe
               </tr>
             </thead>
             <tbody>
-              {BASELINES.map((baseline) => (
-                <tr key={baseline} className={baseline === 'model' ? 'row-model' : undefined}>
-                  <td>
-                    {baseline === 'model' ? (
-                      <Badge variant="info">{BASELINE_LABEL[baseline]}</Badge>
-                    ) : (
-                      BASELINE_LABEL[baseline]
-                    )}
-                  </td>
-                  {METRICS.map((metric) => (
-                    <td key={metric.key} className="num">
-                      {fmtNumber(backtest.overall[baseline]?.[metric.key], 3)}
+              {BASELINES.map((baseline) => {
+                return (
+                  <tr key={baseline} className={baseline === 'model' ? 'row-model' : undefined}>
+                    <td>
+                      {baseline === 'model' ? (
+                        <Badge variant="info">{BASELINE_LABEL[baseline]}</Badge>
+                      ) : (
+                        BASELINE_LABEL[baseline]
+                      )}
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    {METRICS.map((metric) => (
+                      <MetricCell
+                        key={metric.key}
+                        metric={metric.key}
+                        values={BASELINES.map(
+                          (b) => backtest.overall[b]?.[metric.key] ?? NaN,
+                        )}
+                        value={backtest.overall[baseline]?.[metric.key]}
+                      />
+                    ))}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
+        <p className="cell-tone-legend">
+          Green = best in the column, red = worst, orange = in between, white =
+          tied. MAE is lower-better; the other metrics are higher-better.
+        </p>
         <dl className="metric-glossary">
           {METRICS.map((metric) => (
             <div key={metric.key} className="glossary-item">
               <dt>{metric.label}</dt>
               <dd>{METRIC_HELP[metric.key]}</dd>
+            </div>
+          ))}
+          {BASELINES.filter((b) => b !== 'model').map((baseline) => (
+            <div key={baseline} className="glossary-item">
+              <dt>{BASELINE_LABEL[baseline]}</dt>
+              <dd>{BASELINE_HELP[baseline]}</dd>
             </div>
           ))}
         </dl>
@@ -79,32 +98,16 @@ export function BacktestView({ backtest, reference }: { backtest: Backtest; refe
       ) : null}
 
       <section className="card">
-        <h2 className="card-title">Per-season trends</h2>
-        <div className="chart-grid">
-          {METRICS.map((metric) => (
-            <figure key={metric.key} className="chart-figure">
-              <figcaption>{metric.label}</figcaption>
-              <MetricChart
-                metric={metric.key}
-                seasons={seasons}
-                bySeason={backtest.by_season}
-              />
-            </figure>
-          ))}
-        </div>
-      </section>
-
-      <section className="card">
         <h2 className="card-title">Model edge vs baselines (per season)</h2>
         <p className="context-note">
-          Above 0 = the model was better than that baseline in that season.
-          MAE is reversed (lower is better), so a positive edge is good there
-          too.
+          Each chart shows the model's value minus the baseline's value for
+          that season — above 0 means the model was better (MAE is reversed,
+          so a positive edge is good there too).
         </p>
         <div className="chart-grid">
           {METRICS.map((metric) => (
             <figure key={metric.key} className="chart-figure">
-              <figcaption>vs grid / championship — {metric.label}</figcaption>
+              <figcaption>{metric.label} — model minus baseline</figcaption>
               <MetricEdgeChart
                 metric={metric.key}
                 seasons={seasons}
@@ -115,43 +118,6 @@ export function BacktestView({ backtest, reference }: { backtest: Backtest; refe
         </div>
       </section>
     </>
-  )
-}
-
-function MetricChart({
-  metric,
-  seasons,
-  bySeason,
-}: {
-  metric: keyof BacktestMetricRow
-  seasons: number[]
-  bySeason: Record<string, Record<string, BacktestMetricRow>>
-}) {
-  const data: ChartDatum[] = seasons.map((season) => {
-    const row: ChartDatum = {
-      season: String(season),
-    }
-    for (const baseline of BASELINES) {
-      row[baseline] = bySeason[baseline]?.[String(season)]?.[metric]
-    }
-    return row
-  })
-  const series: ChartSeries[] = BASELINES.map((baseline) => ({
-    key: baseline,
-    name: BASELINE_LABEL[baseline],
-    color: BASELINE_COLOR[baseline],
-    strokeWidth: baseline === 'model' ? 2.5 : 1.5,
-  }))
-  return (
-    <Chart
-      data={data}
-      xKey="season"
-      series={series}
-      ariaLabel={`${metricLabel(metric)} by season, for ${BASELINES.map(
-        (b) => BASELINE_LABEL[b],
-      ).join(', ')}`}
-      valueFormat={(v) => fmtNumber(v, 3)}
-    />
   )
 }
 

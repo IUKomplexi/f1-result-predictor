@@ -23,9 +23,43 @@ export const MODEL_COLORS = ['#e10600', '#4a7fd6', '#d9a514', '#17a354', '#8b5cf
 export const METRICS: { key: keyof BacktestMetricRow; label: string }[] = [
   { key: 'winner_hit', label: 'Winner hit' },
   { key: 'top3_overlap', label: 'Top-3 overlap' },
+  { key: 'top10_overlap', label: 'Top-10 overlap' },
   { key: 'spearman', label: 'Spearman' },
   { key: 'mae', label: 'MAE' },
 ]
+
+/** Plain-language meaning of the baselines (shown under the mean table). */
+export const BASELINE_HELP: Record<string, string> = {
+  grid: 'predicts the points of the grid slot',
+  championship: 'predicts the points of the championship position',
+  zero: 'predicts 0 points for every driver (the naive baseline)',
+}
+
+/** Metrics where a LOWER value is better (MAE; all others are higher-better). */
+const LOWER_IS_BETTER: ReadonlySet<keyof BacktestMetricRow> = new Set(['mae'])
+
+export type CellTone = 'best' | 'worst' | 'mid' | 'neutral'
+
+/**
+ * Tone for one cell in a metric column across several rows, so a comparison
+ * table shows at a glance which value is best: best = green, worst = red,
+ * strictly-between values = orange, ties/all-equal = white (no meaningful
+ * difference).
+ */
+export function cellTone(
+  metric: keyof BacktestMetricRow,
+  values: number[],
+  value: number,
+): CellTone {
+  const finite = values.filter((v) => Number.isFinite(v))
+  if (finite.length === 0) return 'neutral'
+  const best = LOWER_IS_BETTER.has(metric) ? Math.min(...finite) : Math.max(...finite)
+  const worst = LOWER_IS_BETTER.has(metric) ? Math.max(...finite) : Math.min(...finite)
+  if (best === worst) return 'neutral'
+  if (value === best) return 'best'
+  if (value === worst) return 'worst'
+  return 'mid'
+}
 
 /** The "deployed config model" pseudo-choice, only when it is not a saved model. */
 export const DEFAULT_MODEL = 'default'

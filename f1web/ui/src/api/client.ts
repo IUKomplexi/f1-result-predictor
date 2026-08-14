@@ -52,6 +52,7 @@ export interface Prediction {
 export interface BacktestMetricRow {
   winner_hit: number
   top3_overlap: number
+  top10_overlap: number
   spearman: number
   mae: number
 }
@@ -203,8 +204,13 @@ export interface SeasonPredictions {
 }
 
 /** All completed rounds of a season in one dataset pass (Race History). */
-export function getSeasonPredictions(season: number): Promise<SeasonPredictions> {
-  return apiGet<SeasonPredictions>(`/api/predictions/season${qs({ season })}`)
+export function getSeasonPredictions(
+  season: number,
+  modelPath?: string | null,
+): Promise<SeasonPredictions> {
+  return apiGet<SeasonPredictions>(
+    `/api/predictions/season${qs({ season, model_path: modelPath || undefined })}`,
+  )
 }
 
 export function getBacktest(): Promise<Backtest> {

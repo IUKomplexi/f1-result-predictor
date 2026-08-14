@@ -10,34 +10,75 @@ import {
   allSeasons,
   deltaVs,
 } from './lib'
+import { MetricCell } from './MetricCell'
 
-/** Per-metric charts with one series per compared model plus the baselines. */
+/** Per-metric charts (2×2) plus absolute + delta tables for the compared models. */
 export function ModelComparison({ backtest, reference }: { backtest: Backtest; reference: string | null }) {
   const byModel = backtest.models ?? {}
   const names = Object.keys(byModel).sort()
   const refName = reference && names.includes(reference) ? reference : names[0]
   return (
-    <section className="card">
-      <h2 className="card-title">Model comparison</h2>
-      <p className="context-note">
-        All models are scored on the same seasons. Baselines are identical, so
-        only the model lines differ.
-      </p>
-      <div className="chart-grid">
-        {METRICS.map((metric) => (
-          <figure key={metric.key} className="chart-figure">
-            <figcaption>{metric.label} — per model</figcaption>
-            <CompareChart
-              metric={metric.key}
-              names={names}
-              byModel={byModel}
-              bySeason={backtest.by_season}
-            />
-          </figure>
-        ))}
-      </div>
-      <CompareDeltaTable byModel={byModel} reference={refName} />
-    </section>
+    <>
+      <section className="card">
+        <h2 className="card-title">Model comparison</h2>
+        <div className="chart-grid-2">
+          {METRICS.map((metric) => (
+            <figure key={metric.key} className="chart-figure">
+              <figcaption>{metric.label} — per model</figcaption>
+              <CompareChart
+                metric={metric.key}
+                names={names}
+                byModel={byModel}
+                bySeason={backtest.by_season}
+              />
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="card-title">Model scores (mean over the backtest range)</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                {METRICS.map((metric) => (
+                  <th key={metric.key} scope="col" className="num">
+                    {metric.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {names.map((name) => (
+                <tr key={name} className={name === refName ? 'row-model' : undefined}>
+                  <td>
+                    {name}
+                    {name === refName ? <span className="muted"> (reference)</span> : null}
+                  </td>
+                  {METRICS.map((metric) => (
+                    <MetricCell
+                      key={metric.key}
+                      metric={metric.key}
+                      values={names.map(
+                        (n) => byModel[n]?.overall.model?.[metric.key] ?? NaN,
+                      )}
+                      value={byModel[name]?.overall.model?.[metric.key]}
+                    />
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="cell-tone-legend">
+          Green = best model for that metric, red = worst, orange = in between,
+          white = tied. MAE is lower-better; the other metrics are higher-better.
+        </p>
+        <CompareDeltaTable byModel={byModel} reference={refName} />
+      </section>
+    </>
   )
 }
 
@@ -82,7 +123,7 @@ function CompareChart({
   )
 }
 
-/** Overall deltas vs the reference model (positive = better). */
+/** Overall deltas vs the reference model (positive = better for every metric). */
 function CompareDeltaTable({
   byModel,
   reference,
@@ -94,7 +135,13 @@ function CompareDeltaTable({
   const refRow = byModel[reference]?.overall.model
   return (
     <>
-      <h3 className="card-title">Deltas vs {reference} (positive = better)</h3>
+      <h3 className="card-title">
+        Deltas vs {reference}
+      </h3>
+      <p className="cell-tone-legend">
+        Each cell is that model's value minus {reference}'s. Positive = better
+        for every metric (MAE is inverted).
+      </p>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
