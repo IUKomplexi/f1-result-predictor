@@ -15,6 +15,10 @@
   flex-wrap: wrap;
 }
 
+.history-selector-row {
+  margin-bottom: var(--space-4);
+}
+
 .race-nav .job-option-hint {
   display: none;
 }

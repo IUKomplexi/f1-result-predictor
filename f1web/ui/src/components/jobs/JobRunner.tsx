@@ -14,7 +14,7 @@ interface JobRunnerProps {
   /** 'end' pins the Run button to the bottom-right of the toolbar. */
   buttonAlign?: 'start' | 'end'
   /** Optional layout variant for pages with a structured control toolbar. */
-  layout?: 'default' | 'train'
+  layout?: 'default' | 'train' | 'action-end'
   /** Additional class for the runner section. */
   className?: string
   /** Render without the default outer card when embedded in a parent section. */

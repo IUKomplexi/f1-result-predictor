@@ -24,6 +24,7 @@ export function Data() {
       <JobRunner
         type="fetch"
         runLabel="Fetch data"
+        layout="action-end"
         buildPayload={() => {
           const rangeError = seasonRangeError(range)
           if (rangeError) throw new Error(rangeError)
@@ -41,7 +42,7 @@ export function Data() {
               min={seasons?.start}
               max={seasons?.end}
             />
-            <RefreshToggle value={refresh} onChange={setRefresh} bare />
+            <RefreshToggle value={refresh} onChange={setRefresh} label="Re-fetch from API" />
           </>
         }
         renderResult={(job) => <FetchResult job={job} />}

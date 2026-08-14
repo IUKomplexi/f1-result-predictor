@@ -16,7 +16,6 @@ import { ErrorState, Skeleton } from '../../components/ui/DataState'
 import { JobRunner } from '../../components/jobs/JobRunner'
 import { ModelPicker } from '../race/ModelPicker'
 import { RACE_DEFAULT_MODEL, modelPathFor } from '../race/lib'
-import { RefreshToggle } from '../../components/controls/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
@@ -82,7 +81,7 @@ export function RaceHistory({ onNavigate }: TabProps) {
   const [season, setSeason] = useState<number | null>(null)
   const [model, setModel] = useState<string>(RACE_DEFAULT_MODEL)
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
-  const [refresh, setRefresh] = useState(false)
+  const refresh = false
   const primed = useRef(false)
   const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
   const modelPath = modelPathFor(models, model)
@@ -121,6 +120,7 @@ export function RaceHistory({ onNavigate }: TabProps) {
         <JobRunner
           type="history"
           runLabel="Precompute race history"
+          layout="action-end"
           onDone={handlePrecomputed}
           buildPayload={() => {
             const resolved = resolveRange(range, seasons)
@@ -131,36 +131,10 @@ export function RaceHistory({ onNavigate }: TabProps) {
           options={
             <>
               <SeasonRange value={range} onChange={setRange} />
-              <RefreshToggle
-                value={refresh}
-                onChange={setRefresh}
-                label="Recompute all races"
-                bare
-              />
             </>
           }
           renderResult={(job) => <HistoryRunResult job={job} />}
         />
-      </section>
-
-      <section className="card">
-        <div className="race-nav">
-          <ModelPicker models={models} value={model} onChange={setModel} />
-          <label className="field">
-            <span className="field-label">Season</span>
-            <select
-              className="select"
-              value={selected}
-              onChange={(event) => setSeason(Number(event.target.value))}
-            >
-              {Array.from({ length: end - start + 1 }, (_, i) => end - i).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
       </section>
 
       {state.phase === 'idle' || state.phase === 'loading' ? (
@@ -172,6 +146,13 @@ export function RaceHistory({ onNavigate }: TabProps) {
       {state.phase === 'ready' ? (
         <RaceHistoryTable
           races={state.races}
+          models={models}
+          selectedModel={model}
+          selectedSeason={selected}
+          startSeason={start}
+          endSeason={end}
+          onSeasonChange={setSeason}
+          onModelChange={setModel}
           onOpenRace={(round) => onNavigate?.('race', { season: selected, round })}
         />
       ) : null}
@@ -206,9 +187,23 @@ function HistoryRunResult({ job }: { job: Job }) {
 
 function RaceHistoryTable({
   races,
+  models,
+  selectedModel,
+  selectedSeason,
+  startSeason,
+  endSeason,
+  onSeasonChange,
+  onModelChange,
   onOpenRace,
 }: {
   races: RaceResult[]
+  models: ModelsResponse | null
+  selectedModel: string
+  selectedSeason: number
+  startSeason: number
+  endSeason: number
+  onSeasonChange: (season: number) => void
+  onModelChange: (model: string) => void
   onOpenRace: (round: number) => void
 }) {
   const raced = races.filter((race) => race.hasActuals)
@@ -221,6 +216,23 @@ function RaceHistoryTable({
   return (
     <>
       <section className="card">
+        <div className="race-nav history-selector-row">
+          <label className="field">
+            <span className="field-label">Season</span>
+            <select
+              className="select"
+              value={selectedSeason}
+              onChange={(event) => onSeasonChange(Number(event.target.value))}
+            >
+              {Array.from({ length: endSeason - startSeason + 1 }, (_, i) => endSeason - i).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <ModelPicker models={models} value={selectedModel} onChange={onModelChange} />
+        </div>
         <div className="metrics">
           <div className="metric">
             <span className="metric-label">Races with actuals</span>
