@@ -51,15 +51,27 @@ describe('GridEditor', () => {
     expect(onChange).toHaveBeenCalledWith({ russell: '2' })
   })
 
-  it('moves a driver between positions (swap) without leaving a duplicate', () => {
+  it('does not swap a driver when assigning an occupied driver elsewhere', () => {
     const onChange = vi.fn()
     render(<GridEditor drivers={drivers} values={{ russell: '2' }} onChange={onChange} onReset={() => {}} />)
-    const p2 = screen.getByLabelText('Driver at position 2') as HTMLSelectElement
-    expect(p2.value).toBe('russell')
-    // Move russell to P1: the old P2 entry must be dropped.
     const p1 = screen.getByLabelText('Driver at position 1') as HTMLSelectElement
     fireEvent.change(p1, { target: { value: 'russell' } })
-    expect(onChange).toHaveBeenCalledWith({ russell: '1' })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('disables an explicitly selected driver in other positions', () => {
+    render(
+      <GridEditor
+        drivers={drivers}
+        values={{ russell: '1' }}
+        onChange={() => {}}
+        onReset={() => {}}
+      />,
+    )
+    const p2 = screen.getByLabelText('Driver at position 2') as HTMLSelectElement
+    const russell = Array.from(p2.options).find((option) => option.value === 'russell')
+    expect(russell).toBeUndefined()
+    expect(p2.options[0].textContent).toBe('Use model grid')
   })
 
   it('"Use model grid" clears the position override', () => {

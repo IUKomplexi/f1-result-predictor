@@ -31,7 +31,6 @@ export function Race({ navState }: TabProps) {
   const modelsState = useApi<ModelsResponse>('models', getModels)
   const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
   const [model, setModel] = useState<string>(RACE_DEFAULT_MODEL)
-  const [defaultModel, setDefaultModel] = useState<string>(RACE_DEFAULT_MODEL)
   const [modelTouched, setModelTouched] = useState(false)
   const {
     season,
@@ -48,12 +47,10 @@ export function Race({ navState }: TabProps) {
   } = useRaceCalendar(status.state, navState)
 
   // Preselect the deployed model once the index loads; never clobber a choice
-  // the user already made. defaultModel is the baseline the "pending
-  // overrides" badge compares against.
+  // the user already made.
   useEffect(() => {
     if (modelTouched || models === null) return
     const deployed = deployedName(models) ?? RACE_DEFAULT_MODEL
-    setDefaultModel(deployed)
     setModel(deployed)
   }, [models, modelTouched])
 
@@ -87,7 +84,6 @@ export function Race({ navState }: TabProps) {
         round={round}
         models={models}
         model={model}
-        defaultModel={defaultModel}
         onModelChange={(value) => {
           setModelTouched(true)
           setModel(value)
@@ -144,7 +140,6 @@ function RacePanel({
   round,
   models,
   model,
-  defaultModel,
   onModelChange,
   nav,
 }: {
@@ -152,7 +147,6 @@ function RacePanel({
   round: number | null
   models: ModelsResponse | null
   model: string
-  defaultModel: string
   onModelChange: (value: string) => void
   nav: RaceNav
 }) {
@@ -210,7 +204,7 @@ function RacePanel({
     setApplied((n) => n + 1)
   }
 
-  const pendingOverrides = model !== defaultModel || gridRows !== null
+  const pendingOverrides = gridRows !== null
   const gpName = round !== null ? nav.roundNames.get(round) : undefined
   // Only the prediction for the *current* race may fill the title/meta —
   // during a refetch the previous race's payload must not leak in.
@@ -251,49 +245,50 @@ function RacePanel({
 
           <div className="race-deck-controls">
             <div className="pager">
+              {nav.isNextRace ? (
+                <Badge variant="info">Upcoming</Badge>
+              ) : (
+                <button
+                  type="button"
+                  className="button next-race-button"
+                  disabled={nav.nextRace === null}
+                  onClick={nav.goToNextRace}
+                  title={
+                    nav.nextRace !== null
+                      ? `Jump to the next race (round ${nav.nextRace.round})`
+                      : undefined
+                  }
+                >
+                  Next race
+                </button>
+              )}
               <div className="pager-buttons">
                 <button
                   type="button"
-                  className="button"
+                  className="button pager-arrow"
                   disabled={!nav.canPrev}
                   onClick={() => nav.setRound(nav.rounds[nav.idx - 1])}
+                  aria-label="Previous race"
+                  title="Previous race"
                 >
-                  ‹ Prev
+                  ‹
                 </button>
                 <button
                   type="button"
-                  className="button"
+                  className="button pager-arrow"
                   disabled={!nav.canNext}
                   onClick={() => nav.setRound(nav.rounds[nav.idx + 1])}
+                  aria-label="Next race"
+                  title="Next race"
                 >
-                  Next ›
+                  ›
                 </button>
-                {nav.isNextRace ? (
-                  <Badge variant="info">Upcoming</Badge>
-                ) : (
-                  <button
-                    type="button"
-                    className="button"
-                    disabled={nav.nextRace === null}
-                    onClick={nav.goToNextRace}
-                    title={
-                      nav.nextRace !== null
-                        ? `Jump to the next race (round ${nav.nextRace.round})`
-                        : undefined
-                    }
-                  >
-                    Next race
-                  </button>
-                )}
               </div>
-            </div>
-            <div className="model-slot">
-              <ModelPicker models={models} value={model} onChange={onModelChange} />
             </div>
           </div>
         </div>
 
-        <div className="season-row">
+        <div className="race-selector-row">
           <label className="field">
             <span className="field-label">Season</span>
             <select
@@ -308,17 +303,12 @@ function RacePanel({
               ))}
             </select>
           </label>
+          <ModelPicker models={models} value={model} onChange={onModelChange} />
         </div>
 
         <div className="deck-status-row">
           {pendingOverrides ? (
-            <Badge variant="warn">
-              {gridRows !== null && model !== defaultModel
-                ? 'Grid + model overrides pending'
-                : gridRows !== null
-                  ? 'Grid override pending'
-                  : 'Model override pending'}
-            </Badge>
+            <Badge variant="warn">Grid override pending</Badge>
           ) : (
             <span className="muted">Config defaults</span>
           )}
@@ -330,7 +320,7 @@ function RacePanel({
         </div>
 
         <details className="advanced-options advanced-options-inline">
-          <summary>Grid &amp; model overrides</summary>
+          <summary>Grid override</summary>
           <div className="advanced-drawer">
             {lastMatches && !last.verified ? (
               <GridEditor

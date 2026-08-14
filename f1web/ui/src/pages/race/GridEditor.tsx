@@ -6,8 +6,8 @@ import { Badge } from '../../components/ui/Badge'
  * Editable qualifying grid for an upcoming race: one row per starting
  * position, with a driver dropdown to assign who starts there. Seeded from
  * the prediction's own grid. "Use model grid" keeps the model's guess for
- * that position. Picking a driver clears them from any other position
- * (swap semantics), so the same driver can never occupy two rows. Edits
+ * that position. Explicitly selected drivers are reserved globally, so the
+ * same driver can never be selected in two rows. Edits
  * stay local until the user applies them (POST /api/predict with a
  * grid_csv body). Not shown for verified races — a completed race has no
  * grid to feed.
@@ -40,6 +40,12 @@ export function GridEditor({
 
   const selectDriver = (position: number, driverId: string) => {
     const next = { ...(values ?? {}) }
+    if (
+      driverId !== '' &&
+      Object.entries(next).some(([id, pos]) => id === driverId && pos !== String(position))
+    ) {
+      return
+    }
     // Clearing: remove whoever was assigned to this position.
     for (const [id, pos] of Object.entries(next)) {
       if (pos === String(position)) delete next[id]
@@ -47,10 +53,6 @@ export function GridEditor({
     if (driverId === '') {
       onChange(next)
       return
-    }
-    // The chosen driver moves here from wherever they were before.
-    for (const [id, pos] of Object.entries(next)) {
-      if (id === driverId && pos !== String(position)) delete next[id]
     }
     next[driverId] = String(position)
     onChange(next)
@@ -60,51 +62,58 @@ export function GridEditor({
     <div className="job-option grid-editor">
       <div className="feature-toggle-head">
         <span className="job-label">
-          Qualifying grid override (CLI --grid)
+          Grid override
           {isDirty ? <Badge variant="warn">pending</Badge> : null}
         </span>
         <button type="button" className="link-button" onClick={onReset} disabled={!isDirty}>
           Reset to model grid
         </button>
       </div>
-      <p className="job-option-hint">
-        Assign a driver to each starting position. "Use model grid" keeps the
-        model's guess for that position.
-      </p>
       <div className="grid-editor-table">
-        <table className="data-table grid-table">
-          <thead>
-            <tr>
-              <th scope="col" className="num">Pos</th>
-              <th scope="col">Driver</th>
-            </tr>
-          </thead>
-          <tbody>
-            {positions.map((position) => {
-              const current = driverAt(position)
-              return (
-                <tr key={position}>
-                  <td className="num rank">{position}</td>
-                  <td>
-                    <select
-                      className="grid-select"
-                      value={current}
-                      aria-label={`Driver at position ${position}`}
-                      onChange={(e) => selectDriver(position, e.target.value)}
-                    >
-                      <option value="">Use model grid</option>
-                      {drivers.map((row) => (
-                        <option key={row.driver_id} value={row.driver_id}>
-                          {driverLabel(row.driver_id)}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
+        <div className="grid-editor-columns">
+          {[positions.slice(0, 11), positions.slice(11)].map((column, columnIndex) => (
+            <table key={columnIndex} className="data-table grid-table">
+              <thead>
+                <tr>
+                  <th scope="col" className="num">Pos</th>
+                  <th scope="col">Driver</th>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {column.map((position) => {
+                  const current = driverAt(position)
+                  const reserved = new Set(
+                    Object.entries(values ?? {})
+                      .filter(([id, pos]) => id !== current && pos !== String(position))
+                      .map(([id]) => id),
+                  )
+                  return (
+                    <tr key={position}>
+                      <td className="num rank">{position}</td>
+                      <td>
+                        <select
+                          className="grid-select"
+                          value={current}
+                          aria-label={`Driver at position ${position}`}
+                          onChange={(e) => selectDriver(position, e.target.value)}
+                        >
+                          <option value="">Use model grid</option>
+                          {drivers
+                            .filter((row) => !reserved.has(row.driver_id))
+                            .map((row) => (
+                              <option key={row.driver_id} value={row.driver_id}>
+                                {driverLabel(row.driver_id)}
+                              </option>
+                            ))}
+                        </select>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          ))}
+        </div>
       </div>
     </div>
   )

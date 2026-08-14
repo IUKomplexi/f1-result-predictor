@@ -54,20 +54,21 @@
   min-width: 20rem;
 }
 
-.model-slot {
+.race-selector-row {
   display: flex;
-  flex-direction: column;
   align-items: flex-end;
-  width: 100%;
-}
-
-.model-slot .field {
-  width: min(100%, 20rem);
-}
-
-/* Season selector sits below the title/meta text, left side. */
-.season-row {
+  gap: var(--space-4);
+  flex-wrap: wrap;
   margin-top: var(--space-1);
+}
+
+.race-selector-row .field,
+.race-selector-row > .field {
+  min-width: 8rem;
+}
+
+.race-selector-row .job-option-hint {
+  display: none;
 }
 
 .advanced-options-inline {
@@ -121,7 +122,7 @@
     width: 100%;
   }
 
-  .model-slot {
+  .race-selector-row {
     align-items: flex-start;
   }
 }
@@ -166,6 +167,19 @@
   justify-content: flex-end;
 }
 
+.pager-arrow {
+  width: 2.5rem;
+  height: 2.5rem;
+  justify-content: center;
+  padding: 0;
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.next-race-button {
+  align-self: flex-end;
+}
+
 .pager-label {
   max-width: 20rem;
   overflow: hidden;
@@ -193,12 +207,19 @@
   margin-top: var(--space-3);
 }
 
+.grid-editor-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
 .grid-editor-table table {
   margin: 0;
 }
 
 .grid-select {
-  min-width: 8rem;
+  min-width: 0;
+  width: 100%;
   text-align: center;
   background: var(--bg-surface-raised);
   border: 1px solid var(--border-default);
@@ -207,6 +228,12 @@
   font: inherit;
   font-size: var(--text-sm);
   padding: var(--space-1) var(--space-2);
+}
+
+@media (max-width: 52rem) {
+  .grid-editor-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 .grid-select:focus {
