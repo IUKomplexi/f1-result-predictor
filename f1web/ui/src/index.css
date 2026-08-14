@@ -44,19 +44,20 @@ a {
 /* ---------------------------------------------------------------- layout */
 
 .shell {
-  max-width: 72rem;
+  max-width: 88rem;
   margin: 0 auto;
-  padding: var(--space-8) var(--space-4) var(--space-12);
+  padding: var(--space-6) var(--space-6) var(--space-8);
 }
 
 .site-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
-  padding-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-default);
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
 }
 
 .brand {

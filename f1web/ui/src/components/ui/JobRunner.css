@@ -1,42 +1,57 @@
 /* Shared inline pipeline-step controls (JobRunner) + result styles.
    These were previously part of the (now split) Pipeline tab. */
 
+/* Unified control toolbar: one raised panel that holds the option fields
+   and the Run button in a wrapping grid, so controls and actions form a
+   single cohesive row instead of floating independently. */
 .job-options {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, max-content));
   gap: var(--space-4);
-  align-items: flex-end;
+  align-items: end;
+  background: var(--bg-surface-raised);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
   margin-bottom: var(--space-4);
 }
 
 .job-option {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
-.job-option input[type='number'] {
-  background: var(--bg-surface-raised);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-3);
-  width: 8rem;
+/* Uppercase micro-labels (the guide's toolbar label style); checkbox
+   labels (.check-line) keep their sentence case. */
+.job-option > label:not(.check-line),
+.job-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
 }
 
-/* Text inputs (e.g. the Train model name) share the control look so they
-   align with the number inputs instead of stretching to their default width. */
+/* Consistent 2.25rem control height across number/text/select fields. */
+.job-option input[type='number'],
 .job-option input[type='text'] {
-  background: var(--bg-surface-raised);
+  height: 2.25rem;
+  background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-3);
-  width: 14rem;
+  padding: 0 var(--space-3);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* The Run button joins the toolbar grid and matches the control height. */
+.job-options > .button {
+  height: 2.25rem;
+  align-self: end;
 }
 
 .check-line {
