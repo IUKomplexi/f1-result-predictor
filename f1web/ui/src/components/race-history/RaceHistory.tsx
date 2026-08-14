@@ -135,17 +135,12 @@ export function RaceHistory({ onNavigate }: TabProps) {
                 value={refresh}
                 onChange={setRefresh}
                 label="Recompute all races"
-                hint="Re-run after new race data or a retrain to calculate everything again."
+                bare
               />
             </>
           }
           renderResult={(job) => <HistoryRunResult job={job} />}
         />
-        <p className="muted">
-          Calculates all past races of these seasons once, so opening Race
-          History afterwards is fast. Run again after new race data or a
-          retrain (use Refresh to clear the saved results).
-        </p>
       </section>
 
       <section className="card">

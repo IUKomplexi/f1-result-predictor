@@ -41,7 +41,7 @@ export function Data() {
               min={seasons?.start}
               max={seasons?.end}
             />
-            <RefreshToggle value={refresh} onChange={setRefresh} />
+            <RefreshToggle value={refresh} onChange={setRefresh} bare />
           </>
         }
         renderResult={(job) => <FetchResult job={job} />}

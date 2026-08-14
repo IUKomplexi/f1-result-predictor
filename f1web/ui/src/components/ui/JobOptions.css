@@ -86,6 +86,21 @@
   accent-color: var(--accent);
 }
 
+/* Bare (textless) toggle: checkbox centered against the surrounding option
+   fields so it lines up with the season inputs. */
+.refresh-bare {
+  align-self: center;
+  justify-self: center;
+  padding: 0 var(--space-2);
+}
+
+.refresh-bare input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 /* --- FeatureToggles --- */
 .job-options-error {
   color: var(--danger);

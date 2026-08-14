@@ -4,6 +4,21 @@
   gap: var(--space-3);
 }
 
+/* Model + season selectors side by side: labels on one line, dropdowns on
+   the next — horizontally aligned (this lazy tab needs its own rule; the
+   Race tab's .race-nav lives in Race.css). The model picker's helper text
+   is hidden here so both fields have the same height. */
+.race-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.race-nav .job-option-hint {
+  display: none;
+}
+
 .field-label {
   font-size: var(--text-sm);
   font-weight: 600;
