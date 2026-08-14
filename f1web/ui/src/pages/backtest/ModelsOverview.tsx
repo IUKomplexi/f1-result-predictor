@@ -5,13 +5,19 @@ import { Skeleton } from '../../components/ui/DataState'
 import { deployedName } from '../../lib/models'
 
 /** Saved checkpoints at a glance (name, training window, rows, features). */
-export function ModelsOverview({ models }: { models: ModelsResponse | null }) {
+export function ModelsOverview({
+  models,
+  embedded = false,
+}: {
+  models: ModelsResponse | null
+  embedded?: boolean
+}) {
   const entries = models
     ? Object.entries(models.models).sort(([a], [b]) => a.localeCompare(b))
     : []
   const deployed = deployedName(models)
   return (
-    <section className="card">
+    <section className={embedded ? 'models-overview models-overview-embedded' : 'card'}>
       <h2 className="card-title">Saved models</h2>
       {models === null ? (
         <Skeleton rows={2} />

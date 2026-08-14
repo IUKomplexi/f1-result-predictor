@@ -1,7 +1,7 @@
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
 /* Fixed two-column layout for the model-comparison charts (2×2 with 4+ charts). */
@@ -9,6 +9,54 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
+}
+
+.backtest-task-card {
+  padding: var(--space-4);
+}
+
+.backtest-task-models {
+  min-width: 0;
+}
+
+.models-overview-embedded {
+  min-width: 0;
+}
+
+.models-overview-embedded .card-title {
+  margin-bottom: var(--space-3);
+}
+
+.backtest-runner {
+  padding: 0;
+}
+
+.backtest-runner .job-options {
+  margin-top: var(--space-4);
+}
+
+.backtest-runner .result-block {
+  margin-top: var(--space-4);
+}
+
+.calibration-compact {
+  margin-top: var(--space-4);
+}
+
+.calibration-compact > .card {
+  padding: var(--space-4);
+}
+
+.calibration-compact > .card + .card {
+  margin-top: var(--space-3);
+}
+
+.calibration-compact .chart-grid {
+  gap: var(--space-3);
+}
+
+.calibration-compact .chart-figure {
+  padding: var(--space-2);
 }
 
 /* Compact chart matrix: raised figure cards, fixed 180px plots. */
@@ -61,13 +109,13 @@
   color: var(--text-secondary);
   font-size: var(--text-sm);
   max-width: 60ch;
-  margin: 0 0 var(--space-4);
+  margin: 0 0 var(--space-3);
 }
 
 /* Plain-language metric definitions under the mean table, collapsed behind a
    small toggle so the analytics stay compact. */
 .metric-glossary-toggle {
-  margin-top: var(--space-4);
+  margin-top: var(--space-3);
   font-size: var(--text-xs);
 }
 

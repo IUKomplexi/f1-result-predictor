@@ -58,93 +58,99 @@ export function Backtest() {
 
   return (
     <>
-      <ModelsOverview models={models} />
-      <JobRunner
-        type="backtest"
-        runLabel="Run backtest"
-        onDone={() => setVersion((v) => v + 1)}
-        buildPayload={() => {
-          const resolved = resolveRange(range, seasons)
-          const rangeError = seasonRangeError(resolved)
-          if (rangeError) throw new Error(rangeError)
-          return {
-            ...seasonPayload(resolved),
-            quantize,
-            // Walk-forward retraining is the explicit advanced opt-in; otherwise
-            // the selected saved models are scored with their own features.
-            use_checkpoint: !walkForward,
-            ...(walkForward
-              ? { enable_features: features.enable, disable_features: features.disable }
-            : { model_paths: selectedPaths(models, checked) }),
+      <section className="card backtest-task-card">
+        <div className="backtest-task-models">
+          <ModelsOverview models={models} embedded />
+        </div>
+        <JobRunner
+          type="backtest"
+          runLabel="Run backtest"
+          className="backtest-runner"
+          card={false}
+          onDone={() => setVersion((v) => v + 1)}
+          buildPayload={() => {
+            const resolved = resolveRange(range, seasons)
+            const rangeError = seasonRangeError(resolved)
+            if (rangeError) throw new Error(rangeError)
+            return {
+              ...seasonPayload(resolved),
+              quantize,
+              // Walk-forward retraining is the explicit advanced opt-in; otherwise
+              // the selected saved models are scored with their own features.
+              use_checkpoint: !walkForward,
+              ...(walkForward
+                ? { enable_features: features.enable, disable_features: features.disable }
+              : { model_paths: selectedPaths(models, checked) }),
+            }
+          }}
+          options={
+            <>
+              <div className="job-option model-select">
+                <span className="job-label">Models to score</span>
+                <div className="model-check-list">
+                  {choices.map((choice) => (
+                    <label key={choice.value} className="check-line">
+                      <input
+                        type="checkbox"
+                        checked={checked.includes(choice.value)}
+                        disabled={walkForward}
+                        onChange={(e) => toggleModel(choice.value, e.target.checked)}
+                      />
+                      {choice.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="job-option-hint">
+                  None selected = the deployed model.
+                </p>
+              </div>
+              <SeasonRange value={range} onChange={setRange} />
+              <details className="advanced-options">
+                <summary>Advanced</summary>
+                <div className="job-options-inner">
+                  <div className="job-option">
+                    <label
+                      className="check-line"
+                      title="Retrain for each season instead of using the saved models. Only for testing."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={walkForward}
+                        onChange={(e) => setWalkForward(e.target.checked)}
+                      />
+                      Walk-forward retraining
+                    </label>
+                    <p className="job-option-hint">
+                      More realistic, but doesn't judge the model you just trained.
+                    </p>
+                  </div>
+                  <div className="job-option">
+                    <label
+                      className="check-line"
+                      title="Round points to real F1 values (25, 18, 15, ...)."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={quantize}
+                        onChange={(e) => setQuantize(e.target.checked)}
+                      />
+                      Quantize points
+                    </label>
+                    <p className="job-option-hint">
+                      Rounds predicted points to real F1 values (25, 18, 15,
+                      12, 10, …) — matching what the deployed predictor outputs.
+                    </p>
+                  </div>
+                  {walkForward ? (
+                    <FeatureToggles value={features} onChange={setFeatures} />
+                  ) : null}
+                </div>
+              </details>
+            </>
           }
-        }}
-        options={
-          <>
-            <div className="job-option model-select">
-              <span className="job-label">Models to score</span>
-              <div className="model-check-list">
-                {choices.map((choice) => (
-                  <label key={choice.value} className="check-line">
-                    <input
-                      type="checkbox"
-                      checked={checked.includes(choice.value)}
-                      disabled={walkForward}
-                      onChange={(e) => toggleModel(choice.value, e.target.checked)}
-                    />
-                    {choice.label}
-                  </label>
-                ))}
-              </div>
-              <p className="job-option-hint">
-                None selected = the deployed model.
-              </p>
-            </div>
-            <SeasonRange value={range} onChange={setRange} />
-            <details className="advanced-options">
-              <summary>Advanced</summary>
-              <div className="job-options-inner">
-                <div className="job-option">
-                  <label
-                    className="check-line"
-                    title="Retrain for each season instead of using the saved models. Only for testing."
-                  >
-                    <input
-                      type="checkbox"
-                      checked={walkForward}
-                      onChange={(e) => setWalkForward(e.target.checked)}
-                    />
-                    Walk-forward retraining
-                  </label>
-                  <p className="job-option-hint">
-                    More realistic, but doesn't judge the model you just trained.
-                  </p>
-                </div>
-                <div className="job-option">
-                  <label
-                    className="check-line"
-                    title="Round points to real F1 values (25, 18, 15, ...)."
-                  >
-                    <input
-                      type="checkbox"
-                      checked={quantize}
-                      onChange={(e) => setQuantize(e.target.checked)}
-                    />
-                    Quantize points
-                  </label>
-                  <p className="job-option-hint">
-                    Rounds predicted points to real F1 values (25, 18, 15,
-                    12, 10, …) — matching what the deployed predictor outputs.
-                  </p>
-                </div>
-                {walkForward ? (
-                  <FeatureToggles value={features} onChange={setFeatures} />
-                ) : null}
-              </div>
-            </details>
-          </>
-        }
-        renderResult={(job) => <BacktestRunResult job={job} />}
-      />
+          renderResult={(job) => <BacktestRunResult job={job} />}
+        />
+      </section>
       <PrereqHint
         when={status.state.phase === 'ready' && !status.state.data.model.has_checkpoint}
       >
@@ -162,7 +168,9 @@ export function Backtest() {
           deployedLabel={deployed ?? DEFAULT_MODEL}
         />
       )}
-      <Calibration />
+      <div className="calibration-compact">
+        <Calibration />
+      </div>
     </>
   )
 }
