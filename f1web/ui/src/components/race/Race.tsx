@@ -67,7 +67,6 @@ export function Race({ navState }: TabProps) {
   const canNext = idx >= 0 && idx < rounds.length - 1
   const isNextRace =
     nextRace !== null && nextRace.season === season && nextRace.round === round
-  const gpName = round !== null ? roundNames.get(round) : undefined
 
   return (
     <>
@@ -83,75 +82,6 @@ export function Race({ navState }: TabProps) {
           </p>
         </section>
       ) : null}
-      <section className="card">
-        <div className="race-nav">
-          <div className="race-nav-left">
-            <label className="field">
-              <span className="field-label">Season</span>
-              <select
-                className="select"
-                value={selected ?? ''}
-                onChange={(event) => selectSeason(Number(event.target.value))}
-              >
-                {seasons.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <ModelPicker
-              models={models}
-              value={model}
-              onChange={(value) => {
-                setModelTouched(true)
-                setModel(value)
-              }}
-            />
-          </div>
-          <div className="pager">
-            <span className="pager-label">
-              {round !== null ? `${gpName ?? 'Race'} · Round ${round}` : '—'}
-            </span>
-            <div className="pager-buttons">
-              <button
-                type="button"
-                className="button"
-                disabled={!canPrev}
-                onClick={() => setRound(rounds[idx - 1])}
-              >
-                ‹ Prev
-              </button>
-              <button
-                type="button"
-                className="button"
-                disabled={!canNext}
-                onClick={() => setRound(rounds[idx + 1])}
-              >
-                Next ›
-              </button>
-              {isNextRace ? (
-                <Badge variant="info">Upcoming</Badge>
-              ) : (
-                <button
-                  type="button"
-                  className="button"
-                  disabled={nextRace === null}
-                  onClick={goToNextRace}
-                  title={
-                    nextRace !== null
-                      ? `Jump to the next race (round ${nextRace.round})`
-                      : undefined
-                  }
-                >
-                  Next race
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {season === null || round === null ? (
         <Skeleton rows={10} />
       ) : (
@@ -161,6 +91,24 @@ export function Race({ navState }: TabProps) {
           models={models}
           model={model}
           defaultModel={defaultModel}
+          onModelChange={(value) => {
+            setModelTouched(true)
+            setModel(value)
+          }}
+          nav={{
+            selected,
+            seasons,
+            selectSeason,
+            rounds,
+            idx,
+            canPrev,
+            canNext,
+            setRound,
+            isNextRace,
+            nextRace,
+            goToNextRace,
+            roundNames,
+          }}
         />
       )}
     </>
@@ -175,19 +123,42 @@ export function Race({ navState }: TabProps) {
  * at training time (Train tab, or Backtest's walk-forward retraining). Edits
  * are local until "Apply changes"; the request is cached server-side per
  * override combination.
+ *
+ * The whole top area is one "control deck" card: the race title + meta on
+ * the left, season/model pickers and the round pager on the right, and a
+ * collapsible drawer for grid overrides below.
  */
+type RaceNav = {
+  selected: number | null
+  seasons: number[]
+  selectSeason: (season: number) => void
+  rounds: number[]
+  idx: number
+  canPrev: boolean
+  canNext: boolean
+  setRound: (round: number) => void
+  isNextRace: boolean
+  nextRace: { season: number; round: number } | null
+  goToNextRace: () => void
+  roundNames: Map<number, string>
+}
+
 function RacePanel({
   season,
   round,
   models,
   model,
   defaultModel,
+  onModelChange,
+  nav,
 }: {
   season: number
   round: number
   models: ModelsResponse | null
   model: string
   defaultModel: string
+  onModelChange: (value: string) => void
+  nav: RaceNav
 }) {
   const [gridRows, setGridRows] = useState<Record<string, string> | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
@@ -237,13 +208,97 @@ function RacePanel({
   }
 
   const pendingOverrides = model !== defaultModel || gridRows !== null
+  const gpName = nav.roundNames.get(round)
+  const title = last?.race.race_name ?? gpName ?? `Round ${round}`
+  const meta = last?.race
 
   return (
     <>
-      <section className="card race-controls">
-        <details className="advanced-options">
-          <summary>Advanced</summary>
-          <div className="job-options-inner">
+      <section className="card race-deck">
+        <div className="race-deck-header">
+          <div className="race-title-group">
+            <h2 className="card-title">{title}</h2>
+            <p className="meta-line">
+              <span>Round {round} · season {season}</span>
+              {meta ? (
+                <>
+                  <span>·</span>
+                  <span>{fmtDate(meta.date)}</span>
+                  {meta.circuit_id ? (
+                    <>
+                      <span>·</span>
+                      <span>{driverLabel(meta.circuit_id)}</span>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </p>
+          </div>
+
+          <div className="race-deck-controls">
+            <div className="control-group">
+              <label className="field">
+                <span className="field-label">Season</span>
+                <select
+                  className="select"
+                  value={nav.selected ?? ''}
+                  onChange={(event) => nav.selectSeason(Number(event.target.value))}
+                >
+                  {nav.seasons.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ModelPicker models={models} value={model} onChange={onModelChange} />
+            </div>
+            <div className="pager">
+              <span className="pager-label">
+                {gpName !== undefined ? `${gpName} · Round ${round}` : `Round ${round}`}
+              </span>
+              <div className="pager-buttons">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!nav.canPrev}
+                  onClick={() => nav.setRound(nav.rounds[nav.idx - 1])}
+                >
+                  ‹ Prev
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!nav.canNext}
+                  onClick={() => nav.setRound(nav.rounds[nav.idx + 1])}
+                >
+                  Next ›
+                </button>
+                {nav.isNextRace ? (
+                  <Badge variant="info">Upcoming</Badge>
+                ) : (
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={nav.nextRace === null}
+                    onClick={nav.goToNextRace}
+                    title={
+                      nav.nextRace !== null
+                        ? `Jump to the next race (round ${nav.nextRace.round})`
+                        : undefined
+                    }
+                  >
+                    Next race
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <details className="advanced-options advanced-options-inline">
+          <summary>Grid &amp; model overrides</summary>
+          <div className="advanced-drawer">
             {last !== null && !last.verified ? (
               <GridEditor
                 drivers={last.drivers}
@@ -257,34 +312,34 @@ function RacePanel({
                 yet.
               </p>
             )}
+            <div className="drawer-actions">
+              {pendingOverrides ? (
+                <Badge variant="warn">
+                  {gridRows !== null && model !== defaultModel
+                    ? 'Grid + model overrides pending'
+                    : gridRows !== null
+                      ? 'Grid override pending'
+                      : 'Model override pending'}
+                </Badge>
+              ) : (
+                <span className="muted">Config defaults</span>
+              )}
+              {applyError ? (
+                <p className="save-status error" role="alert">
+                  {applyError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                className="button primary"
+                onClick={apply}
+                disabled={state.phase === 'loading'}
+              >
+                Apply changes
+              </button>
+            </div>
           </div>
         </details>
-        <div className="race-apply-row">
-          {pendingOverrides ? (
-            <Badge variant="warn">
-              {gridRows !== null && model !== defaultModel
-                ? 'Grid + model overrides pending'
-                : gridRows !== null
-                  ? 'Grid override pending'
-                  : 'Model override pending'}
-            </Badge>
-          ) : (
-            <span className="muted">Config defaults</span>
-          )}
-          {applyError ? (
-            <p className="save-status error" role="alert">
-              {applyError}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            className="button primary"
-            onClick={apply}
-            disabled={state.phase === 'loading'}
-          >
-            Apply changes
-          </button>
-        </div>
       </section>
       {state.phase === 'loading' ? <Skeleton rows={10} /> : null}
       {state.phase === 'error' ? (
@@ -296,30 +351,15 @@ function RacePanel({
 }
 
 function RaceTable({ prediction }: { prediction: Prediction }) {
-  const { race, drivers, synthetic, verified, calibrated, checkpoint } = prediction
+  const { drivers, synthetic, verified, calibrated, checkpoint } = prediction
   const modelStem = checkpoint.split(/[\\/]/).pop()?.replace(/\.joblib$/, '') ?? checkpoint
   return (
     <>
+      {verified ? <RaceScoreboard drivers={drivers} /> : null}
+
       <section className="card">
-        <div className="race-meta">
-          <div>
-            <h2 className="card-title">
-              {race.race_name ?? `Round ${prediction.round}`}
-            </h2>
-            <p className="meta-line">
-              <span>
-                Round {prediction.round} · season {prediction.season}
-              </span>
-              <span>·</span>
-              <span>{fmtDate(race.date)}</span>
-              {race.circuit_id ? (
-                <>
-                  <span>·</span>
-                  <span>{driverLabel(race.circuit_id)}</span>
-                </>
-              ) : null}
-            </p>
-          </div>
+        <div className="race-table-head">
+          <h2 className="card-title">Ranked grid</h2>
           <div className="badge-row">
             <span className="model-chip" title={checkpoint}>
               {modelStem}
@@ -331,12 +371,6 @@ function RaceTable({ prediction }: { prediction: Prediction }) {
             {calibrated ? <Badge variant="info">Calibrated probabilities</Badge> : null}
           </div>
         </div>
-      </section>
-
-      {verified ? <RaceScoreboard drivers={drivers} /> : null}
-
-      <section className="card">
-        <h2 className="card-title">Ranked grid</h2>
         <div className="table-wrap table-scroll">
           <table className="data-table grid-table">
             <thead>

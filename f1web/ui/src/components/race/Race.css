@@ -29,6 +29,72 @@
   flex-wrap: wrap;
 }
 
+/* Unified header & control deck: race title + meta on the left, pickers and
+   pager on the right, overrides drawer below — one card instead of three. */
+.race-deck {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.race-deck-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.race-title-group {
+  min-width: 14rem;
+  flex: 1 1 16rem;
+}
+
+.race-title-group .meta-line {
+  margin-top: var(--space-1);
+}
+
+.race-deck-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+/* Season selector with the model picker directly below it (left column). */
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.advanced-options-inline {
+  margin: 0;
+}
+
+.advanced-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.race-table-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
 /* Season selector with the model picker directly below it (left column). */
 .race-nav-left {
   display: flex;
