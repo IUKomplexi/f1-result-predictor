@@ -31,31 +31,44 @@ const drivers: PredictionRow[] = [
 ]
 
 describe('GridEditor', () => {
-  it('seeds dropdowns from the prediction grid and reports edits', () => {
+  it('lists positions on the left, seeded from the prediction grid', () => {
+    render(<GridEditor drivers={drivers} values={null} onChange={() => {}} onReset={() => {}} />)
+    const cells = screen.getAllByRole('cell')
+    // Position column first, driver dropdown second.
+    expect(cells[0].textContent).toBe('1')
+    expect(cells[2].textContent).toBe('2')
+    const p1 = screen.getByLabelText('Driver at position 1') as HTMLSelectElement
+    const p2 = screen.getByLabelText('Driver at position 2') as HTMLSelectElement
+    expect(p1.value).toBe('russell') // model grid: russell P1
+    expect(p2.value).toBe('norris') // model grid: norris P2
+  })
+
+  it('assigning a driver to a position reports the override', () => {
     const onChange = vi.fn()
     render(<GridEditor drivers={drivers} values={null} onChange={onChange} onReset={() => {}} />)
-    const select = screen.getByLabelText('Grid position for Russell') as HTMLSelectElement
-    expect(select.value).toBe('1')
-    fireEvent.change(select, { target: { value: '2' } })
+    const p2 = screen.getByLabelText('Driver at position 2') as HTMLSelectElement
+    fireEvent.change(p2, { target: { value: 'russell' } })
     expect(onChange).toHaveBeenCalledWith({ russell: '2' })
   })
 
-  it('offers a "Use model grid" no-override option plus one option per position', () => {
-    render(<GridEditor drivers={drivers} values={null} onChange={() => {}} onReset={() => {}} />)
-    const select = screen.getByLabelText('Grid position for Russell') as HTMLSelectElement
-    const options = Array.from(select.options).map((o) => o.value)
-    expect(options[0]).toBe('') // "Use model grid"
-    expect(options).toContain('1')
-    expect(options).toContain('2')
+  it('moves a driver between positions (swap) without leaving a duplicate', () => {
+    const onChange = vi.fn()
+    render(<GridEditor drivers={drivers} values={{ russell: '2' }} onChange={onChange} onReset={() => {}} />)
+    const p2 = screen.getByLabelText('Driver at position 2') as HTMLSelectElement
+    expect(p2.value).toBe('russell')
+    // Move russell to P1: the old P2 entry must be dropped.
+    const p1 = screen.getByLabelText('Driver at position 1') as HTMLSelectElement
+    fireEvent.change(p1, { target: { value: 'russell' } })
+    expect(onChange).toHaveBeenCalledWith({ russell: '1' })
   })
 
-  it('shows edited values over the seed and accumulates edits per driver', () => {
+  it('"Use model grid" clears the position override', () => {
     const onChange = vi.fn()
     render(<GridEditor drivers={drivers} values={{ norris: '1' }} onChange={onChange} onReset={() => {}} />)
-    const norris = screen.getByLabelText('Grid position for Norris') as HTMLSelectElement
-    expect(norris.value).toBe('1')
-    fireEvent.change(norris, { target: { value: '2' } })
-    expect(onChange).toHaveBeenCalledWith({ norris: '2' })
+    const p1 = screen.getByLabelText('Driver at position 1') as HTMLSelectElement
+    expect(p1.value).toBe('norris')
+    fireEvent.change(p1, { target: { value: '' } })
+    expect(onChange).toHaveBeenCalledWith({})
   })
 
   it('reset is available only once the grid is dirty', () => {
@@ -65,7 +78,7 @@ describe('GridEditor', () => {
     )
     const reset = () => screen.getByText('Reset to model grid') as HTMLButtonElement
     expect(reset().disabled).toBe(true)
-    rerender(<GridEditor drivers={drivers} values={{ russell: '3' }} onChange={() => {}} onReset={onReset} />)
+    rerender(<GridEditor drivers={drivers} values={{ russell: '1' }} onChange={() => {}} onReset={onReset} />)
     expect(reset().disabled).toBe(false)
     fireEvent.click(reset())
     expect(onReset).toHaveBeenCalledOnce()

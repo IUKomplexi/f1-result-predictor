@@ -9,7 +9,7 @@ import {
 import type { TabProps } from '../../App'
 import { useApi } from '../../hooks/useApi'
 import { useRaceCalendar } from '../../hooks/useRaceCalendar'
-import { driverLabel, fmtDate, fmtPoints } from '../../lib/format'
+import { driverLabel, fmtDateDotted, fmtPoints } from '../../lib/format'
 import { deployedName } from '../backtest/lib'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
@@ -225,11 +225,19 @@ function RacePanel({
           <div className="race-title-group">
             <h2 className="card-title">{title}</h2>
             <p className="meta-line">
-              <span>{round !== null ? `Round ${round} · season ${season}` : 'No race selected'}</span>
+              {season !== null && round !== null ? (
+                <>
+                  <span>Season {season}</span>
+                  <span>·</span>
+                  <span>Round {round}</span>
+                </>
+              ) : (
+                <span>No race selected</span>
+              )}
               {meta ? (
                 <>
                   <span>·</span>
-                  <span>{fmtDate(meta.date)}</span>
+                  <span>{fmtDateDotted(meta.date)}</span>
                   {meta.circuit_id ? (
                     <>
                       <span>·</span>
@@ -242,27 +250,7 @@ function RacePanel({
           </div>
 
           <div className="race-deck-controls">
-            <div className="control-group">
-              <label className="field">
-                <span className="field-label">Season</span>
-                <select
-                  className="select"
-                  value={nav.selected ?? ''}
-                  onChange={(event) => nav.selectSeason(Number(event.target.value))}
-                >
-                  {nav.seasons.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <ModelPicker models={models} value={model} onChange={onModelChange} />
-            </div>
             <div className="pager">
-              <span className="pager-label">
-                {gpName !== undefined ? `${gpName} · Round ${round}` : '—'}
-              </span>
               <div className="pager-buttons">
                 <button
                   type="button"
@@ -299,7 +287,27 @@ function RacePanel({
                 )}
               </div>
             </div>
+            <div className="model-slot">
+              <ModelPicker models={models} value={model} onChange={onModelChange} />
+            </div>
           </div>
+        </div>
+
+        <div className="season-row">
+          <label className="field">
+            <span className="field-label">Season</span>
+            <select
+              className="select"
+              value={nav.selected ?? ''}
+              onChange={(event) => nav.selectSeason(Number(event.target.value))}
+            >
+              {nav.seasons.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="deck-status-row">

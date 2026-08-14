@@ -29,6 +29,16 @@ export function fmtDate(iso: string | null | undefined): string {
   return date.toISOString().slice(0, 10)
 }
 
+/** ISO date -> "22.08.2026" (day.month.year with dots, UTC). */
+export function fmtDateDotted(iso: string | null | undefined): string {
+  if (!iso) return '–'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  return `${day}.${month}.${date.getUTCFullYear()}`
+}
+
 /** Seconds -> "45s", "2m 05s", "1h 03m" (monospace-friendly). */
 export function fmtElapsed(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return '–'
