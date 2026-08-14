@@ -1,27 +1,9 @@
-import { useState } from 'react'
-import {
-  getCalibration,
-  getModels,
-  getStatus,
-  type Calibration,
-  type CalibrationTarget,
-  type ModelsResponse,
-} from '../../api/client'
+import { getCalibration, type Calibration, type CalibrationTarget } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
 import { ErrorState, Skeleton } from '../ui/DataState'
-import { JobRunner } from '../ui/JobRunner'
-import { PrereqHint } from '../ui/PrereqHint'
-import {
-  DEFAULT_SEASON_RANGE,
-  SeasonRange,
-  resolveRange,
-  seasonPayload,
-  type SeasonRangeValue,
-} from '../ui/SeasonRange'
-import { modelChoices } from './lib'
 
 const TARGET_LABEL: Record<string, string> = {
   scored: 'P scored',
@@ -29,124 +11,22 @@ const TARGET_LABEL: Record<string, string> = {
   win: 'P win',
 }
 
-const DEFAULT_CALIBRATION_MODEL = ''
-
 /**
- * Calibration (CLI `f1 calibrate`) folded into the Backtest tab: fit
- * isotonic probability calibrators for a model and review the deployment
- * decision — per-target raw vs calibrated Brier plus reliability curves.
- * Picking no model fits the shared walk-forward calibrators; picking a saved
- * model calibrates its checkpoint (its own features) and writes calibrators
- * next to it. fit-through/eval-from overrides the hold-out split evaluation.
+ * Calibration report (reports/calibration.json): per-target raw vs calibrated
+ * Brier plus reliability curves for the deployed model. Calibration itself
+ * runs automatically as part of every Train job — this tab is the
+ * diagnostics view only, so there is no run trigger here.
  */
 export function Calibration() {
-  const [modelChoice, setModelChoice] = useState<string>(DEFAULT_CALIBRATION_MODEL)
-  const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
-  const [fitThrough, setFitThrough] = useState('')
-  const [evalFrom, setEvalFrom] = useState('')
-  const [version, setVersion] = useState(0)
-  const status = useApi('status', () => getStatus())
-  const modelsState = useApi<ModelsResponse>('models', getModels)
-  const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
-  const seasons = status.state.phase === 'ready' ? status.state.data.seasons : null
-  const { state, retry } = useApi(`calibration-${version}`, () => getCalibration())
+  const { state, retry } = useApi('calibration', () => getCalibration())
 
   return (
     <>
       <section className="card">
-        <JobRunner
-          type="calibrate"
-          runLabel="Run calibration"
-          onDone={() => setVersion((v) => v + 1)}
-          buildPayload={() => ({
-            ...seasonPayload(resolveRange(range, seasons)),
-            ...(modelChoice !== DEFAULT_CALIBRATION_MODEL
-              ? { model_path: models?.models[modelChoice]?.checkpoint ?? undefined }
-              : {}),
-            ...(fitThrough.trim() !== '' ? { fit_through_season: Number(fitThrough) } : {}),
-            ...(evalFrom.trim() !== '' ? { eval_from_season: Number(evalFrom) } : {}),
-          })}
-          options={
-            <>
-              <div className="job-option">
-                <label className="job-label" htmlFor="calibrate-model">
-                  Model
-                </label>
-                <select
-                  id="calibrate-model"
-                  className="select"
-                  value={modelChoice}
-                  onChange={(e) => setModelChoice(e.target.value)}
-                >
-                  <option value={DEFAULT_CALIBRATION_MODEL}>
-                    config default (deployed)
-                  </option>
-                  {modelChoices(models)
-                    .filter((choice) => choice.value !== 'default')
-                    .map((choice) => (
-                      <option key={choice.value} value={choice.value}>
-                        {choice.label}
-                      </option>
-                    ))}
-                </select>
-                <p className="job-option-hint">
-                  No model = the default model. A saved model gets its own
-                  calibration.
-                </p>
-              </div>
-              <SeasonRange value={range} onChange={setRange} />
-              <details className="advanced-options">
-                <summary>Advanced</summary>
-                <div className="job-options-inner">
-                  <div className="season-config">
-                    <div className="field">
-                      <label className="field-label" htmlFor="cal-fit-through">
-                        Fit through season
-                      </label>
-                      <input
-                        id="cal-fit-through"
-                        type="number"
-                        className="select"
-                        placeholder="auto (2/3 split)"
-                        value={fitThrough}
-                        onChange={(e) => setFitThrough(e.target.value)}
-                      />
-                    </div>
-                    <div className="field">
-                      <label className="field-label" htmlFor="cal-eval-from">
-                        Evaluate from season
-                      </label>
-                      <input
-                        id="cal-eval-from"
-                        type="number"
-                        className="select"
-                        placeholder="auto (2/3 split)"
-                        value={evalFrom}
-                        onChange={(e) => setEvalFrom(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <p className="job-option-hint">
-                    Optional. Fit on seasons up to "fit through", judge on
-                    seasons from "evaluate from". Leave both empty for
-                    automatic.
-                  </p>
-                </div>
-              </details>
-            </>
-          }
-          renderResult={(job) => <CalibrateRunResult job={job} />}
-        />
-        <PrereqHint
-          when={status.state.phase === 'ready' && !status.state.data.model.has_checkpoint}
-        >
-          No model checkpoint yet — run Train first so calibration has a model to
-          evaluate.
-        </PrereqHint>
-        <p className="muted config-intro">
-          Calibration is only used if it actually helps. If a model was
-          trained on ALL seasons, retrain it with an earlier end season first —
-          calibration needs seasons it hasn't seen.
+        <h2 className="card-title">Calibration</h2>
+        <p className="context-note">
+          Calibration runs automatically with every Train job; this tab shows
+          the report for the deployed model.
         </p>
       </section>
       {state.phase === 'loading' ? (
@@ -157,31 +37,6 @@ export function Calibration() {
         <CalibrationView calibration={state.data} />
       )}
     </>
-  )
-}
-
-function CalibrateRunResult({ job }: { job: { result: Record<string, unknown> | null; log: string[] } }) {
-  const result = job.result ?? {}
-  return (
-    <div className="result-block">
-      <h3 className="card-title">Calibration run</h3>
-      {job.log.length > 0 && (
-        <details className="job-log">
-          <summary>Log</summary>
-          {job.log.map((line, i) => (
-            <pre key={i} className="log-line">{line}</pre>
-          ))}
-        </details>
-      )}
-      <ul className="summary-list">
-        <li>
-          deployed: <code className="mono">{String(result.deployed)}</code>
-        </li>
-        <li>
-          calibrators: <code className="mono">{String(result.calibrators)}</code>
-        </li>
-      </ul>
-    </div>
   )
 }
 

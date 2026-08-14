@@ -425,10 +425,21 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
             return _error(str(exc), 400)
 
     @app.get("/api/predictions/season")
-    def predictions_season_api(season: int):
-        """All completed rounds of a season in one dataset pass (Race History)."""
+    def predictions_season_api(
+        season: int,
+        model_path: str | None = Query(default=None),
+    ):
+        """All completed rounds of a season in one dataset pass (Race History).
+
+        ``model_path`` overrides the checkpoint for the batch (the same
+        ``--model`` semantics as ``/api/predict``); the prediction cache key
+        covers the model identity so named-model history never shares entries.
+        """
         try:
-            preds = predict_season(season, quiet=True, cache_dir=PREDICTION_CACHE_DIR)
+            preds = predict_season(
+                season, quiet=True, cache_dir=PREDICTION_CACHE_DIR,
+                model_path=model_path,
+            )
         except SystemExit as exc:
             return _error(str(exc), 409)
         except (ValueError, F1APIError) as exc:

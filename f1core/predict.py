@@ -346,13 +346,19 @@ def prediction_cache_key(
     return hashlib.sha256(payload).hexdigest()
 
 
-def season_cache_key(season: int, feats_fingerprint: str, params_hash: str) -> str:
+def season_cache_key(
+    season: int, feats_fingerprint: str, params_hash: str, model_id: str | None = None
+) -> str:
     """Cache filename key for a whole-season prediction snapshot.
 
     Distinct from :func:`prediction_cache_key` (rounds start at 1, so a
-    ``season|...`` prefix can never collide with a per-round key).
+    ``season|...`` prefix can never collide with a per-round key). ``model_id``
+    disambiguates explicit ``--model`` overrides (path + mtime), so a named
+    model's season snapshot never shares the deployed model's cache entry.
     """
     payload = f"season|{season}|{feats_fingerprint}|{params_hash}".encode()
+    if model_id:
+        payload += f"|model:{model_id}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -746,11 +752,14 @@ def predict_season(
     feats = enabled_features(cfg, enable=enable_features or [], disable=disable_features or [])
     fp = feature_fingerprint(feats)
     params = _params_hash(cfg)
+    model_id = _model_cache_id(cfg, model_path)
 
     # Whole-season cache hit: rebuild prediction dicts from the stored JSON
     # payloads, skipping dataset assembly + scoring entirely.
     if cache_dir is not None:
-        cached = load_cached_prediction(cache_dir, season_cache_key(season, fp, params))
+        cached = load_cached_prediction(
+            cache_dir, season_cache_key(season, fp, params, model_id)
+        )
         if cached is not None and isinstance(cached.get("predictions"), list):
             return [_pred_from_payload(p) for p in cached["predictions"]]
 
@@ -776,13 +785,15 @@ def predict_season(
             "features": feats,
         }
         if cache_dir is not None:
-            key = prediction_cache_key(season, int(round_), fp, params)
+            key = prediction_cache_key(
+                season, int(round_), fp, params, model_id=model_id
+            )
             save_cached_prediction(cache_dir, key, prediction_payload(pred))
         preds.append(pred)
     if cache_dir is not None:
         save_cached_prediction(
             cache_dir,
-            season_cache_key(season, fp, params),
+            season_cache_key(season, fp, params, model_id),
             {"season": season, "predictions": [prediction_payload(p) for p in preds]},
         )
     return preds

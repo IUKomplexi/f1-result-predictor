@@ -23,7 +23,7 @@ export const STEPS: Step[] = [
     jobType: 'fetch',
     tab: 'data',
     tabLabel: 'Data',
-    title: 'Fetch raw data',
+    title: 'Fetch data',
     desc: 'Downloads race data from the Jolpica API.',
     ready: (s) => s.data.has_raw_cache,
   },
