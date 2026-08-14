@@ -10,6 +10,7 @@ import {
   SeasonRange,
   resolveRange,
   seasonPayload,
+  seasonRangeError,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
 import { BacktestRunResult } from './BacktestRunResult'
@@ -62,16 +63,21 @@ export function Backtest() {
         type="backtest"
         runLabel="Run backtest"
         onDone={() => setVersion((v) => v + 1)}
-        buildPayload={() => ({
-          ...seasonPayload(resolveRange(range, seasons)),
-          quantize,
-          // Walk-forward retraining is the explicit advanced opt-in; otherwise
-          // the selected saved models are scored with their own features.
-          use_checkpoint: !walkForward,
-          ...(walkForward
-            ? { enable_features: features.enable, disable_features: features.disable }
+        buildPayload={() => {
+          const resolved = resolveRange(range, seasons)
+          const rangeError = seasonRangeError(resolved)
+          if (rangeError) throw new Error(rangeError)
+          return {
+            ...seasonPayload(resolved),
+            quantize,
+            // Walk-forward retraining is the explicit advanced opt-in; otherwise
+            // the selected saved models are scored with their own features.
+            use_checkpoint: !walkForward,
+            ...(walkForward
+              ? { enable_features: features.enable, disable_features: features.disable }
             : { model_paths: selectedPaths(models, checked) }),
-        })}
+          }
+        }}
         options={
           <>
             <div className="job-option model-select">
@@ -90,8 +96,7 @@ export function Backtest() {
                 ))}
               </div>
               <p className="job-option-hint">
-                Pick one or more models. Two or more also shows comparison
-                charts. None selected = the default model.
+                None selected = the deployed model.
               </p>
             </div>
             <SeasonRange value={range} onChange={setRange} />

@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ApiError, getSeasonPredictions, getStatus, type Job } from '../../api/client'
+import {
+  ApiError,
+  getModels,
+  getSeasonPredictions,
+  getStatus,
+  type Job,
+  type ModelsResponse,
+} from '../../api/client'
 import type { TabProps } from '../../App'
 import { useApi } from '../../hooks/useApi'
 import { analyzeRace, type RaceResult } from '../../lib/analysis'
@@ -7,14 +14,18 @@ import { driverLabel, fmtDate } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { JobRunner } from '../ui/JobRunner'
+import { ModelPicker } from '../race/ModelPicker'
+import { RACE_DEFAULT_MODEL, modelPathFor } from '../race/lib'
 import { RefreshToggle } from '../ui/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
   resolveRange,
   seasonPayload,
+  seasonRangeError,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
+import '../race/Race.css'
 import './RaceHistory.css'
 
 type SeasonState =
@@ -23,7 +34,10 @@ type SeasonState =
   | { phase: 'error'; message: string }
   | { phase: 'ready'; races: RaceResult[] }
 
-function useSeasonResults(season: number | null): {
+function useSeasonResults(
+  season: number | null,
+  modelPath: string | null,
+): {
   state: SeasonState
   retry: () => void
 } {
@@ -41,7 +55,7 @@ function useSeasonResults(season: number | null): {
       try {
         // One dataset pass for the whole season (backend /api/predictions/season),
         // instead of N sequential per-round recomputes.
-        const data = await getSeasonPredictions(season)
+        const data = await getSeasonPredictions(season, modelPath)
         const predictions = Array.isArray(data.predictions) ? data.predictions : []
         const races = predictions
           .map(analyzeRace)
@@ -57,18 +71,22 @@ function useSeasonResults(season: number | null): {
     return () => {
       cancelled = true
     }
-  }, [season, attempt])
+  }, [season, modelPath, attempt])
 
   return { state, retry: () => setAttempt((n) => n + 1) }
 }
 
 export function RaceHistory({ onNavigate }: TabProps) {
   const status = useApi('status', () => getStatus())
+  const modelsState = useApi<ModelsResponse>('models', getModels)
   const [season, setSeason] = useState<number | null>(null)
+  const [model, setModel] = useState<string>(RACE_DEFAULT_MODEL)
   const [range, setRange] = useState<SeasonRangeValue>(DEFAULT_SEASON_RANGE)
   const [refresh, setRefresh] = useState(false)
   const primed = useRef(false)
-  const { state, retry } = useSeasonResults(season)
+  const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
+  const modelPath = modelPathFor(models, model)
+  const { state, retry } = useSeasonResults(season, modelPath ?? null)
 
   const statusState = status.state
   const seasons = statusState.phase === 'ready' ? statusState.data.seasons : null
@@ -104,7 +122,12 @@ export function RaceHistory({ onNavigate }: TabProps) {
           type="history"
           runLabel="Precompute race history"
           onDone={handlePrecomputed}
-          buildPayload={() => ({ ...seasonPayload(resolveRange(range, seasons)), refresh })}
+          buildPayload={() => {
+            const resolved = resolveRange(range, seasons)
+            const rangeError = seasonRangeError(resolved)
+            if (rangeError) throw new Error(rangeError)
+            return { ...seasonPayload(resolved), refresh }
+          }}
           options={
             <>
               <SeasonRange value={range} onChange={setRange} />
@@ -126,20 +149,23 @@ export function RaceHistory({ onNavigate }: TabProps) {
       </section>
 
       <section className="card">
-        <label className="field">
-          <span className="field-label">Season</span>
-          <select
-            className="select"
-            value={selected}
-            onChange={(event) => setSeason(Number(event.target.value))}
-          >
-            {Array.from({ length: end - start + 1 }, (_, i) => end - i).map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="race-nav">
+          <ModelPicker models={models} value={model} onChange={setModel} />
+          <label className="field">
+            <span className="field-label">Season</span>
+            <select
+              className="select"
+              value={selected}
+              onChange={(event) => setSeason(Number(event.target.value))}
+            >
+              {Array.from({ length: end - start + 1 }, (_, i) => end - i).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </section>
 
       {state.phase === 'idle' || state.phase === 'loading' ? (

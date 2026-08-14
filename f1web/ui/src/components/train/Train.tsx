@@ -9,6 +9,7 @@ import {
   SeasonRange,
   resolveRange,
   seasonPayload,
+  seasonRangeError,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
 
@@ -25,18 +26,20 @@ export function Train() {
       <JobRunner
         type="train"
         runLabel="Train model"
-      buildPayload={() => ({
-        ...seasonPayload(resolveRange(range, seasons)),
-        ...(name.trim() !== '' ? { name: name.trim() } : {}),
-        enable_features: features.enable,
-        disable_features: features.disable,
-      })}
+      buildPayload={() => {
+        const resolved = resolveRange(range, seasons)
+        const rangeError = seasonRangeError(resolved)
+        if (rangeError) throw new Error(rangeError)
+        return {
+          ...seasonPayload(resolved),
+          ...(name.trim() !== '' ? { name: name.trim() } : {}),
+          enable_features: features.enable,
+          disable_features: features.disable,
+        }
+      }}
       options={
         <>
           <SeasonRange value={range} onChange={setRange} />
-          <p className="job-option-hint">
-            New data you fetch on the Data tab is picked up automatically.
-          </p>
           <p className="job-option-hint">
             Training also calibrates the model automatically — no separate
             calibrate step needed.
@@ -52,9 +55,9 @@ export function Train() {
               placeholder={suggestion}
             />
             <p className="job-option-hint">
-              Leave empty to replace the current model. Type a name to save a
-              new model you can pick on the Race tab. Only letters, numbers,
-              <code>.</code>, <code>_</code> and <code>-</code> are allowed.
+              Leave empty to replace the current model, or type a name (letters,
+              numbers, <code>.</code>, <code>_</code>, <code>-</code>) to save a
+              new model for the Race tab.
             </p>
           </div>
           <FeatureToggles value={features} onChange={setFeatures} />

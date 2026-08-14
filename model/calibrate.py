@@ -356,6 +356,8 @@ def run(
         start = cast(int, cfg["data"]["start_season"])
     if end is None:
         end = cast(int, cfg["data"]["end_season"])
+    if start > end:
+        raise ValueError(f"start season {start} must not be after end season {end}")
     if cache_dir is None:
         cache_dir = cast(str, cfg["data"]["cache_dir"])
     if dataset is None:

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SEASON_RANGE, resolveRange, seasonPayload } from './SeasonRange'
+import {
+  DEFAULT_SEASON_RANGE,
+  resolveRange,
+  seasonPayload,
+  seasonRangeError,
+} from './SeasonRange'
 
-const seasons = { start: 2010, end: 2026, data_start: 2014, data_end: 2026 }
+const seasons = { start: 2014, end: 2026, data_start: 2014, data_end: 2026 }
 
 describe('resolveRange', () => {
   it('fills blank inputs with the allowed window (same as the pickers)', () => {
@@ -27,5 +32,18 @@ describe('seasonPayload', () => {
     expect(seasonPayload(DEFAULT_SEASON_RANGE)).toEqual({})
     expect(seasonPayload({ start: 2016, end: null })).toEqual({ start: 2016 })
     expect(seasonPayload({ start: 2014, end: 2026 })).toEqual({ start: 2014, end: 2026 })
+  })
+})
+
+describe('seasonRangeError', () => {
+  it('rejects an inverted range with a clear message', () => {
+    expect(seasonRangeError({ start: 2026, end: 2014 })).toMatch(/Start season \(2026\) is after end season \(2014\)/)
+  })
+
+  it('accepts valid and partially blank ranges', () => {
+    expect(seasonRangeError({ start: 2014, end: 2026 })).toBeNull()
+    expect(seasonRangeError({ start: null, end: 2026 })).toBeNull()
+    expect(seasonRangeError({ start: 2014, end: null })).toBeNull()
+    expect(seasonRangeError(DEFAULT_SEASON_RANGE)).toBeNull()
   })
 })

@@ -2,7 +2,7 @@
 
 Predicts **points per driver** for a Formula 1 race from *pre-race* information
 (grid, qualifying, driver/team form, circuit history, championship position),
-using a zero-inflated hurdle model trained on 2010–2026 race data from the
+using a zero-inflated hurdle model trained on 2014–2026 race data from the
 [Jolpica F1 API](https://www.jolpi.ca/ergast/) (the Ergast successor).
 
 ```
@@ -43,7 +43,7 @@ paths).
 
 | Command | What it does |
 | --- | --- |
-| `f1 fetch [--start 2010] [--end 2026]` | fetch and cache raw API data |
+| `f1 fetch [--start 2014] [--end 2026]` | fetch and cache raw API data |
 | `f1 train` | train the final model → `data/model/hurdle.joblib` |
 | `f1 calibrate` | fit isotonic probability calibrators → `data/model/calibrators.joblib` (run after every `f1 train`) |
 | `f1 backtest [--no-quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` + `.json` (quantized by default) |
@@ -361,7 +361,7 @@ durable history.
 
 ## Feature registry & selection
 
-All 31 features (27 numeric + 4 categorical) are registered in
+All 25 features (21 numeric + 4 categorical) are registered in
 `features/registry.py` — the single source of truth for id, category, default,
 builder, and rationale — and classified by a walk-forward permutation-importance
 audit with drop-column ablation:
@@ -370,7 +370,9 @@ audit with drop-column ablation:
 | --- | --- | --- |
 | `core` | high impact (survived FDR q=0.05 in ≥1 hurdle component) | on |
 | `selectable` | low impact; kept for experiments | off |
-| `cut` | removal improved the backtest ≥1 SE (ablation gate) | off |
+
+(The former `cut` category — features whose removal improved the backtest —
+was removed from the codebase; a future feature-search can re-add them.)
 
 The default enabled set is the 14 core features (registry defaults; override
 via `[features] enabled` in `config.toml`). Every feature is still computed;
@@ -516,7 +518,7 @@ moves, or refactors.
   everything else within noise). What feature could actually move
   top-3/MAE — per-circuit setup, strategy data, 2026-regs data?
 - **2026 regulation change** is an imminent transfer-risk event for a model
-  trained on 2010–2026 (the `points_era` split only covers pre/post-2019).
+  trained on 2014–2026 (the `points_era` split only covers pre/post-2019).
 - **Consider serving distributions** of race outcomes rather than point
   estimates as a differentiator over the grid baseline.
 

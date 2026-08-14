@@ -31,7 +31,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "data": {
         "cache_dir": "data/raw",
         "dataset": "data/features.parquet",
-        "start_season": 2010,
+        "start_season": 2014,
         "end_season": 2026,
     },
     "model": {

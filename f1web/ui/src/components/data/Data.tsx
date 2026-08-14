@@ -7,6 +7,7 @@ import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
   seasonPayload,
+  seasonRangeError,
   type SeasonRangeValue,
 } from '../ui/SeasonRange'
 import { RefreshToggle } from '../ui/RefreshToggle'
@@ -23,13 +24,17 @@ export function Data() {
       <JobRunner
         type="fetch"
         runLabel="Fetch data"
-        buildPayload={() => ({ ...seasonPayload(range), refresh })}
+        buildPayload={() => {
+          const rangeError = seasonRangeError(range)
+          if (rangeError) throw new Error(rangeError)
+          return { ...seasonPayload(range), refresh }
+        }}
         options={
           <>
             {/* Fetch is the one place that pulls NEW seasons, so the end
                 ceiling is the configured end season (not the cached max) and
                 the start floor is the configured start (not the modern-era
-                clamp), so older seasons like 2010 can be fetched too. */}
+                clamp), so older seasons down to 2014 can be fetched too. */}
             <SeasonRange
               value={range}
               onChange={setRange}
