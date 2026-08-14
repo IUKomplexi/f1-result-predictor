@@ -1,0 +1,423 @@
+{
+  "metric": "mae",
+  "quantize": true,
+  "n_candidates": 24,
+  "baseline": {
+    "params": {
+      "max_iter": 400,
+      "learning_rate": 0.03,
+      "max_depth": 3,
+      "l2_regularization": 1.0,
+      "min_samples_leaf": 20
+    },
+    "metrics": {
+      "winner_hit": 0.5343,
+      "top3_overlap": 0.6552,
+      "top10_overlap": 0.7745,
+      "spearman": 0.6501,
+      "mae": 2.9478
+    }
+  },
+  "best": {
+    "params": {
+      "max_iter": 200,
+      "learning_rate": 0.05,
+      "max_depth": 3,
+      "l2_regularization": 10.0,
+      "min_samples_leaf": 50
+    },
+    "metrics": {
+      "winner_hit": 0.5441,
+      "top3_overlap": 0.6536,
+      "top10_overlap": 0.7779,
+      "spearman": 0.6525,
+      "mae": 2.915
+    }
+  },
+  "ranked": [
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 50
+      },
+      "metrics": {
+        "winner_hit": 0.5441,
+        "top3_overlap": 0.6536,
+        "top10_overlap": 0.7779,
+        "spearman": 0.6525,
+        "mae": 2.915
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.03,
+        "max_depth": 4,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 50
+      },
+      "metrics": {
+        "winner_hit": 0.5196,
+        "top3_overlap": 0.652,
+        "top10_overlap": 0.777,
+        "spearman": 0.6473,
+        "mae": 2.9376
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.05,
+        "max_depth": 4,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 50
+      },
+      "metrics": {
+        "winner_hit": 0.5392,
+        "top3_overlap": 0.6585,
+        "top10_overlap": 0.777,
+        "spearman": 0.6495,
+        "mae": 2.9402
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.03,
+        "max_depth": 3,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.5343,
+        "top3_overlap": 0.6552,
+        "top10_overlap": 0.7745,
+        "spearman": 0.6501,
+        "mae": 2.9478
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 50
+      },
+      "metrics": {
+        "winner_hit": 0.5441,
+        "top3_overlap": 0.6552,
+        "top10_overlap": 0.776,
+        "spearman": 0.6486,
+        "mae": 2.9493
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.05,
+        "max_depth": 4,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.5049,
+        "top3_overlap": 0.6552,
+        "top10_overlap": 0.7657,
+        "spearman": 0.6433,
+        "mae": 2.9562
+      }
+    },
+    {
+      "params": {
+        "max_iter": 800,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "l2_regularization": 0.1,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.5441,
+        "top3_overlap": 0.6683,
+        "top10_overlap": 0.7745,
+        "spearman": 0.6539,
+        "mae": 2.9589
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.1,
+        "max_depth": 2,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.5343,
+        "top3_overlap": 0.6634,
+        "top10_overlap": 0.7755,
+        "spearman": 0.6515,
+        "mae": 2.9596
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.05,
+        "max_depth": 5,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.4755,
+        "top3_overlap": 0.6487,
+        "top10_overlap": 0.7691,
+        "spearman": 0.6434,
+        "mae": 2.9674
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.05,
+        "max_depth": 2,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.5343,
+        "top3_overlap": 0.6569,
+        "top10_overlap": 0.7765,
+        "spearman": 0.6484,
+        "mae": 2.9691
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.1,
+        "max_depth": 5,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.4804,
+        "top3_overlap": 0.6422,
+        "top10_overlap": 0.7676,
+        "spearman": 0.643,
+        "mae": 2.9804
+      }
+    },
+    {
+      "params": {
+        "max_iter": 800,
+        "learning_rate": 0.01,
+        "max_depth": 5,
+        "l2_regularization": 0.1,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.5147,
+        "top3_overlap": 0.6569,
+        "top10_overlap": 0.776,
+        "spearman": 0.6473,
+        "mae": 2.9829
+      }
+    },
+    {
+      "params": {
+        "max_iter": 800,
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.4902,
+        "top3_overlap": 0.6438,
+        "top10_overlap": 0.7686,
+        "spearman": 0.6417,
+        "mae": 3.0046
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "l2_regularization": 0.1,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.4853,
+        "top3_overlap": 0.652,
+        "top10_overlap": 0.7721,
+        "spearman": 0.644,
+        "mae": 3.0098
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.1,
+        "max_depth": 5,
+        "l2_regularization": 0.1,
+        "min_samples_leaf": 50
+      },
+      "metrics": {
+        "winner_hit": 0.4902,
+        "top3_overlap": 0.6225,
+        "top10_overlap": 0.7637,
+        "spearman": 0.6366,
+        "mae": 3.0115
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.4853,
+        "top3_overlap": 0.6438,
+        "top10_overlap": 0.773,
+        "spearman": 0.6456,
+        "mae": 3.0129
+      }
+    },
+    {
+      "params": {
+        "max_iter": 400,
+        "learning_rate": 0.1,
+        "max_depth": 5,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 50
+      },
+      "metrics": {
+        "winner_hit": 0.5245,
+        "top3_overlap": 0.6258,
+        "top10_overlap": 0.7681,
+        "spearman": 0.6347,
+        "mae": 3.0375
+      }
+    },
+    {
+      "params": {
+        "max_iter": 800,
+        "learning_rate": 0.1,
+        "max_depth": 5,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.4118,
+        "top3_overlap": 0.6127,
+        "top10_overlap": 0.7627,
+        "spearman": 0.6284,
+        "mae": 3.0787
+      }
+    },
+    {
+      "params": {
+        "max_iter": 600,
+        "learning_rate": 0.1,
+        "max_depth": 5,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.4314,
+        "top3_overlap": 0.6111,
+        "top10_overlap": 0.7686,
+        "spearman": 0.633,
+        "mae": 3.1051
+      }
+    },
+    {
+      "params": {
+        "max_iter": 800,
+        "learning_rate": 0.1,
+        "max_depth": 4,
+        "l2_regularization": 0.1,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.4608,
+        "top3_overlap": 0.6111,
+        "top10_overlap": 0.7627,
+        "spearman": 0.6265,
+        "mae": 3.1148
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.01,
+        "max_depth": 5,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 50
+      },
+      "metrics": {
+        "winner_hit": 0.549,
+        "top3_overlap": 0.6699,
+        "top10_overlap": 0.7789,
+        "spearman": 0.6501,
+        "mae": 3.1994
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.01,
+        "max_depth": 5,
+        "l2_regularization": 0.1,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.5392,
+        "top3_overlap": 0.665,
+        "top10_overlap": 0.7789,
+        "spearman": 0.6495,
+        "mae": 3.2158
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.01,
+        "max_depth": 5,
+        "l2_regularization": 1.0,
+        "min_samples_leaf": 5
+      },
+      "metrics": {
+        "winner_hit": 0.5392,
+        "top3_overlap": 0.6569,
+        "top10_overlap": 0.777,
+        "spearman": 0.6502,
+        "mae": 3.2381
+      }
+    },
+    {
+      "params": {
+        "max_iter": 200,
+        "learning_rate": 0.01,
+        "max_depth": 4,
+        "l2_regularization": 10.0,
+        "min_samples_leaf": 20
+      },
+      "metrics": {
+        "winner_hit": 0.5392,
+        "top3_overlap": 0.6601,
+        "top10_overlap": 0.7784,
+        "spearman": 0.652,
+        "mae": 3.2457
+      }
+    }
+  ]
+}

@@ -86,7 +86,7 @@ def test_config_to_toml_writes_model_params_subtable():
     cfg = DEFAULTS
     text = config_to_toml(cfg)
     assert "[model.params]" in text
-    assert "learning_rate = 0.03" in text
+    assert "learning_rate = 0.05" in text
     assert "[api]" in text and "[weather]" not in text  # section order preserved
 
 

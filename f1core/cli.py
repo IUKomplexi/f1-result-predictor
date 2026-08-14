@@ -112,6 +112,29 @@ def _backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _tune(args: argparse.Namespace) -> int:
+    from model.tune import run as run_tune
+
+    result = run_tune(
+        start=args.start, end=args.end, refresh=args.refresh,
+        cache_dir=args.cache_dir, dataset=args.dataset,
+        out=args.out, out_json=args.out_json,
+        candidates=args.candidates, metric=args.metric,
+        quantize=not args.no_quantize,
+        enable_features=_split_features(args.enable_features),
+        disable_features=_split_features(args.disable_features),
+        log=lambda msg: print(msg, flush=True),
+    )
+    print(f"\nBest ({result['metric']}): {result['best']['params']}")
+    print(f"  {result['best']['metrics']}")
+    print(f"Baseline: {result['baseline']['params']}")
+    print(f"  {result['baseline']['metrics']}")
+    for rank, row in enumerate(result["top"], start=1):
+        print(f"Top-{rank}: {row['params']} -> {row['metrics']}")
+    print(f"\nWrote {result['report']}")
+    return 0
+
+
 def _calibrate(args: argparse.Namespace) -> int:
     from model.calibrate import run as run_calibrate
 
@@ -219,6 +242,24 @@ def build_parser() -> argparse.ArgumentParser:
                    help="first season to evaluate hold-out Brier on (default: none)")
     _add_common(p)
     p.set_defaults(func=_calibrate)
+
+    p = sub.add_parser("tune", help="walk-forward hyperparameter search (f1 tune)")
+    p.add_argument("--start", type=int, default=None, help="default: config [data] start_season")
+    p.add_argument("--end", type=int, default=None, help="default: config [data] end_season")
+    p.add_argument("--refresh", action="store_true")
+    p.add_argument("--cache-dir", default=None, help="default: config [data] cache_dir")
+    p.add_argument("--dataset", default=None, help="default: config [data] dataset")
+    p.add_argument("--out", default=None, help="default: reports/tuning.md")
+    p.add_argument("--out-json", default=None,
+                   help="JSON snapshot (default: --out with .json)")
+    p.add_argument("--candidates", type=int, default=24,
+                   help="number of param sets to evaluate (default: 24, max 576)")
+    p.add_argument("--metric", choices=["mae", "winner_hit", "top3_overlap", "spearman"],
+                   default="mae", help="objective metric (default: mae)")
+    p.add_argument("--no-quantize", action="store_true",
+                   help="keep continuous expected points (deployed output is quantized)")
+    _add_common(p)
+    p.set_defaults(func=_tune)
 
     p = sub.add_parser("web", help="run the FastAPI app + dashboard")
     p.add_argument("--host", default="127.0.0.1")

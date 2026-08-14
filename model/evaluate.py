@@ -125,18 +125,20 @@ def run_backtest(
     quantize: bool = True,
     features: list[str] | None = None,
     model: Any = None,
+    params: dict | None = None,
 ) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     """Backtest; returns (overall table, per-season tables).
 
     The default is a walk-forward backtest: the model is re-trained for every
     test season (train = all strictly earlier seasons) on ``features``
-    (default: the full feature set). Pass ``model`` (a pre-trained
-    :class:`~model.train.HurdleModels` checkpoint) to instead score every
-    season with that fixed model — the "how good is *this* model on a season
-    range" mode (not out-of-sample w.r.t. its own training data). Metrics are
-    computed per race and then averaged per season and overall. Expected
-    points are quantized to the points table by default (the deployed
-    output); pass ``quantize=False`` to compare the raw continuous
+    (default: the full feature set) with ``params`` (default: the effective
+    ``[model.params]`` from config — read once, outside the loop). Pass
+    ``model`` (a pre-trained :class:`~model.train.HurdleModels` checkpoint) to
+    instead score every season with that fixed model — the "how good is *this*
+    model on a season range" mode (not out-of-sample w.r.t. its own training
+    data). Metrics are computed per race and then averaged per season and
+    overall. Expected points are quantized to the points table by default (the
+    deployed output); pass ``quantize=False`` to compare the raw continuous
     expectations.
     """
     df = df.copy()
@@ -153,7 +155,9 @@ def run_backtest(
         season_rows = _collect_metric_rows(df)
     else:
         season_rows: list[dict] = []
-        params = model_params()  # read [model.params] once, outside the loop
+        # model_params() reads [model.params] once, outside the loop; an
+        # explicit ``params`` (tuning) replaces the config-driven defaults.
+        params = params if params is not None else model_params()
         for train, test, _season in walk_forward_seasons(df):
             X_train, y_train = prepare(train, features)
             fitted = HurdleModels(params=params).fit(X_train, y_train)

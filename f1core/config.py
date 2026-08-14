@@ -41,11 +41,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # HGB hyperparameters (tune via the dashboard's Settings tab). This is
         # the single source of truth for the defaults; config.toml overrides.
         "params": {
-            "max_iter": 400,
-            "learning_rate": 0.03,
+            # Chosen by walk-forward search (f1 tune, 24 candidates, MAE):
+            # best 2.9150 vs 2.9478 for the previous hand-set defaults.
+            "max_iter": 200,
+            "learning_rate": 0.05,
             "max_depth": 3,
-            "l2_regularization": 1.0,
-            "min_samples_leaf": 20,
+            "l2_regularization": 10.0,
+            "min_samples_leaf": 50,
         },
     },
     "report": {

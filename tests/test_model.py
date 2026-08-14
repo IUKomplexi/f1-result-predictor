@@ -19,12 +19,14 @@ from model.train import (
     HurdleModels,
     checkpoint_meta,
     load_checkpoint,
+    model_params,
     points_for_position,
     prepare,
     save_checkpoint,
     train_final_model,
     walk_forward_seasons,
 )
+from model.tune import candidate_params, evaluate_candidate
 
 
 def _synthetic_df(n_seasons: int = 8, rounds: int = 4, drivers: int = 10) -> pd.DataFrame:
@@ -349,3 +351,42 @@ def test_model_drops_constant_numeric_columns():
     last_round = df.loc[df["season"] == last, "round"].max()
     result = predict_race(df, model, last, last_round)
     assert result["expected_points"].notna().all()
+
+
+def test_run_backtest_accepts_explicit_params():
+    """Explicit params drive the walk-forward fits; None = config defaults."""
+    df = add_features(_synthetic_df(n_seasons=8))
+    explicit = {"max_iter": 200, "learning_rate": 0.1, "max_depth": 2,
+                "l2_regularization": 0.1, "min_samples_leaf": 5}
+    overall_exp, _ = run_backtest(df, params=explicit)
+    assert "model" in overall_exp.index
+    assert overall_exp.loc["model", "mae"] > 0.0
+    # params=None resolves to the config-driven defaults — identical to not
+    # passing params at all.
+    overall_default, _ = run_backtest(df)
+    overall_none, _ = run_backtest(df, params=None)
+    pd.testing.assert_frame_equal(overall_default, overall_none)
+
+
+def test_tune_candidates_deterministic_includes_baseline():
+    cfg = {
+        "model": {
+            "params": {"max_iter": 300, "learning_rate": 0.05, "max_depth": 2,
+                       "l2_regularization": 1.0, "min_samples_leaf": 10},
+            "seed": 42,
+        }
+    }
+    first = candidate_params(cfg, 5)
+    second = candidate_params(cfg, 5)
+    assert first == second  # deterministic for a fixed n
+    assert first[0] == model_params(cfg)  # candidate 0 is the baseline
+    assert len(first) == 5
+    assert len({frozenset(p.items()) for p in first[1:]}) == 4  # no duplicates
+
+
+def test_tune_evaluate_returns_metrics():
+    df = add_features(_synthetic_df(n_seasons=8))
+    metrics = evaluate_candidate(df, model_params(), FEATURES)
+    assert set(metrics) == {"winner_hit", "top3_overlap", "top10_overlap", "spearman", "mae"}
+    overall, _ = run_backtest(df, quantize=True, features=FEATURES)
+    assert metrics["mae"] < overall.loc["zero", "mae"]
