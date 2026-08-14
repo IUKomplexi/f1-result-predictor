@@ -4,6 +4,10 @@
   max-width: 60ch;
 }
 
+.result-block {
+  margin-top: var(--space-4);
+}
+
 .config-intro code {
   background: var(--bg-surface-raised);
   padding: 1px 4px;

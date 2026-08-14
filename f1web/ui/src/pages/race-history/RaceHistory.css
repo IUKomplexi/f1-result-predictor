@@ -11,7 +11,7 @@
 .race-nav {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-4);
   flex-wrap: wrap;
 }
 
@@ -41,7 +41,7 @@
 }
 
 .progress-card {
-  margin-top: var(--space-4);
+  margin-top: var(--space-3);
 }
 
 .progress-label {
