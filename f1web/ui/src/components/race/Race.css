@@ -1,11 +1,3 @@
-.race-meta {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
 .badge-row {
   display: flex;
   gap: var(--space-2);
@@ -95,11 +87,17 @@
   margin-bottom: var(--space-3);
 }
 
-/* Season selector with the model picker directly below it (left column). */
-.race-nav-left {
+.race-table-head .card-title {
+  margin-bottom: 0;
+}
+
+/* Always-visible override status row under the deck header (the pending
+   badge must not hide inside the collapsed overrides drawer). */
+.deck-status-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .field {
@@ -147,59 +145,6 @@
   white-space: nowrap;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.race-refresh-row {
-  padding-block: var(--space-3);
-}
-
-.race-refresh-row .check-line {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.race-refresh-row .check-line input {
-  accent-color: var(--accent);
-}
-
-/* --------------------------------------------------- race override controls */
-
-.race-controls-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.race-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.race-controls .check-line {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.race-controls .check-line input {
-  accent-color: var(--accent);
-}
-
-.race-apply-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-4);
-}
-
-.race-apply-row .button {
-  margin-left: auto;
 }
 
 .model-chip {

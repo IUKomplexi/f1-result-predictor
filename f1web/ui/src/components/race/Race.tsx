@@ -82,35 +82,31 @@ export function Race({ navState }: TabProps) {
           </p>
         </section>
       ) : null}
-      {season === null || round === null ? (
-        <Skeleton rows={10} />
-      ) : (
-        <RacePanel
-          season={season}
-          round={round}
-          models={models}
-          model={model}
-          defaultModel={defaultModel}
-          onModelChange={(value) => {
-            setModelTouched(true)
-            setModel(value)
-          }}
-          nav={{
-            selected,
-            seasons,
-            selectSeason,
-            rounds,
-            idx,
-            canPrev,
-            canNext,
-            setRound,
-            isNextRace,
-            nextRace,
-            goToNextRace,
-            roundNames,
-          }}
-        />
-      )}
+      <RacePanel
+        season={season}
+        round={round}
+        models={models}
+        model={model}
+        defaultModel={defaultModel}
+        onModelChange={(value) => {
+          setModelTouched(true)
+          setModel(value)
+        }}
+        nav={{
+          selected,
+          seasons,
+          selectSeason,
+          rounds,
+          idx,
+          canPrev,
+          canNext,
+          setRound,
+          isNextRace,
+          nextRace,
+          goToNextRace,
+          roundNames,
+        }}
+      />
     </>
   )
 }
@@ -152,8 +148,8 @@ function RacePanel({
   onModelChange,
   nav,
 }: {
-  season: number
-  round: number
+  season: number | null
+  round: number | null
   models: ModelsResponse | null
   model: string
   defaultModel: string
@@ -169,28 +165,35 @@ function RacePanel({
     setGridRows(null)
   }, [season, round])
 
-  const { state, retry } = useApi(
-    `race-${season}-${round}-${applied}`,
-    () => {
-      const { body } = racePredictBody(models, {
-        season,
-        round,
-        refresh: false,
-        model,
-        gridRows,
-        writeReport: true,
-      })
-      return postPrediction(body)
-    },
+  const ready = season !== null && round !== null
+  const { state, retry } = useApi<Prediction | null>(
+    ready ? `race-${season}-${round}-${applied}` : 'race-idle',
+    ready
+      ? () => {
+          const { body } = racePredictBody(models, {
+            season,
+            round,
+            refresh: false,
+            model,
+            gridRows,
+            writeReport: true,
+          })
+          return postPrediction(body)
+        }
+      : async () => null,
   )
 
   // The grid editor seeds from the latest ready prediction, so it stays
-  // populated while a re-request is in flight.
+  // populated while a re-request is in flight — but only for the *current*
+  // race; a prediction for another season/round must never leak in.
   const lastRef = useRef<Prediction | null>(null)
-  if (state.phase === 'ready') lastRef.current = state.data
+  if (state.phase === 'ready' && state.data !== null) lastRef.current = state.data
   const last = lastRef.current
+  const lastMatches =
+    last !== null && last.season === season && last.round === round
 
   const apply = () => {
+    if (!ready) return
     const { error } = racePredictBody(models, {
       season,
       round,
@@ -208,9 +211,12 @@ function RacePanel({
   }
 
   const pendingOverrides = model !== defaultModel || gridRows !== null
-  const gpName = nav.roundNames.get(round)
-  const title = last?.race.race_name ?? gpName ?? `Round ${round}`
-  const meta = last?.race
+  const gpName = round !== null ? nav.roundNames.get(round) : undefined
+  // Only the prediction for the *current* race may fill the title/meta —
+  // during a refetch the previous race's payload must not leak in.
+  const current = state.phase === 'ready' && state.data !== null ? state.data : null
+  const title = current?.race.race_name ?? gpName ?? (round !== null ? `Round ${round}` : 'Race')
+  const meta = current?.race
 
   return (
     <>
@@ -219,7 +225,7 @@ function RacePanel({
           <div className="race-title-group">
             <h2 className="card-title">{title}</h2>
             <p className="meta-line">
-              <span>Round {round} · season {season}</span>
+              <span>{round !== null ? `Round ${round} · season ${season}` : 'No race selected'}</span>
               {meta ? (
                 <>
                   <span>·</span>
@@ -255,7 +261,7 @@ function RacePanel({
             </div>
             <div className="pager">
               <span className="pager-label">
-                {gpName !== undefined ? `${gpName} · Round ${round}` : `Round ${round}`}
+                {gpName !== undefined ? `${gpName} · Round ${round}` : '—'}
               </span>
               <div className="pager-buttons">
                 <button
@@ -296,10 +302,29 @@ function RacePanel({
           </div>
         </div>
 
+        <div className="deck-status-row">
+          {pendingOverrides ? (
+            <Badge variant="warn">
+              {gridRows !== null && model !== defaultModel
+                ? 'Grid + model overrides pending'
+                : gridRows !== null
+                  ? 'Grid override pending'
+                  : 'Model override pending'}
+            </Badge>
+          ) : (
+            <span className="muted">Config defaults</span>
+          )}
+          {applyError ? (
+            <p className="save-status error" role="alert">
+              {applyError}
+            </p>
+          ) : null}
+        </div>
+
         <details className="advanced-options advanced-options-inline">
           <summary>Grid &amp; model overrides</summary>
           <div className="advanced-drawer">
-            {last !== null && !last.verified ? (
+            {lastMatches && !last.verified ? (
               <GridEditor
                 drivers={last.drivers}
                 values={gridRows}
@@ -313,27 +338,11 @@ function RacePanel({
               </p>
             )}
             <div className="drawer-actions">
-              {pendingOverrides ? (
-                <Badge variant="warn">
-                  {gridRows !== null && model !== defaultModel
-                    ? 'Grid + model overrides pending'
-                    : gridRows !== null
-                      ? 'Grid override pending'
-                      : 'Model override pending'}
-                </Badge>
-              ) : (
-                <span className="muted">Config defaults</span>
-              )}
-              {applyError ? (
-                <p className="save-status error" role="alert">
-                  {applyError}
-                </p>
-              ) : null}
               <button
                 type="button"
                 className="button primary"
                 onClick={apply}
-                disabled={state.phase === 'loading'}
+                disabled={state.phase === 'loading' || !ready}
               >
                 Apply changes
               </button>
@@ -341,11 +350,14 @@ function RacePanel({
           </div>
         </details>
       </section>
-      {state.phase === 'loading' ? <Skeleton rows={10} /> : null}
-      {state.phase === 'error' ? (
+      {!ready ? <Skeleton rows={10} /> : null}
+      {ready && state.phase === 'loading' ? <Skeleton rows={10} /> : null}
+      {ready && state.phase === 'error' ? (
         <ErrorState message={state.message} onRetry={retry} />
       ) : null}
-      {state.phase === 'ready' ? <RaceTable prediction={state.data} /> : null}
+      {ready && state.phase === 'ready' && state.data !== null ? (
+        <RaceTable prediction={state.data} />
+      ) : null}
     </>
   )
 }
