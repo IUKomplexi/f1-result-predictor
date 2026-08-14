@@ -108,15 +108,16 @@
 
 .feature-toggle-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-3);
 }
 
 .feature-toggle-group {
   background: var(--bg-surface-raised);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
 }
 
 .feature-toggle-group-title {
@@ -131,9 +132,14 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 2px 0;
+  padding: var(--space-1) 0;
   font-size: var(--text-xs);
   color: var(--text-secondary);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-default) 50%, transparent);
+}
+
+.feature-toggle-row:last-child {
+  border-bottom: none;
 }
 
 .feature-toggle-check {

@@ -529,10 +529,12 @@ function Field({
     const kind: 'int' | 'float' = field.type
     return (
       <div className="field">
-        <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
-          {fieldLabel(field)}
-        </label>
-        <code className="field-key">[{field.section}] {field.key}</code>
+        <div className="field-header">
+          <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
+            {fieldLabel(field)}
+          </label>
+          <code className="field-key">[{field.section}] {field.key}</code>
+        </div>
         <input
           id={`${field.section}-${field.key}`}
           type="number"
@@ -549,10 +551,12 @@ function Field({
 
   return (
     <div className="field">
-      <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
-        {fieldLabel(field)}
-      </label>
-      <code className="field-key">[{field.section}] {field.key}</code>
+      <div className="field-header">
+        <label className="field-label" htmlFor={`${field.section}-${field.key}`}>
+          {fieldLabel(field)}
+        </label>
+        <code className="field-key">[{field.section}] {field.key}</code>
+      </div>
       <input
         id={`${field.section}-${field.key}`}
         type="text"

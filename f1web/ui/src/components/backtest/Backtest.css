@@ -8,7 +8,36 @@
 .chart-grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-6);
+  gap: var(--space-4);
+}
+
+/* Top section: baseline summary on the left, model comparison on the right. */
+.backtest-analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.analytics-right {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+@media (max-width: 64rem) {
+  .backtest-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Compact chart matrix: raised figure cards, fixed 180px plots. */
+.chart-grid .chart-figure,
+.chart-grid-2 .chart-figure {
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
 }
 
 .chart-figure {
@@ -55,12 +84,26 @@
   margin: 0 0 var(--space-4);
 }
 
-/* Plain-language metric definitions under the mean table. */
+/* Plain-language metric definitions under the mean table, collapsed behind a
+   small toggle so the analytics stay compact. */
+.metric-glossary-toggle {
+  margin-top: var(--space-4);
+  font-size: var(--text-xs);
+}
+
+.metric-glossary-toggle summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .metric-glossary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: var(--space-2) var(--space-5);
-  margin: var(--space-4) 0 0;
+  margin: var(--space-3) 0 0;
 }
 
 .glossary-item {

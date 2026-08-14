@@ -119,7 +119,7 @@ function CompareChart({
     })),
   ]
   return (
-    <Chart data={data} xKey="season" series={series} valueFormat={(v) => fmtNumber(v, 3)} />
+    <Chart data={data} xKey="season" series={series} height={180} valueFormat={(v) => fmtNumber(v, 3)} />
   )
 }
 
