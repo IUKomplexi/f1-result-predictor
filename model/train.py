@@ -342,6 +342,30 @@ def save_checkpoint(
                 len(feats), feature_fingerprint(feats), path)
 
 
+def delete_checkpoint(path: str | Path) -> None:
+    """Delete a checkpoint file, its sibling calibrators, and its index entry.
+
+    ``path`` is the checkpoint file (e.g. ``data/model/Test1.joblib``); the
+    sibling ``<stem>.calibrators.joblib`` (a named model's own calibrators)
+    and the ``index.json`` entry are removed with it. The shared
+    ``data/model/calibrators.joblib`` is never touched.
+    """
+    p = Path(path)
+    stem = p.stem
+    for candidate in (p, p.with_name(f"{stem}.calibrators.joblib")):
+        candidate.unlink(missing_ok=True)
+    index_path = p.parent / "index.json"
+    if not index_path.is_file():
+        return
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if stem in index:
+        index.pop(stem, None)
+        index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+
+
 def checkpoint_meta(path: str | Path) -> dict[str, Any] | None:
     """Best-effort metadata from a checkpoint file (features/fingerprint/season_range).
 

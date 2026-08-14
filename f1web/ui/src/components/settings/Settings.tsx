@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import {
-  getConfig,
-  putConfig,
   ApiError,
+  clearData,
+  deleteModel,
+  getConfig,
+  getModels,
+  putConfig,
   type ConfigField,
   type ConfigResponse,
+  type ModelsResponse,
 } from '../../api/client'
 import type { NavState, TabProps } from '../../App'
 import { useApi } from '../../hooks/useApi'
@@ -13,6 +17,7 @@ import { Badge } from '../ui/Badge'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ErrorState, Skeleton } from '../ui/DataState'
 import { FeatureGroups } from '../ui/FeatureGroups'
+import { normPath } from '../backtest/lib'
 import './Settings.css'
 
 type ConfigMap = Record<string, Record<string, unknown>>
@@ -121,6 +126,10 @@ function SettingsForm({
   const [saving, setSaving] = useState(false)
   const [savedCfg, setSavedCfg] = useState<ConfigMap>(() => structuredClone(data.config) as ConfigMap)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const modelsState = useApi<ModelsResponse>('models', getModels)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [clearOpen, setClearOpen] = useState(false)
+  const [manageStatus, setManageStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const pendingNav = useRef<{ id: string; state?: NavState } | null>(null)
   const editorRef = useRef(editor)
   editorRef.current = editor
@@ -197,6 +206,13 @@ function SettingsForm({
   }
 
   const sections = [...new Set(editor.schema.map((f) => f.section))]
+  const deployedPath = (editor.cfg.model?.checkpoint as string | undefined) ?? null
+  const isDeployedModel = (name: string): boolean => {
+    if (modelsState.state.phase !== 'ready' || deployedPath === null) return false
+    const info = modelsState.state.data.models[name]
+    return info !== undefined && normPath(info.checkpoint) === normPath(deployedPath)
+  }
+  const deleteTargetIsDeployed = deleteTarget !== null && isDeployedModel(deleteTarget)
 
   return (
     <>
@@ -249,6 +265,45 @@ function SettingsForm({
           </button>
         </div>
       </section>
+      <section className="card">
+        <h2 className="card-title">Models</h2>
+        <p className="muted config-intro">
+          Every trained model. Deleting the deployed model (the config
+          default) is allowed, but predictions need a retrain before they work
+          again.
+        </p>
+        {modelsState.state.phase === 'loading' ? (
+          <Skeleton rows={2} />
+        ) : modelsState.state.phase === 'error' ? (
+          <ErrorState message={modelsState.state.message} onRetry={modelsState.retry} />
+        ) : (
+          <ModelList
+            models={modelsState.state.data}
+            deployedPath={(editor.cfg.model?.checkpoint as string | undefined) ?? null}
+            onDelete={(name) => setDeleteTarget(name)}
+          />
+        )}
+        {manageStatus ? (
+          <p
+            className={manageStatus.kind === 'ok' ? 'save-status ok' : 'save-status error'}
+            role="status"
+          >
+            {manageStatus.text}
+          </p>
+        ) : null}
+      </section>
+      <section className="card danger-zone">
+        <h2 className="card-title">Clear data</h2>
+        <p className="muted config-intro">
+          Removes everything the app generated: the dataset, all trained
+          models, predictions and reports. The downloaded raw data (
+          <code>data/raw</code>) is kept, so you can retrain without
+          re-fetching.
+        </p>
+        <button type="button" className="button" onClick={() => setClearOpen(true)}>
+          Clear all generated data
+        </button>
+      </section>
       {confirmOpen ? (
         <ConfirmDialog
           title="Discard unsaved changes?"
@@ -273,7 +328,116 @@ function SettingsForm({
           }}
         />
       ) : null}
+      {deleteTarget !== null ? (
+        <ConfirmDialog
+          title={
+            deleteTargetIsDeployed
+              ? `Delete the deployed model ${deleteTarget}?`
+              : `Delete model ${deleteTarget}?`
+          }
+          body={
+            deleteTargetIsDeployed
+              ? 'This is the config-default model predictions currently use. Deleting it means "retrain needed" until you train a replacement.'
+              : 'Removes the checkpoint, its calibrators and the model index entry. This cannot be undone.'
+          }
+          confirmLabel="Delete model"
+          cancelLabel="Cancel"
+          onConfirm={async () => {
+            const name = deleteTarget
+            setDeleteTarget(null)
+            try {
+              await deleteModel(name)
+              modelsState.retry()
+              setManageStatus({ kind: 'ok', text: `Deleted ${name}.` })
+            } catch (error) {
+              const message = error instanceof ApiError ? error.message : String(error)
+              setManageStatus({ kind: 'error', text: message })
+            }
+          }}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      ) : null}
+      {clearOpen ? (
+        <ConfirmDialog
+          title="Clear all generated data?"
+          body="This removes the dataset, all trained models, predictions and reports. The downloaded raw data (data/raw) is kept. You will need to retrain before predicting again."
+          confirmLabel="Clear everything"
+          cancelLabel="Cancel"
+          onConfirm={async () => {
+            setClearOpen(false)
+            try {
+              const result = await clearData()
+              modelsState.retry()
+              setManageStatus({
+                kind: 'ok',
+                text: `Cleared ${Object.values(result.removed).reduce((a, b) => a + b, 0)} files — retrain from the Train tab.`,
+              })
+            } catch (error) {
+              const message = error instanceof ApiError ? error.message : String(error)
+              setManageStatus({ kind: 'error', text: message })
+            }
+          }}
+          onCancel={() => setClearOpen(false)}
+        />
+      ) : null}
     </>
+  )
+}
+
+function ModelList({
+  models,
+  deployedPath,
+  onDelete,
+}: {
+  models: ModelsResponse
+  deployedPath: string | null
+  onDelete: (name: string) => void
+}) {
+  const entries = Object.entries(models.models).sort(([a], [b]) => a.localeCompare(b))
+  return (
+    <div className="table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Model</th>
+            <th scope="col">Checkpoint</th>
+            <th scope="col" className="num">Features</th>
+            <th scope="col" className="num">Seasons</th>
+            <th scope="col" className="num">Trained</th>
+            <th scope="col" />
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([name, info]) => {
+            const isDeployed =
+              deployedPath !== null && normPath(info.checkpoint) === normPath(deployedPath)
+            return (
+              <tr key={name}>
+                <td>
+                  <code className="mono">{name}</code>{' '}
+                  {isDeployed ? <Badge variant="info">deployed</Badge> : null}
+                </td>
+                <td className="muted">{info.checkpoint}</td>
+                <td className="num">{info.features?.length ?? '–'}</td>
+                <td className="num">
+                  {info.season_range ? info.season_range.join('–') : '–'}
+                </td>
+                <td className="num">
+                  {info.trained_at
+                    ? new Date(info.trained_at * 1000).toLocaleDateString()
+                    : '–'}
+                </td>
+                <td>
+                  <button type="button" className="button" onClick={() => onDelete(name)}>
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

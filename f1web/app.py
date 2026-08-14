@@ -211,6 +211,61 @@ def _grid_path_from_text(text: str) -> str:
     return path
 
 
+def _read_model_index() -> dict:
+    """Saved-model metadata from ``data/model/index.json`` (see GET /api/models).
+
+    Falls back to listing ``*.joblib`` files in the model dir when the index
+    is missing/empty (images built before the index existed).
+    """
+    index_path = REPO_ROOT / "data" / "model" / "index.json"
+    models: dict = {}
+    if index_path.is_file():
+        try:
+            models = json.loads(index_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            models = {}
+    if not models:
+        calibrators = Path(load_config(CONFIG_TOML)["model"]["calibrators"]).name
+        model_dir = REPO_ROOT / "data" / "model"
+        for joblib in sorted(model_dir.glob("*.joblib")):
+            if joblib.name == calibrators:
+                continue
+            models[joblib.stem] = {"checkpoint": str(joblib.relative_to(REPO_ROOT))}
+    return models
+
+
+def _clear_generated_data() -> dict[str, int]:
+    """Delete generated artifacts (dataset, models, predictions, reports).
+
+    ``data/raw`` is deliberately kept — a re-fetch of the API cache is not
+    needed after a wipe. Returns a per-category count of removed files.
+    """
+    import glob as globmod
+
+    removed: dict[str, int] = {"dataset": 0, "models": 0, "predictions": 0, "reports": 0}
+
+    def unlink(rel_patterns: list[str]) -> int:
+        count = 0
+        for pattern in rel_patterns:
+            for match in globmod.glob(str(REPO_ROOT / pattern)):
+                try:
+                    Path(match).unlink()
+                    count += 1
+                except OSError:
+                    pass
+        return count
+
+    removed["dataset"] = unlink(["data/features.parquet"])
+    removed["models"] = unlink(["data/model/*.joblib", "data/model/index.json"])
+    removed["predictions"] = unlink(["data/predictions/*.json"])
+    removed["reports"] = unlink([
+        "reports/backtest.md", "reports/backtest.json",
+        "reports/calibration.json", "reports/prediction.md",
+        "reports/jobs/*.json",
+    ])
+    return removed
+
+
 def _slim_job(job: dict, now: float | None = None) -> dict:
     """A job without the (possibly large) log and result, for the history list.
 
@@ -587,21 +642,51 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         model dir so the selector still works on images built before the index
         existed.
         """
-        index_path = REPO_ROOT / "data" / "model" / "index.json"
-        models: dict = {}
-        if index_path.is_file():
-            try:
-                models = json.loads(index_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                models = {}
-        if not models:
-            calibrators = Path(load_config(CONFIG_TOML)["model"]["calibrators"]).name
-            model_dir = REPO_ROOT / "data" / "model"
-            for joblib in sorted(model_dir.glob("*.joblib")):
-                if joblib.name == calibrators:
-                    continue
-                models[joblib.stem] = {"checkpoint": str(joblib.relative_to(REPO_ROOT))}
+        models = _read_model_index()
         return {"models": models, "default": load_config(CONFIG_TOML)["model"]["checkpoint"]}
+
+    @app.delete("/api/models/{name}")
+    def delete_model_api(name: str):
+        """Delete a saved model: its checkpoint, sibling calibrators, index entry.
+
+        The config-default (deployed) checkpoint is deletable too — the client
+        confirms with a warning first. Unknown names 404.
+        """
+        index = _read_model_index()
+        entry = index.get(name)
+        if entry is None or not entry.get("checkpoint"):
+            return _error(f"model not found: {name}", 404)
+        try:
+            from model.train import delete_checkpoint
+
+            delete_checkpoint(REPO_ROOT / entry["checkpoint"])
+        except OSError as exc:
+            return _error(f"could not delete model: {exc}", 500)
+        return {"deleted": name}
+
+    @app.post("/api/clear-data")
+    def clear_data_api():
+        """Wipe everything the app generated, keeping the raw API cache.
+
+        Deletes the dataset, all model checkpoints/calibrators/index,
+        prediction cache, and generated reports (backtest/calibration/
+        prediction + job history). ``data/raw`` is kept so a re-fetch isn't
+        needed. Refused while a job is queued/running.
+        """
+        if any(j["status"] in ("queued", "running") for j in manager.list()):
+            return _error("clear data while a job is queued or running", 409)
+        removed = _clear_generated_data()
+        # In-memory caches must reflect the wipe immediately.
+        _PREDICTION_CACHE.clear()
+        global _data_end_cache
+        _data_end_cache = None
+        try:
+            from model.train import _JOBLIB_CACHE
+            _JOBLIB_CACHE.clear()
+        except ImportError:  # pragma: no cover - model.train is always importable
+            pass
+        manager.reset()
+        return {"removed": removed}
 
     @app.get("/api/status")
     def status_api() -> dict:

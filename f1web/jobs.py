@@ -132,6 +132,11 @@ class JobManager:
                 self._jobs.values(), key=lambda j: j["created_at"], reverse=True
             )
 
+    def reset(self) -> None:
+        """Drop all in-memory job state (used after a clear-data wipe)."""
+        with self._lock:
+            self._jobs.clear()
+
     def _run_loop(self) -> None:
         while True:
             job_id = self._queue.get()

@@ -775,3 +775,88 @@ def test_predict_write_report_writes_markdown(tmp_path, monkeypatch):
     text = report.read_text(encoding="utf-8")
     assert "# Prediction:" in text
     assert "2024 Round 1" in text
+
+
+# ------------------------------------------------------------ models + clear
+
+def _seed_model(tmp_path, name="Test1"):
+    """Write a fake model (checkpoint + calibrators + index entry) in the temp repo."""
+    import json as _json
+
+    model_dir = tmp_path / "data" / "model"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / f"{name}.joblib").write_bytes(b"checkpoint")
+    (model_dir / f"{name}.calibrators.joblib").write_bytes(b"calibrators")
+    index = {name: {"checkpoint": f"data/model/{name}.joblib"}}
+    (model_dir / "index.json").write_text(_json.dumps(index), encoding="utf-8")
+    return model_dir
+
+
+def test_delete_model_removes_checkpoint_calibrators_and_index(tmp_path, monkeypatch):
+    import json as _json
+
+    import f1web.app as app_module
+
+    model_dir = _seed_model(tmp_path, "Test1")
+    monkeypatch.setattr(app_module, "REPO_ROOT", tmp_path)
+    client = TestClient(create_app())
+
+    resp = client.delete("/api/models/Test1")
+    assert resp.status_code == 200
+    assert resp.json() == {"deleted": "Test1"}
+    assert not (model_dir / "Test1.joblib").exists()
+    assert not (model_dir / "Test1.calibrators.joblib").exists()
+    assert "Test1" not in _json.loads((model_dir / "index.json").read_text(encoding="utf-8"))
+
+
+def test_delete_model_unknown_is_404(tmp_path, monkeypatch):
+    import f1web.app as app_module
+
+    _seed_model(tmp_path)
+    monkeypatch.setattr(app_module, "REPO_ROOT", tmp_path)
+    client = TestClient(create_app())
+
+    resp = client.delete("/api/models/nope")
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["error"]
+
+
+def test_clear_data_keeps_raw_and_wipes_generated(tmp_path, monkeypatch):
+    import f1web.app as app_module
+
+    # Seed a mix of generated artifacts + a raw cache file that must survive.
+    raw_dir = tmp_path / "data" / "raw"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "f1_2024.json__x.json").write_text("{}")
+    (tmp_path / "data" / "features.parquet").write_bytes(b"parquet")
+    _seed_model(tmp_path, "Test1")
+    pred_dir = tmp_path / "data" / "predictions"
+    pred_dir.mkdir(parents=True)
+    (pred_dir / "abc.json").write_text("{}")
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "backtest.json").write_text("{}")
+    (reports / "prediction.md").write_text("# Prediction")
+    jobs_dir = reports / "jobs"
+    jobs_dir.mkdir()
+    (jobs_dir / "job1.json").write_text("{}")
+
+    monkeypatch.setattr(app_module, "REPO_ROOT", tmp_path)
+    client = TestClient(create_app())
+
+    resp = client.post("/api/clear-data")
+    assert resp.status_code == 200
+    removed = resp.json()["removed"]
+    assert removed["models"] >= 2  # checkpoint + calibrators
+    assert removed["predictions"] == 1
+    assert removed["reports"] >= 3
+    assert removed["dataset"] == 1
+
+    assert (raw_dir / "f1_2024.json__x.json").exists()  # raw kept
+    assert not (tmp_path / "data" / "features.parquet").exists()
+    assert not (tmp_path / "data" / "model" / "Test1.joblib").exists()
+    assert not (pred_dir / "abc.json").exists()
+    assert not (reports / "backtest.json").exists()
+    assert not (jobs_dir / "job1.json").exists()
+    # The in-memory job history is reset too.
+    assert client.get("/api/jobs").json()["jobs"] == []

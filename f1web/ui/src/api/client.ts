@@ -149,7 +149,7 @@ export interface ModelsResponse {
 /* --------------------------------------------------------------- request */
 
 async function apiJson<T>(
-  method: 'GET' | 'POST' | 'PUT',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -192,6 +192,16 @@ export function getStatus(): Promise<Status> {
 
 export function getModels(): Promise<ModelsResponse> {
   return apiGet<ModelsResponse>('/api/models')
+}
+
+/** Delete a saved model (checkpoint + its calibrators + index entry). */
+export function deleteModel(name: string): Promise<{ deleted: string }> {
+  return apiJson<{ deleted: string }>('DELETE', `/api/models/${encodeURIComponent(name)}`)
+}
+
+/** Wipe generated data (dataset, models, predictions, reports); data/raw kept. */
+export function clearData(): Promise<{ removed: Record<string, number> }> {
+  return apiJson<{ removed: Record<string, number> }>('POST', '/api/clear-data')
 }
 
 export function getPrediction(season?: number, round?: number, refresh = false): Promise<Prediction> {
