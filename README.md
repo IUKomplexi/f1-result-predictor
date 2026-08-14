@@ -47,6 +47,7 @@ paths).
 | `f1 train` | train the final model → `data/model/hurdle.joblib` |
 | `f1 calibrate` | fit isotonic probability calibrators → `data/model/calibrators.joblib` (run after every `f1 train`) |
 | `f1 backtest [--no-quantize]` | walk-forward backtest vs baselines → `reports/backtest.md` + `.json` (quantized by default) |
+| `f1 tune [--candidates 24] [--metric mae]` | walk-forward hyperparameter search (candidate 0 = current `[model.params]`) → `reports/tuning.md` + `.json` |
 | `f1 predict` | predict the **next race** → `reports/prediction.md` |
 | `f1 predict --season 2024 --round 22` | predict any race; past races are verified vs actuals |
 | `f1 predict --grid qual.csv` | supply a qualifying grid (`driver_id,grid`) for an upcoming race |
@@ -227,7 +228,7 @@ same settings; per-race prediction overrides are ephemeral (in-memory only).
 | --- | --- | --- |
 | `f1data/` | Polite, cached Jolpica API client + normalized fetchers | `F1Client` (`client.py`), `fetch_season`, `fetch_calendar`, `fetch_*` (`fetchers.py`) |
 | `features/` | Feature engineering: per-start dataset with strictly pre-race features + points target, plus the declarative feature registry | `build_dataset`, `add_features`, `assemble` (`build.py`); `REGISTRY`, `enabled_features`, `feature_fingerprint` (`registry.py`) |
-| `model/` | Hurdle model (HGB classifier + regressor), walk-forward backtest, isotonic calibration | `train_final_model`, `run_backtest`, `fit_calibrators` |
+| `model/` | Hurdle model (HGB classifier + regressor), walk-forward backtest + hyperparameter search, isotonic calibration | `train_final_model`, `run_backtest`, `candidate_params`/`run` (`tune.py`), `fit_calibrators` |
 | `f1core/` | Shared core: prediction pipeline, config loader **+ writer**, markdown/ranking helpers, HTTP base class, and the `f1` CLI | `predict_race`, `get_prediction` (`predict.py`), `load_config`/`save_config`/`validate_config` (`config.py`), `to_md`/`rank_by` (`reporting.py`), `main` + subcommand handlers (`cli.py`) |
 | `f1web/` | FastAPI JSON API + host for the built React SPA, plus an in-process async job runner for pipeline steps | `create_app` (`app.py`), `JobManager` + `run_*` handlers (`jobs.py`), `f1web/ui/` (Preact + Vite + TS) |
 | `scripts/` | One-off tooling | `download_fixtures.py` (regenerates the tracked test fixtures) |
@@ -252,6 +253,7 @@ features/registry.py        declarative feature registry (id, category,
 model/train.py              hurdle model (HGB classifier + regressor)
 model/calibrate.py          isotonic probability calibration (per-target)
 model/evaluate.py           walk-forward backtest vs grid/championship/zero
+model/tune.py               walk-forward hyperparameter search (f1 tune)
 f1web/app.py                FastAPI JSON API + built-SPA host
 ```
 
@@ -408,26 +410,31 @@ saved calibrators automatically.
 ## Results (honest)
 
 Walk-forward backtest, train on all seasons strictly before the test season,
-evaluate 2013–2025 (mean per race). Model = hurdle on the 14 **core**
+evaluate 2014–2026 (mean per race). Model = hurdle on the 14 **core**
 registry features (see [Feature registry & selection](#feature-registry--selection)),
-tuned hyperparameters, and expected points **quantized to
+hyperparameters tuned by `f1 tune`, and expected points **quantized to
 the points table** (adopted because it improved walk-forward
 MAE/top-3/Spearman):
 
 | baseline | winner_hit | top3_overlap | spearman | MAE (pts) |
 | --- | --- | --- | --- | --- |
-| **model** | **0.550** | 0.659 | **0.656** | 2.92 |
-| grid order | 0.535 | **0.686** | 0.623 | **2.83** |
-| championship | 0.450 | 0.613 | 0.617 | 3.99 |
-| zero | 0.535 | 0.686 | 0.623 | 4.99 |
+| **model** | **0.544** | 0.654 | **0.653** | 2.92 |
+| grid order | 0.534 | **0.688** | 0.618 | **2.84** |
+| championship | 0.456 | 0.600 | 0.609 | 4.07 |
+| zero | 0.534 | 0.688 | 0.618 | 5.04 |
 
-The model **beats the grid-order baseline on winner hit-rate** (0.550 vs
-0.535) and on ranking correlation (Spearman 0.656 vs 0.623). Grid order still
-edges it on top-3 (0.659 vs 0.686) and MAE (2.92 vs 2.83 — the grid baseline
+The model **beats the grid-order baseline on winner hit-rate** (0.544 vs
+0.534) and on ranking correlation (Spearman 0.653 vs 0.618). Grid order still
+edges it on top-3 (0.654 vs 0.688) and MAE (2.92 vs 2.84 — the grid baseline
 predicts the exact points-table value whenever the pole sitter wins, which no
 probabilistic model can match). The feature audit cut 17 low-impact/redundant
-features (kept off by default): winner_hit rose from 0.539 to 0.550 with no
-metric moving beyond the fold-to-fold noise floor.
+features (kept off by default); a walk-forward hyperparameter search
+(`f1 tune`, 24 candidates, objective MAE) then improved model MAE from 2.948
+to 2.915. Five candidate pre-race features (qualifying gap to pole, driver
+age, race start hour, prior-race fastest-lap rank, prior-race laps) were
+gated by the same walk-forward MAE; none beat the tuned baseline (2.920–2.942
+vs 2.915), so they were reverted rather than kept as dead selectable
+features.
 
 Dry run (Las Vegas 2024, predicted from pre-race info only): winner hit ✓,
 top-3 overlap 0.67, Spearman 0.79, MAE 1.95 points.
@@ -512,10 +519,12 @@ moves, or refactors.
 ## Open questions / next steps
 
 - **Headline edge is thin.** The model beats grid order on winner hit-rate
-  (0.550 vs 0.535) and Spearman (0.656 vs 0.623) but grid still wins
-  top-3 overlap (0.686) and MAE (2.83). The feature audit cut 17
+  (0.544 vs 0.534) and Spearman (0.653 vs 0.618) but grid still wins
+  top-3 overlap (0.688) and MAE (2.84). The feature audit cut 17
   low-impact/redundant features (off by default; winner_hit 0.539 → 0.550,
-  everything else within noise). What feature could actually move
+  everything else within noise), and a `f1 tune` search improved model MAE
+  2.948 → 2.915 while five candidate pre-race features all failed their
+  walk-forward MAE gate. What feature could actually move
   top-3/MAE — per-circuit setup, strategy data, 2026-regs data?
 - **2026 regulation change** is an imminent transfer-risk event for a model
   trained on 2014–2026 (the `points_era` split only covers pre/post-2019).
