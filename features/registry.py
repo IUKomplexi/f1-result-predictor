@@ -15,8 +15,11 @@ ablation, 2013-2025 test windows; all 31 features were measured):
   component); on by default.
 * ``selectable`` — low impact (noise in both components); kept for experiments
   but off by default.
-* ``cut`` — removal significantly improved the backtest (the ±1 SE ablation
-  gate passed); kept in the registry so it can be re-enabled.
+
+(The former ``cut`` category — features whose removal significantly improved
+the backtest — was removed from the codebase: the ablation gate said dropping
+them helps, so they are not worth keeping registered. If a future
+feature-search wants them back, re-add them here and in ``features/build.py``.)
 
 Toggling the enabled set changes the model-checkpoint fingerprint (and thus
 invalidates checkpoints), so stale artifacts are never silently reused.
@@ -31,8 +34,8 @@ from typing import Literal
 
 from features.build import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
-Category = Literal["core", "selectable", "cut"]
-CATEGORIES: tuple[Category, ...] = ("core", "selectable", "cut")
+Category = Literal["core", "selectable"]
+CATEGORIES: tuple[Category, ...] = ("core", "selectable")
 
 # Display labels, in CATEGORIES order (the dashboard renders feature groups
 # from category_meta() — see GET /api/config — so this is the single source
@@ -40,7 +43,6 @@ CATEGORIES: tuple[Category, ...] = ("core", "selectable", "cut")
 CATEGORY_LABELS: dict[Category, str] = {
     "core": "Core — on by default",
     "selectable": "Selectable — off by default",
-    "cut": "Cut — removal improved the backtest",
 }
 
 
@@ -67,8 +69,8 @@ class FeatureSpec:
 
 
 # --------------------------------------------------------------------------
-# The registry (27 numeric + 4 categorical).
-# Categories: core / selectable / cut (see the docstring above).
+# The registry (21 numeric + 4 categorical).
+# Categories: core / selectable (see the docstring above).
 # --------------------------------------------------------------------------
 
 _REGISTRY: list[FeatureSpec] = [
@@ -114,16 +116,6 @@ _REGISTRY: list[FeatureSpec] = [
     FeatureSpec("driver_prev_points_sum", "core", "numeric", "_add_driver_history",
                 "rolling points sum (window 5, strictly prior)",
                 "significant in both components (q=0.001 / 0.000)"),
-    FeatureSpec("last_race_points", "cut", "numeric", "_add_driver_history",
-                "points scored in the driver's previous race",
-                "noise in both components; removal improves winner_hit by 2.5 SE (gate)"),
-    FeatureSpec("driver_prev_dnf_rate", "cut", "numeric", "_add_driver_history",
-                "rolling DNF rate (window 5, strictly prior)",
-                "noise in both components; removal improves winner_hit by 1.8 SE (gate)"),
-    FeatureSpec("driver_wins_prior", "cut", "numeric", "_add_driver_history",
-                "career wins strictly before this race",
-                "significant in classifier (q=0.046) but removal improves "
-                "top3_overlap by 2.2 SE (gate)"),
     # --- constructor history (_add_constructor_history) ---
     FeatureSpec("team_prev_points_mean", "core", "numeric", "_add_constructor_history",
                 "rolling team points per race, both cars (window 5, strictly prior)",
@@ -136,9 +128,6 @@ _REGISTRY: list[FeatureSpec] = [
                 "cumulative team wins strictly before this race",
                 "significant in classifier (q=0.018); noise in regressor"),
     # --- circuit history (_add_circuit_history) ---
-    FeatureSpec("circuit_prev_finish_mean", "cut", "numeric", "_add_circuit_history",
-                "driver's rolling mean finish at this circuit (window 3, strictly prior)",
-                "noise in both components; removal improves top3_overlap by 1.1 SE (gate)"),
     FeatureSpec("circuit_prev_points_mean", "selectable", "numeric", "_add_circuit_history",
                 "driver's rolling mean points at this circuit (window 3, strictly prior)",
                 "noise in both components; removal improves top3_overlap 1.5 SE but "
@@ -148,17 +137,10 @@ _REGISTRY: list[FeatureSpec] = [
                 "rolling finish-position gap vs teammate (window 5, strictly prior)",
                 "noise in both components; removal regresses top3_overlap 1.3 SE and "
                 "spearman 1.4 SE at noise-level magnitude"),
-    FeatureSpec("qual_gap_vs_teammate", "cut", "numeric", "_add_teammate_gaps",
-                "rolling qualifying-position gap vs teammate (window 5, strictly prior)",
-                "noise in both components; removal improves top3_overlap by 1.4 SE (gate)"),
     # --- championship (_add_championship) ---
     FeatureSpec("champ_points_entering", "core", "numeric", "_add_championship",
                 "championship points entering the race (incl. current-round sprint)",
                 "significant in regressor (q=0.026); near-significant in classifier (q=0.081)"),
-    FeatureSpec("champ_pos_entering", "cut", "numeric", "_add_championship",
-                "championship rank entering the race",
-                "significant in classifier (q=0.002) but redundant with champ points; "
-                "removal improves top3_overlap by 1.6 SE (gate)"),
     FeatureSpec("constructor_champ_pos_entering", "core", "numeric", "_add_constructor_history",
                 "constructor championship rank entering the round",
                 "significant in both components (q=0.000 / 0.026)"),

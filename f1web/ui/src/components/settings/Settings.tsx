@@ -12,6 +12,7 @@ import { debounce, type Debounced } from '../../lib/debounce'
 import { Badge } from '../ui/Badge'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ErrorState, Skeleton } from '../ui/DataState'
+import { FeatureGroups } from '../ui/FeatureGroups'
 import './Settings.css'
 
 type ConfigMap = Record<string, Record<string, unknown>>
@@ -324,45 +325,18 @@ function Field({
 
   if (field.key === 'enabled' && field.type === 'features') {
     const selectedIds = (editor.cfg.features?.enabled as string[] | null) ?? editor.defaults
-    // Groups come from the backend (features/registry.py CATEGORY_ORDER +
-    // CATEGORY_LABELS via /api/config); unknown categories still render,
-    // appended after the known ones so drift never hides a feature.
-    const known = new Set(editor.categoryMeta.map((m) => m.id))
-    const groups = [
-      ...editor.categoryMeta,
-      ...[...new Set(Object.values(editor.categories))]
-        .filter((category) => !known.has(category))
-        .map((category) => ({ id: category, label: category })),
-    ]
     return (
       <div className="field span-all">
-        <span className="field-label">Features</span>
-        <button type="button" className="link-button" onClick={reset(editor, onChange)}>
-          Reset to registry defaults
-        </button>
-        {groups.map((group) => (
-          <div key={group.id} className="feature-group">
-            <h3 className="feature-group-title">{group.label}</h3>
-            <div className="feature-grid">
-              {editor.registry
-                .filter((id) => editor.categories[id] === group.id)
-                .map((id) => {
-                  const selected = selectedIds!.includes(id)
-                  return (
-                    <label key={id} className="feature-check">
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={(e) => toggleFeature(id, e.target.checked)}
-                      />
-                      <span>{id}</span>
-                    </label>
-                  )
-                })}
-            </div>
-          </div>
-        ))}
-        {help}
+        <FeatureGroups
+          registry={editor.registry}
+          categories={editor.categories}
+          categoryMeta={editor.categoryMeta}
+          checked={(id) => selectedIds.includes(id)}
+          onToggle={toggleFeature}
+          resetLabel="Reset to registry defaults"
+          onReset={reset(editor, onChange)}
+          hint={help}
+        />
       </div>
     )
   }

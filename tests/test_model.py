@@ -132,7 +132,6 @@ def test_race_metrics_perfect_and_reversed():
             "position": [1, 2, 3, 4, 5],
             "points": [25.0, 18.0, 15.0, 12.0, 10.0],
             "grid": [1, 2, 3, 4, 5],
-            "champ_pos_entering": [1, 2, 3, 4, 5],
             "pred_points": [25.0, 18.0, 15.0, 12.0, 10.0],
         }
     )
@@ -152,7 +151,7 @@ def test_run_backtest_produces_tables():
     df = add_features(_synthetic_df(n_seasons=8))
     overall, by_season = run_backtest(df)
     assert set(overall.index) == {"model", "grid", "championship", "zero"}
-    assert set(overall.columns) == {"winner_hit", "top3_overlap", "spearman", "mae"}
+    assert set(overall.columns) == {"winner_hit", "top3_overlap", "top10_overlap", "spearman", "mae"}
     assert "model" in by_season
     # The model should at least beat the zero baseline on MAE.
     assert overall.loc["model", "mae"] < overall.loc["zero", "mae"]
@@ -240,7 +239,7 @@ def test_run_backtest_deployed_checkpoint_scores_all_seasons():
     model = train_final_model(df)
     overall, by_season = run_backtest(df, model=model)
     assert set(overall.index) == {"model", "grid", "championship", "zero"}
-    assert set(overall.columns) == {"winner_hit", "top3_overlap", "spearman", "mae"}
+    assert set(overall.columns) == {"winner_hit", "top3_overlap", "top10_overlap", "spearman", "mae"}
     assert overall.loc["model", "mae"] < overall.loc["zero", "mae"]
     # The fixed model applies to every season — unlike the walk-forward mode,
     # which needs min_train_seasons prior seasons before the first test.
@@ -277,7 +276,7 @@ def test_run_model_paths_compares_checkpoints(tmp_path, monkeypatch):
     for name in ("alpha", "beta"):
         entry = snap["models"][name]
         assert set(entry["overall"]) == {"model", "grid", "championship", "zero"}
-        assert {"winner_hit", "top3_overlap", "spearman", "mae"} <= set(
+        assert {"winner_hit", "top3_overlap", "top10_overlap", "spearman", "mae"} <= set(
             entry["overall"]["model"]
         )
         assert "model" in entry["by_season"]

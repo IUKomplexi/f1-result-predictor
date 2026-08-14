@@ -130,12 +130,6 @@
   color: var(--text-secondary);
 }
 
-.feature-toggle-select {
-  background: var(--bg-surface-raised);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--text-xs);
-  padding: 2px var(--space-2);
+.feature-toggle-check {
+  accent-color: var(--accent);
 }

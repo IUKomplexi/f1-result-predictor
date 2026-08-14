@@ -81,45 +81,6 @@
   min-width: 9rem;
 }
 
-.feature-group {
-  margin-bottom: var(--space-4);
-}
-
-.feature-group-title {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0 0 var(--space-2);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
-.feature-check {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.feature-check em {
-  font-style: normal;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  margin-left: var(--space-1);
-}
-
-.feature-check input {
-  accent-color: var(--accent);
-}
-
 /* Sticky save bar: stays visible while scrolling the (long) config form so
    the save state and button are never out of view. */
 .save-bar {

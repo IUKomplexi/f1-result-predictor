@@ -40,18 +40,12 @@ NUMERIC_FEATURES = [
     "driver_prev_finish_mean",
     "driver_prev_points_mean",
     "driver_prev_points_sum",
-    "last_race_points",
-    "driver_prev_dnf_rate",
-    "driver_wins_prior",
     "team_prev_points_mean",
     "team_prev_pos_mean",
     "team_wins_prior",
-    "circuit_prev_finish_mean",
     "circuit_prev_points_mean",
     "finish_gap_vs_teammate",
-    "qual_gap_vs_teammate",
     "champ_points_entering",
-    "champ_pos_entering",
     "constructor_champ_pos_entering",
     "season_driver_pts_per_race",
     "season_team_pts_per_race",
@@ -82,11 +76,6 @@ def _rolling_mean(s: pd.Series, window: int = FORM_WINDOW) -> pd.Series:
 
 def _rolling_sum(s: pd.Series, window: int = FORM_WINDOW) -> pd.Series:
     return s.shift(1).rolling(window, min_periods=1).sum()  # type: ignore[reportReturnType]
-
-
-def _career_wins(s: pd.Series) -> pd.Series:
-    """Cumulative wins strictly before the current race."""
-    return (s == 1).astype(float).shift(1).cumsum().fillna(0.0)
 
 
 # --------------------------------------------------------------------------
@@ -217,14 +206,9 @@ def _add_driver_history(out: pd.DataFrame) -> pd.DataFrame:
     out["team_tenure"] = out.groupby(["driver_id", "constructor_id"], sort=False).cumcount()
     prev_team = g["constructor_id"].shift(1)
     out["team_switch"] = ((out["constructor_id"] != prev_team) & prev_team.notna()).astype(float)
-    out["last_race_points"] = g["points"].shift(1)
     out["driver_prev_finish_mean"] = g["finish_pos"].transform(_rolling_mean)
     out["driver_prev_points_mean"] = g["points"].transform(_rolling_mean)
     out["driver_prev_points_sum"] = g["points"].transform(_rolling_sum)
-    out["driver_prev_dnf_rate"] = g["is_dnf"].transform(
-        lambda s: s.astype(float).shift(1).rolling(FORM_WINDOW, min_periods=1).mean()
-    )
-    out["driver_wins_prior"] = g["position"].transform(_career_wins)
     return out
 
 
@@ -290,9 +274,6 @@ def _add_constructor_history(out: pd.DataFrame) -> pd.DataFrame:
 def _add_circuit_history(out: pd.DataFrame) -> pd.DataFrame:
     """Prior visits at the same circuit per driver."""
     g = out.groupby(["driver_id", "circuit_id"], sort=False)
-    out["circuit_prev_finish_mean"] = g["finish_pos"].transform(
-        lambda s: s.shift(1).rolling(CIRCUIT_WINDOW, min_periods=1).mean()
-    )
     out["circuit_prev_points_mean"] = g["points"].transform(
         lambda s: s.shift(1).rolling(CIRCUIT_WINDOW, min_periods=1).mean()
     )
@@ -324,7 +305,6 @@ def _teammate_gap(out: pd.DataFrame, value_col: str, out_col: str) -> None:
 def _add_teammate_gaps(out: pd.DataFrame) -> pd.DataFrame:
     """Teammate-relative performance (strictly prior)."""
     _teammate_gap(out, "finish_pos", "finish_gap_vs_teammate")
-    _teammate_gap(out, "qual_pos", "qual_gap_vs_teammate")
     return out
 
 
@@ -345,9 +325,6 @@ def _add_championship(out: pd.DataFrame) -> pd.DataFrame:
         out["champ_points_entering"] / out["season_n_prior"].clip(lower=1),
         np.nan,
     )
-    out["champ_pos_entering"] = out.groupby(["season", "round"])[
-        "champ_points_entering"
-    ].rank(ascending=False, method="min")
     return out
 
 

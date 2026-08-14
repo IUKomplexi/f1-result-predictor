@@ -47,7 +47,6 @@ def test_no_leakage_rolling_features_use_prior_races_only():
     assert row["driver_prev_points_mean"] == pytest.approx((25.0 + 15.0) / 2)
     assert row["driver_prev_finish_mean"] == pytest.approx((1 + 3) / 2)
     assert row["champ_points_entering"] == pytest.approx(40.0)
-    assert row["champ_pos_entering"] == 2  # b enters round 3 with 43 pts
     # Team form uses the team's prior races (43 = a25+b18, 40 = a15+b25).
     assert row["team_prev_points_mean"] == pytest.approx((43.0 + 40.0) / 2)
 
@@ -247,12 +246,10 @@ def test_team_switch_tenure_and_lag_features():
     r2 = out[out["round"] == 2].iloc[0]
     assert r2["team_switch"] == 1.0       # moved from t1 to t2
     assert r2["team_tenure"] == 0         # first race with t2
-    assert r2["last_race_points"] == 25.0  # points in round 1
     assert r2["grid_qual_gap"] == -2       # qualified 4th, started 2nd
     r3 = out[out["round"] == 3].iloc[0]
     assert r3["team_switch"] == 0.0
     assert r3["team_tenure"] == 1         # one prior race with t2
-    assert r3["last_race_points"] == 18.0
     assert r3["circuit_prev_points_mean"] == pytest.approx(25.0)  # at c1, round 1
     assert out["is_sprint_round"].eq(0.0).all()  # default when no calendar
 
@@ -356,8 +353,6 @@ def test_teammate_gap_features():
 
     a2 = out[(out["driver_id"] == "a") & (out["round"] == 2)].iloc[0]
     b2 = out[(out["driver_id"] == "b") & (out["round"] == 2)].iloc[0]
-    # Round 1: a finished 1st vs b 5th -> gap -4; qualified 1st vs 4th -> -3.
+    # Round 1: a finished 1st vs b 5th -> gap -4.
     assert a2["finish_gap_vs_teammate"] == pytest.approx(-4.0)
-    assert a2["qual_gap_vs_teammate"] == pytest.approx(-3.0)
     assert b2["finish_gap_vs_teammate"] == pytest.approx(4.0)
-    assert b2["qual_gap_vs_teammate"] == pytest.approx(3.0)

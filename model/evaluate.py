@@ -38,7 +38,12 @@ def baseline_grid_points(df: pd.DataFrame) -> pd.Series:
 
 def baseline_champ_points(df: pd.DataFrame) -> pd.Series:
     """Predict the points table value of the championship position entering."""
-    return df["champ_pos_entering"].map(points_for_position)  # type: ignore[reportReturnType]
+    # The championship rank was a cut feature; derive it here from the
+    # (still computed) entering points so the baseline keeps working.
+    rank = df.groupby(["season", "round"])["champ_points_entering"].rank(
+        ascending=False, method="min"
+    )
+    return rank.map(points_for_position)  # type: ignore[reportReturnType]
 
 
 def baseline_zero_points(df: pd.DataFrame) -> pd.Series:
@@ -50,7 +55,7 @@ def baseline_zero_points(df: pd.DataFrame) -> pd.Series:
 # --------------------------------------------------------------------------
 
 def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
-    """One race's metrics: winner hit, top-3 overlap, spearman, MAE."""
+    """One race's metrics: winner hit, top-3/top-10 overlap, spearman, MAE."""
     actual_points = df["points"].to_numpy(dtype=float)
     pred_points = df["pred_points"].to_numpy(dtype=float)
     n = len(df)
@@ -69,6 +74,8 @@ def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
 
     top3_actual = set(df.loc[df["position"].between(1, 3), "driver_id"])
     top3_pred = set(df.loc[pred_rank.le(3), "driver_id"])
+    top10_actual = set(df.loc[df["position"].between(1, 10), "driver_id"])
+    top10_pred = set(df.loc[pred_rank.le(10), "driver_id"])
 
     corr = spearmanr(pred_rank, actual_rank).statistic  # type: ignore[reportAttributeAccessIssue]  # scipy stubs type the result as `_`
     if np.isnan(corr):
@@ -81,6 +88,7 @@ def race_metrics(df: pd.DataFrame) -> dict[str, Any]:
             else 0.0
         ),
         "top3_overlap": len(top3_actual & top3_pred) / 3.0,
+        "top10_overlap": len(top10_actual & top10_pred) / 10.0,
         "spearman": float(corr),
         "mae": float(np.mean(np.abs(pred_points - actual_points))),
     }
@@ -159,7 +167,7 @@ def run_backtest(
     results = pd.DataFrame(season_rows)
     overall = (
         results.groupby("baseline")[
-            ["winner_hit", "top3_overlap", "spearman", "mae"]
+            ["winner_hit", "top3_overlap", "top10_overlap", "spearman", "mae"]
         ]
         .mean()
         .reindex(["model", "grid", "championship", "zero"])  # type: ignore[reportAttributeAccessIssue]  # groupby() is Unknown without pandas stubs

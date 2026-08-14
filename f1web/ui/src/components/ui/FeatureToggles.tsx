@@ -1,5 +1,6 @@
 import { getConfig } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
+import { FeatureGroups } from './FeatureGroups'
 import './JobOptions.css'
 
 /** Per-run feature overrides, mirroring the CLI's --enable/--disable-features. */
@@ -11,12 +12,11 @@ export interface FeatureOverride {
 /** No overrides: the job uses the config [features] enabled set as-is. */
 export const NO_FEATURE_OVERRIDES: FeatureOverride = { enable: [], disable: [] }
 
-type Mode = 'default' | 'enable' | 'disable'
-
 /**
  * Per-run feature override control (CLI --enable-features / --disable-features):
- * every registered feature can stay at its config default or be forced on/off
- * for this run only. Nothing is written to config.toml.
+ * every registered feature is shown as a checkbox whose checked state is the
+ * *effective* enabled state for this run (config default, plus any force
+ * on/off override). Nothing is written to config.toml.
  */
 export function FeatureToggles({
   value,
@@ -43,65 +43,42 @@ export function FeatureToggles({
     )
   }
   const { registry, categories, defaults, category_meta } = state.data.features
-  // Groups come from the backend (features/registry.py CATEGORY_ORDER +
-  // CATEGORY_LABELS via /api/config); categories unknown to the backend still
-  // render, appended after the known ones so drift never hides a feature.
-  const known = new Set(category_meta.map((m) => m.id))
-  const groups = [
-    ...category_meta,
-    ...[...new Set(Object.values(categories))]
-      .filter((category) => !known.has(category))
-      .map((category) => ({ id: category, label: category })),
-  ]
-  const modeOf = (id: string): Mode =>
-    value.enable.includes(id) ? 'enable' : value.disable.includes(id) ? 'disable' : 'default'
-  const setMode = (id: string, mode: Mode) => {
+
+  // Checkbox state = effective enabled for this run: an explicit force on/off
+  // wins, otherwise the config default.
+  const checked = (id: string): boolean => {
+    if (value.enable.includes(id)) return true
+    if (value.disable.includes(id)) return false
+    return defaults.includes(id)
+  }
+  const toggle = (id: string, on: boolean) => {
     const enable = value.enable.filter((f) => f !== id)
     const disable = value.disable.filter((f) => f !== id)
-    if (mode === 'enable') enable.push(id)
-    if (mode === 'disable') disable.push(id)
+    if (on === defaults.includes(id)) {
+      // Matches the config default again -> drop the override.
+      onChange({ enable, disable })
+      return
+    }
+    if (on) enable.push(id)
+    else disable.push(id)
     onChange({ enable, disable })
   }
+
   return (
-    <div className="job-option feature-toggles">
-      <div className="feature-toggle-head">
-        <span className="job-label">Feature overrides</span>
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => onChange(NO_FEATURE_OVERRIDES)}
-        >
-          Reset to config defaults
-        </button>
-      </div>
-      <div className="feature-toggle-groups">
-        {groups.map((group) => {
-          const ids = registry.filter((id) => categories[id] === group.id)
-          if (ids.length === 0) return null
-          return (
-            <div key={group.id} className="feature-toggle-group">
-              <h4 className="feature-toggle-group-title">{group.label}</h4>
-              {ids.map((id) => (
-                <label key={id} className="feature-toggle-row">
-                  <span className="mono">{id}</span>
-                  <select
-                    className="feature-toggle-select"
-                    value={modeOf(id)}
-                    onChange={(e) => setMode(id, e.target.value as Mode)}
-                    aria-label={`${id} feature override`}
-                  >
-                    <option value="default">
-                      {defaults.includes(id) ? 'default (on)' : 'default (off)'}
-                    </option>
-                    <option value="enable">force on</option>
-                    <option value="disable">force off</option>
-                  </select>
-                </label>
-              ))}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <FeatureGroups
+      registry={registry}
+      categories={categories}
+      categoryMeta={category_meta}
+      checked={checked}
+      onToggle={toggle}
+      resetLabel="Reset to config defaults"
+      onReset={() => onChange(NO_FEATURE_OVERRIDES)}
+      hint={
+        <p className="job-option-hint">
+          Overrides apply to this run only; the config defaults (and the
+          deployed model) are unchanged.
+        </p>
+      }
+    />
   )
 }
