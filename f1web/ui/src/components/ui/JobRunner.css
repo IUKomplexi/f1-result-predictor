@@ -54,6 +54,52 @@
   align-self: end;
 }
 
+/* Train tab: pin the Run button to the bottom-right of the toolbar. */
+.job-options > .button.align-end {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+/* Train tab: options span the full toolbar — features on the left, model
+   name + season range on the right (model name above the seasons). */
+.job-option.train-options {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26rem;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (max-width: 64rem) {
+  .job-option.train-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.train-features {
+  min-width: 0;
+}
+
+.train-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Start + End season side by side, with the range alert below them. */
+.season-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.season-range-error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .check-line {
   display: inline-flex;
   align-items: center;

@@ -21,47 +21,61 @@ export function Train() {
   const suggestion =
     range.start !== null && range.end !== null ? `hurdle-${range.start}-${range.end}` : 'hurdle'
   const seasons = status.state.phase === 'ready' ? status.state.data.seasons : null
+  const rangeError =
+    seasons !== null ? seasonRangeError(resolveRange(range, seasons)) : null
   return (
     <>
       <JobRunner
         type="train"
         runLabel="Train model"
-      buildPayload={() => {
-        const resolved = resolveRange(range, seasons)
-        const rangeError = seasonRangeError(resolved)
-        if (rangeError) throw new Error(rangeError)
-        return {
-          ...seasonPayload(resolved),
-          ...(name.trim() !== '' ? { name: name.trim() } : {}),
-          enable_features: features.enable,
-          disable_features: features.disable,
-        }
-      }}
-      options={
-        <>
-          <p className="job-option-hint">
-            Training also calibrates the model automatically — no separate
-            calibrate step needed.
-          </p>
-          <SeasonRange value={range} onChange={setRange} />
-          <div className="job-option">
-            <label className="field-label" htmlFor="train-name">Model name</label>
-            <input
-              id="train-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value.replace(/[^A-Za-z0-9._-]/g, ''))}
-              pattern="[A-Za-z0-9._-]*"
-              placeholder={suggestion}
-            />
-            <p className="job-option-hint">
-              Leave empty to replace the current model.
-            </p>
+        buttonAlign="end"
+        buildPayload={() => {
+          const resolved = resolveRange(range, seasons)
+          const rangeError = seasonRangeError(resolved)
+          if (rangeError) throw new Error(rangeError)
+          return {
+            ...seasonPayload(resolved),
+            ...(name.trim() !== '' ? { name: name.trim() } : {}),
+            enable_features: features.enable,
+            disable_features: features.disable,
+          }
+        }}
+        options={
+          <div className="job-option train-options">
+            <div className="train-features">
+              <FeatureToggles value={features} onChange={setFeatures} />
+            </div>
+            <div className="train-controls">
+              <div className="job-option">
+                <label className="field-label" htmlFor="train-name">Model name</label>
+                <input
+                  id="train-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value.replace(/[^A-Za-z0-9._-]/g, ''))}
+                  pattern="[A-Za-z0-9._-]*"
+                  placeholder={suggestion}
+                />
+                <p className="job-option-hint">
+                  Leave empty to replace the current model.
+                </p>
+              </div>
+              <p className="job-option-hint">
+                Training also calibrates the model automatically — no separate
+                calibrate step needed.
+              </p>
+              <div className="season-pair">
+                <SeasonRange value={range} onChange={setRange} />
+                {rangeError !== null ? (
+                  <p className="save-status error season-range-error" role="alert">
+                    {rangeError}
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
-          <FeatureToggles value={features} onChange={setFeatures} />
-        </>
-      }
-      renderResult={(job) => <TrainResult job={job} />}
+        }
+        renderResult={(job) => <TrainResult job={job} />}
       />
       <PrereqHint
         when={status.state.phase === 'ready' && !status.state.data.data.has_raw_cache}

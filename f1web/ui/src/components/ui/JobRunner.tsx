@@ -11,6 +11,8 @@ interface JobRunnerProps {
   runLabel?: string
   /** Optional controls rendered alongside the Run button (inputs, toggles). */
   options?: ReactNode
+  /** 'end' pins the Run button to the bottom-right of the toolbar. */
+  buttonAlign?: 'start' | 'end'
   /** Build the job payload from the current option state. */
   buildPayload: () => Record<string, unknown>
   /** Render the JSON-safe result of a finished job. */
@@ -29,6 +31,7 @@ export function JobRunner({
   type,
   runLabel = 'Run',
   options,
+  buttonAlign,
   buildPayload,
   renderResult,
   onDone,
@@ -75,7 +78,12 @@ export function JobRunner({
     <section className="card">
       <div className="job-options">
         {options}
-        <button type="button" className="button" onClick={run} disabled={submitting || anyBusy}>
+        <button
+          type="button"
+          className={buttonAlign === 'end' ? 'button align-end' : 'button'}
+          onClick={run}
+          disabled={submitting || anyBusy}
+        >
           {submitting ? 'Queued…' : runLabel}
         </button>
       </div>

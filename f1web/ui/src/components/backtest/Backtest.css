@@ -11,26 +11,6 @@
   gap: var(--space-4);
 }
 
-/* Top section: baseline summary on the left, model comparison on the right. */
-.backtest-analytics-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-  align-items: start;
-}
-
-.analytics-right {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-@media (max-width: 64rem) {
-  .backtest-analytics-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* Compact chart matrix: raised figure cards, fixed 180px plots. */
 .chart-grid .chart-figure,
 .chart-grid-2 .chart-figure {

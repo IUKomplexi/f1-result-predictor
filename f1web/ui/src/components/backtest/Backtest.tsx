@@ -156,7 +156,11 @@ export function Backtest() {
       ) : state.phase === 'error' ? (
         <ErrorState message={state.message} onRetry={retry} />
       ) : (
-        <BacktestView backtest={state.data} reference={defaultStem(models)} />
+        <BacktestView
+          backtest={state.data}
+          reference={defaultStem(models)}
+          deployedLabel={deployed ?? DEFAULT_MODEL}
+        />
       )}
       <Calibration />
     </>
