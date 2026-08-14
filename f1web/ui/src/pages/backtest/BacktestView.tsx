@@ -1,7 +1,7 @@
 import { fmtNumber } from '../../lib/format'
 import type { Backtest, BacktestMetricRow } from '../../api/client'
-import { Badge } from '../ui/Badge'
-import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
+import { Badge } from '../../components/ui/Badge'
+import { Chart, type ChartDatum, type ChartSeries } from '../../components/ui/Chart'
 import {
   BASELINES,
   BASELINE_HELP,

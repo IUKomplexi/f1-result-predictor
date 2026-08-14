@@ -10,14 +10,14 @@ import {
   type ConfigResponse,
   type ModelsResponse,
 } from '../../api/client'
-import type { NavState, TabProps } from '../../App'
+import type { NavState, TabProps } from '../../types'
 import { useApi } from '../../hooks/useApi'
 import { debounce, type Debounced } from '../../lib/debounce'
-import { Badge } from '../ui/Badge'
-import { ConfirmDialog } from '../ui/ConfirmDialog'
-import { ErrorState, Skeleton } from '../ui/DataState'
-import { FeatureGroups } from '../ui/FeatureGroups'
-import { normPath } from '../backtest/lib'
+import { Badge } from '../../components/ui/Badge'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { ErrorState, Skeleton } from '../../components/ui/DataState'
+import { FeatureGroups } from '../../components/controls/FeatureGroups'
+import { normPath } from '../../lib/models'
 import './Settings.css'
 
 type ConfigMap = Record<string, Record<string, unknown>>

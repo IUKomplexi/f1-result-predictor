@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { getBacktest, getModels, getStatus, type ModelsResponse } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
-import { ErrorState, Skeleton } from '../ui/DataState'
-import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
-import { JobRunner } from '../ui/JobRunner'
-import { PrereqHint } from '../ui/PrereqHint'
+import { ErrorState, Skeleton } from '../../components/ui/DataState'
+import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../../components/controls/FeatureToggles'
+import { JobRunner } from '../../components/jobs/JobRunner'
+import { PrereqHint } from '../../components/ui/PrereqHint'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
@@ -12,12 +12,12 @@ import {
   seasonPayload,
   seasonRangeError,
   type SeasonRangeValue,
-} from '../ui/SeasonRange'
+} from '../../components/controls/SeasonRange'
 import { BacktestRunResult } from './BacktestRunResult'
 import { BacktestView } from './BacktestView'
-import { Calibration } from './Calibration'
+import { Calibration } from '../calibration/Calibration'
 import { ModelsOverview } from './ModelsOverview'
-import { DEFAULT_MODEL, defaultStem, deployedName, modelChoices, selectedPaths } from './lib'
+import { DEFAULT_MODEL, defaultStem, deployedName, modelChoices, selectedPaths } from '../../lib/models'
 import './Backtest.css'
 
 /**

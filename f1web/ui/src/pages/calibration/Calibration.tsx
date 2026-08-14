@@ -1,9 +1,9 @@
 import { getCalibration, type Calibration, type CalibrationTarget } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
 import { fmtNumber } from '../../lib/format'
-import { Badge } from '../ui/Badge'
-import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
-import { ErrorState, Skeleton } from '../ui/DataState'
+import { Badge } from '../../components/ui/Badge'
+import { Chart, type ChartDatum, type ChartSeries } from '../../components/ui/Chart'
+import { ErrorState, Skeleton } from '../../components/ui/DataState'
 
 const TARGET_LABEL: Record<string, string> = {
   scored: 'P scored',

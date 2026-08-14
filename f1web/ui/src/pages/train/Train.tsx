@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { getStatus, type Job } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
-import { JobRunner } from '../ui/JobRunner'
-import { PrereqHint } from '../ui/PrereqHint'
-import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../ui/FeatureToggles'
+import { JobRunner } from '../../components/jobs/JobRunner'
+import { PrereqHint } from '../../components/ui/PrereqHint'
+import { FeatureToggles, NO_FEATURE_OVERRIDES, type FeatureOverride } from '../../components/controls/FeatureToggles'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
@@ -11,7 +11,7 @@ import {
   seasonPayload,
   seasonRangeError,
   type SeasonRangeValue,
-} from '../ui/SeasonRange'
+} from '../../components/controls/SeasonRange'
 
 export function Train() {
   const status = useApi('status', () => getStatus())

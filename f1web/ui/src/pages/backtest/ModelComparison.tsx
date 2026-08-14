@@ -1,6 +1,6 @@
 import { fmtNumber } from '../../lib/format'
 import type { Backtest, BacktestMetricRow } from '../../api/client'
-import { Chart, type ChartDatum, type ChartSeries } from '../ui/Chart'
+import { Chart, type ChartDatum, type ChartSeries } from '../../components/ui/Chart'
 import {
   BASELINES,
   BASELINE_COLOR,

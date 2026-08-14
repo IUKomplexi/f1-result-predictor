@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getCalendar, getPrediction, type Status as PipelineStatus } from '../api/client'
-import type { NavState } from '../App'
-import type { LoadState } from './useApi'
+import { getCalendar, getPrediction, type Status as PipelineStatus } from '../../api/client'
+import type { NavState } from '../../types'
+import type { LoadState } from '../../hooks/useApi'
 
 /**
  * Race tab state machine: defaults to the global "next race" (falling back to

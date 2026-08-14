@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { cancelJob, type JobSummary } from '../../api/client'
 import { useJob, useJobs } from '../../hooks/useJob'
 import { fmtElapsed } from '../../lib/format'
-import { Badge } from './Badge'
-import { LogView } from './LogView'
+import { Badge } from '../ui/Badge'
+import { LogView } from '../ui/LogView'
 import './JobsWidget.css'
 
 const STATUS_VARIANT: Record<JobSummary['status'], 'ready' | 'missing' | 'warn' | 'info'> = {

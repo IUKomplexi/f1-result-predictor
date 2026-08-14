@@ -1,11 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/preact'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Calendar, Prediction, Status } from '../api/client'
-import { getCalendar, getPrediction } from '../api/client'
-import type { LoadState } from './useApi'
+import type { Calendar, Prediction, Status } from '../../api/client'
+import { getCalendar, getPrediction } from '../../api/client'
+import type { LoadState } from '../../hooks/useApi'
 import { useRaceCalendar } from './useRaceCalendar'
 
-vi.mock('../api/client', () => ({
+vi.mock('../../api/client', () => ({
   getCalendar: vi.fn(),
   getPrediction: vi.fn(),
 }))

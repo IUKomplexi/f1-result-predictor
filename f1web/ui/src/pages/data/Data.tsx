@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { getStatus, type Job } from '../../api/client'
 import { useApi } from '../../hooks/useApi'
-import { EmptyState } from '../ui/DataState'
-import { JobRunner } from '../ui/JobRunner'
+import { EmptyState } from '../../components/ui/DataState'
+import { JobRunner } from '../../components/jobs/JobRunner'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
   seasonPayload,
   seasonRangeError,
   type SeasonRangeValue,
-} from '../ui/SeasonRange'
-import { RefreshToggle } from '../ui/RefreshToggle'
+} from '../../components/controls/SeasonRange'
+import { RefreshToggle } from '../../components/controls/RefreshToggle'
 import './Data.css'
 
 export function Data() {

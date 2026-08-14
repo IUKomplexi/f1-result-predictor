@@ -1,8 +1,8 @@
 import { fmtDate } from '../../lib/format'
 import type { ModelInfo, ModelsResponse } from '../../api/client'
-import { Badge } from '../ui/Badge'
-import { Skeleton } from '../ui/DataState'
-import { deployedName } from './lib'
+import { Badge } from '../../components/ui/Badge'
+import { Skeleton } from '../../components/ui/DataState'
+import { deployedName } from '../../lib/models'
 
 /** Saved checkpoints at a glance (name, training window, rows, features). */
 export function ModelsOverview({ models }: { models: ModelsResponse | null }) {

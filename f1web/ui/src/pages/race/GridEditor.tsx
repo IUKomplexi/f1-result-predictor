@@ -1,6 +1,6 @@
 import type { PredictionRow } from '../../api/client'
 import { driverLabel } from '../../lib/format'
-import { Badge } from '../ui/Badge'
+import { Badge } from '../../components/ui/Badge'
 
 /**
  * Editable qualifying grid for an upcoming race: one row per starting

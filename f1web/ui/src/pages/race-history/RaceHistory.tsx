@@ -7,16 +7,16 @@ import {
   type Job,
   type ModelsResponse,
 } from '../../api/client'
-import type { TabProps } from '../../App'
+import type { TabProps } from '../../types'
 import { useApi } from '../../hooks/useApi'
 import { analyzeRace, type RaceResult } from '../../lib/analysis'
 import { driverLabel, fmtDate } from '../../lib/format'
-import { Badge } from '../ui/Badge'
-import { ErrorState, Skeleton } from '../ui/DataState'
-import { JobRunner } from '../ui/JobRunner'
+import { Badge } from '../../components/ui/Badge'
+import { ErrorState, Skeleton } from '../../components/ui/DataState'
+import { JobRunner } from '../../components/jobs/JobRunner'
 import { ModelPicker } from '../race/ModelPicker'
 import { RACE_DEFAULT_MODEL, modelPathFor } from '../race/lib'
-import { RefreshToggle } from '../ui/RefreshToggle'
+import { RefreshToggle } from '../../components/controls/RefreshToggle'
 import {
   DEFAULT_SEASON_RANGE,
   SeasonRange,
@@ -24,7 +24,7 @@ import {
   seasonPayload,
   seasonRangeError,
   type SeasonRangeValue,
-} from '../ui/SeasonRange'
+} from '../../components/controls/SeasonRange'
 import '../race/Race.css'
 import './RaceHistory.css'
 

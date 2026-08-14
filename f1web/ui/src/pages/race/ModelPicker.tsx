@@ -1,5 +1,5 @@
 import type { ModelsResponse } from '../../api/client'
-import { modelChoices } from '../backtest/lib'
+import { modelChoices } from '../../lib/models'
 import { RACE_DEFAULT_MODEL } from './lib'
 
 /**

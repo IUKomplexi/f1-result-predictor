@@ -1,5 +1,5 @@
 import type { ModelsResponse, PredictOverrides } from '../../api/client'
-import { DEFAULT_MODEL } from '../backtest/lib'
+import { DEFAULT_MODEL } from '../../lib/models'
 
 /** The "config default model" pseudo-choice (no model_path is sent). */
 export const RACE_DEFAULT_MODEL = DEFAULT_MODEL

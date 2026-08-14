@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { postJob, type Job } from '../../api/client'
 import { useJob, useJobs } from '../../hooks/useJob'
-import { LogView } from './LogView'
+import { LogView } from '../ui/LogView'
 import './JobRunner.css'
 
 interface JobRunnerProps {

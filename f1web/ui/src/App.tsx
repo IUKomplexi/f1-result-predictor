@@ -9,45 +9,28 @@ import {
   type KeyboardEvent,
 } from 'react'
 import { getStatus } from './api/client'
-import { Race } from './components/race/Race'
-import { RaceHistory } from './components/race-history/RaceHistory'
-import { Status } from './components/status/Status'
+import { Race } from './pages/race/Race'
+import { RaceHistory } from './pages/race-history/RaceHistory'
+import { Status } from './pages/status/Status'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { Skeleton } from './components/ui/DataState'
-import { JobsWidget } from './components/ui/JobsWidget'
+import { JobsWidget } from './components/jobs/JobsWidget'
 import { Badge } from './components/ui/Badge'
+import type { NavState, TabId, TabProps } from './types'
 
 // Chart-heavy views are lazy so Recharts isn't part of the initial bundle.
 const Backtest = lazy(() =>
-  import('./components/backtest/Backtest').then((m) => ({ default: m.Backtest })),
+  import('./pages/backtest/Backtest').then((m) => ({ default: m.Backtest })),
 )
 const Data = lazy(() =>
-  import('./components/data/Data').then((m) => ({ default: m.Data })),
+  import('./pages/data/Data').then((m) => ({ default: m.Data })),
 )
 const Train = lazy(() =>
-  import('./components/train/Train').then((m) => ({ default: m.Train })),
+  import('./pages/train/Train').then((m) => ({ default: m.Train })),
 )
 const Settings = lazy(() =>
-  import('./components/settings/Settings').then((m) => ({ default: m.Settings })),
+  import('./pages/settings/Settings').then((m) => ({ default: m.Settings })),
 )
-
-type TabId = 'status' | 'race' | 'history' | 'data' | 'train' | 'backtest' | 'settings'
-
-/** Cross-tab navigation payload (e.g. Race History → a specific race). */
-export interface NavState {
-  season?: number
-  round?: number
-}
-
-export interface TabProps {
-  onNavigate?: (tabId: string, state?: NavState) => void
-  navState?: NavState | null
-  /** A tab can veto navigation (e.g. Settings with unsaved edits). The guard
-   *  returns false to block; the component retries via onNavigate itself. */
-  setNavigateGuard?: (
-    guard: ((tabId: string, state?: NavState) => boolean) | null,
-  ) => void
-}
 
 interface TabEntry {
   id: TabId
