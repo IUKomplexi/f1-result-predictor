@@ -75,8 +75,3 @@
 .step-actions {
   flex: none;
 }
-
-.status-note {
-  margin-top: var(--space-4);
-  font-size: var(--text-sm);
-}
