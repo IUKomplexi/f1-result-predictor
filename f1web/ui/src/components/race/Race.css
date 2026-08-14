@@ -29,6 +29,13 @@
   flex-wrap: wrap;
 }
 
+/* Season selector with the model picker directly below it (left column). */
+.race-nav-left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -53,19 +60,25 @@
   padding: var(--space-2) var(--space-3);
 }
 
+/* Pager: the GP name + round sit above the prev/next/next-race buttons. */
 .pager {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.pager-buttons {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
 .pager-label {
-  min-width: 10rem;
-  max-width: 18rem;
+  max-width: 20rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: center;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -138,8 +151,6 @@
 /* --------------------------------------------------------- grid editor */
 
 .grid-editor-table {
-  max-height: 18rem;
-  overflow: auto;
   margin-top: var(--space-3);
 }
 
@@ -147,8 +158,8 @@
   margin: 0;
 }
 
-.grid-input {
-  width: 4.5rem;
+.grid-select {
+  min-width: 8rem;
   text-align: center;
   background: var(--bg-surface-raised);
   border: 1px solid var(--border-default);
@@ -159,15 +170,9 @@
   padding: var(--space-1) var(--space-2);
 }
 
-.grid-input:focus {
+.grid-select:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-
-.grid-input.invalid {
-  border-color: var(--danger, #e10600);
-  outline: 2px solid var(--danger, #e10600);
-  outline-offset: 0;
 }
 
 /* ------------------------------------------------------- race scoreboard */

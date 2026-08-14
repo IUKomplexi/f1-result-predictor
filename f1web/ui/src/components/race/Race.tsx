@@ -28,6 +28,11 @@ import './Race.css'
  */
 export function Race({ navState }: TabProps) {
   const status = useApi('status', () => getStatus())
+  const modelsState = useApi<ModelsResponse>('models', getModels)
+  const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
+  const [model, setModel] = useState<string>(RACE_DEFAULT_MODEL)
+  const [defaultModel, setDefaultModel] = useState<string>(RACE_DEFAULT_MODEL)
+  const [modelTouched, setModelTouched] = useState(false)
   const {
     season,
     round,
@@ -41,6 +46,16 @@ export function Race({ navState }: TabProps) {
     setRound,
     goToNextRace,
   } = useRaceCalendar(status.state, navState)
+
+  // Preselect the deployed model once the index loads; never clobber a choice
+  // the user already made. defaultModel is the baseline the "pending
+  // overrides" badge compares against.
+  useEffect(() => {
+    if (modelTouched || models === null) return
+    const deployed = deployedName(models) ?? RACE_DEFAULT_MODEL
+    setDefaultModel(deployed)
+    setModel(deployed)
+  }, [models, modelTouched])
 
   if (status.state.phase === 'loading') return <Skeleton rows={8} />
   if (status.state.phase === 'error') {
@@ -70,59 +85,69 @@ export function Race({ navState }: TabProps) {
       ) : null}
       <section className="card">
         <div className="race-nav">
-          <label className="field">
-            <span className="field-label">Season</span>
-            <select
-              className="select"
-              value={selected ?? ''}
-              onChange={(event) => selectSeason(Number(event.target.value))}
-            >
-              {seasons.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="race-nav-left">
+            <label className="field">
+              <span className="field-label">Season</span>
+              <select
+                className="select"
+                value={selected ?? ''}
+                onChange={(event) => selectSeason(Number(event.target.value))}
+              >
+                {seasons.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <ModelPicker
+              models={models}
+              value={model}
+              onChange={(value) => {
+                setModelTouched(true)
+                setModel(value)
+              }}
+            />
+          </div>
           <div className="pager">
-            <button
-              type="button"
-              className="button"
-              disabled={!canPrev}
-              onClick={() => setRound(rounds[idx - 1])}
-            >
-              ‹ Prev
-            </button>
             <span className="pager-label">
-              {round !== null
-                ? `${gpName ?? 'Race'} · Round ${round}`
-                : '—'}
+              {round !== null ? `${gpName ?? 'Race'} · Round ${round}` : '—'}
             </span>
-            <button
-              type="button"
-              className="button"
-              disabled={!canNext}
-              onClick={() => setRound(rounds[idx + 1])}
-            >
-              Next ›
-            </button>
-            {isNextRace ? (
-              <Badge variant="info">Upcoming</Badge>
-            ) : (
+            <div className="pager-buttons">
               <button
                 type="button"
                 className="button"
-                disabled={nextRace === null}
-                onClick={goToNextRace}
-                title={
-                  nextRace !== null
-                    ? `Jump to the next race (round ${nextRace.round})`
-                    : undefined
-                }
+                disabled={!canPrev}
+                onClick={() => setRound(rounds[idx - 1])}
               >
-                Next race
+                ‹ Prev
               </button>
-            )}
+              <button
+                type="button"
+                className="button"
+                disabled={!canNext}
+                onClick={() => setRound(rounds[idx + 1])}
+              >
+                Next ›
+              </button>
+              {isNextRace ? (
+                <Badge variant="info">Upcoming</Badge>
+              ) : (
+                <button
+                  type="button"
+                  className="button"
+                  disabled={nextRace === null}
+                  onClick={goToNextRace}
+                  title={
+                    nextRace !== null
+                      ? `Jump to the next race (round ${nextRace.round})`
+                      : undefined
+                  }
+                >
+                  Next race
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -130,7 +155,13 @@ export function Race({ navState }: TabProps) {
       {season === null || round === null ? (
         <Skeleton rows={10} />
       ) : (
-        <RacePanel season={season} round={round} />
+        <RacePanel
+          season={season}
+          round={round}
+          models={models}
+          model={model}
+          defaultModel={defaultModel}
+        />
       )}
     </>
   )
@@ -138,33 +169,29 @@ export function Race({ navState }: TabProps) {
 
 /**
  * One race's prediction via POST /api/predict so every per-request CLI
- * override is available: model checkpoint, a qualifying grid, refresh and
- * report writing. Feature overrides are NOT offered here — they only matter
+ * override is available: the model checkpoint and a qualifying grid. The
+ * report is always written (reports/prediction.md); "refresh from API" lives
+ * on the Data tab. Feature overrides are NOT offered here — they only matter
  * at training time (Train tab, or Backtest's walk-forward retraining). Edits
- * are local until "Apply changes"; the
- * request is cached server-side per override combination.
+ * are local until "Apply changes"; the request is cached server-side per
+ * override combination.
  */
-function RacePanel({ season, round }: { season: number; round: number }) {
-  const [refresh, setRefresh] = useState(false)
-  const [model, setModel] = useState<string>(RACE_DEFAULT_MODEL)
-  const [defaultModel, setDefaultModel] = useState<string>(RACE_DEFAULT_MODEL)
-  const [modelTouched, setModelTouched] = useState(false)
-  const [writeReport, setWriteReport] = useState(false)
+function RacePanel({
+  season,
+  round,
+  models,
+  model,
+  defaultModel,
+}: {
+  season: number
+  round: number
+  models: ModelsResponse | null
+  model: string
+  defaultModel: string
+}) {
   const [gridRows, setGridRows] = useState<Record<string, string> | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [applied, setApplied] = useState(0)
-  const modelsState = useApi<ModelsResponse>('models', getModels)
-  const models = modelsState.state.phase === 'ready' ? modelsState.state.data : null
-
-  // Preselect the deployed model once the index loads; never clobber a choice
-  // the user already made. defaultModel is the baseline the "pending
-  // overrides" badge compares against.
-  useEffect(() => {
-    if (modelTouched || models === null) return
-    const deployed = deployedName(models) ?? RACE_DEFAULT_MODEL
-    setDefaultModel(deployed)
-    setModel(deployed)
-  }, [models, modelTouched])
 
   // The qualifying grid belongs to one race; switching races drops the edits.
   useEffect(() => {
@@ -172,15 +199,15 @@ function RacePanel({ season, round }: { season: number; round: number }) {
   }, [season, round])
 
   const { state, retry } = useApi(
-    `race-${season}-${round}-${applied}-${refresh}`,
+    `race-${season}-${round}-${applied}`,
     () => {
       const { body } = racePredictBody(models, {
         season,
         round,
-        refresh,
+        refresh: false,
         model,
         gridRows,
-        writeReport,
+        writeReport: true,
       })
       return postPrediction(body)
     },
@@ -196,10 +223,10 @@ function RacePanel({ season, round }: { season: number; round: number }) {
     const { error } = racePredictBody(models, {
       season,
       round,
-      refresh,
+      refresh: false,
       model,
       gridRows,
-      writeReport,
+      writeReport: true,
     })
     if (error !== null) {
       setApplyError(error)
@@ -214,40 +241,6 @@ function RacePanel({ season, round }: { season: number; round: number }) {
   return (
     <>
       <section className="card race-controls">
-        <div className="race-controls-row">
-          <ModelPicker
-            models={models}
-            value={model}
-            onChange={(value) => {
-              setModelTouched(true)
-              setModel(value)
-            }}
-          />
-          <div className="race-toggles">
-            <label
-              className="check-line"
-              title="Download fresh data instead of using the saved copy."
-            >
-              <input
-                type="checkbox"
-                checked={refresh}
-                onChange={(e) => setRefresh(e.target.checked)}
-              />
-              Re-fetch from API (ignore cache)
-            </label>
-            <label
-              className="check-line"
-              title="Save the result as reports/prediction.md."
-            >
-              <input
-                type="checkbox"
-                checked={writeReport}
-                onChange={(e) => setWriteReport(e.target.checked)}
-              />
-              Write report
-            </label>
-          </div>
-        </div>
         <details className="advanced-options">
           <summary>Advanced</summary>
           <div className="job-options-inner">
@@ -258,7 +251,12 @@ function RacePanel({ season, round }: { season: number; round: number }) {
                 onChange={setGridRows}
                 onReset={() => setGridRows(null)}
               />
-            ) : null}
+            ) : (
+              <p className="muted">
+                Grid overrides only apply to an upcoming race with no results
+                yet.
+              </p>
+            )}
           </div>
         </details>
         <div className="race-apply-row">

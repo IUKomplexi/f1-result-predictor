@@ -3,11 +3,12 @@ import { driverLabel } from '../../lib/format'
 import { Badge } from '../ui/Badge'
 
 /**
- * Editable qualifying grid for an upcoming race: one numeric input per
- * driver, seeded from the prediction's own grid. Edits stay local until the
- * user applies them (POST /api/predict with a grid_csv body); empty cells
- * keep the model's grid for that driver. Not shown for verified races — a
- * completed race has no grid to feed.
+ * Editable qualifying grid for an upcoming race: one dropdown per driver
+ * seeded from the prediction's own grid. The "Use model grid" option keeps
+ * the model's guess for that driver; picking a number sets the grid position
+ * override. Edits stay local until the user applies them (POST /api/predict
+ * with a grid_csv body). Not shown for verified races — a completed race has
+ * no grid to feed.
  */
 export function GridEditor({
   drivers,
@@ -16,13 +17,13 @@ export function GridEditor({
   onReset,
 }: {
   drivers: PredictionRow[]
-  /** null = pristine (inputs show the prediction's grid); edits populate it. */
+  /** null = pristine (dropdowns show the prediction's grid); edits populate it. */
   values: Record<string, string> | null
   onChange: (rows: Record<string, string>) => void
   onReset: () => void
 }) {
   const isDirty = values !== null
-  const invalid = (value: string) => value.trim() !== '' && !/^[1-9]\d*$/.test(value.trim())
+  const positions = Array.from({ length: Math.max(drivers.length, 1) }, (_, i) => i + 1)
   return (
     <div className="job-option grid-editor">
       <div className="feature-toggle-head">
@@ -35,9 +36,10 @@ export function GridEditor({
         </button>
       </div>
       <p className="job-option-hint">
-        Type the real starting grid here. Empty cells keep the model's guess.
+        Pick the real starting grid per driver. "Use model grid" keeps the
+        model's guess.
       </p>
-      <div className="table-wrap grid-editor-table">
+      <div className="grid-editor-table">
         <table className="data-table grid-table">
           <thead>
             <tr>
@@ -55,17 +57,21 @@ export function GridEditor({
                 <tr key={row.driver_id}>
                   <td className="driver">{driverLabel(row.driver_id)}</td>
                   <td className="num">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      className={`grid-input${invalid(current) ? ' invalid' : ''}`}
+                    <select
+                      className="grid-select"
                       value={current}
                       aria-label={`Grid position for ${driverLabel(row.driver_id)}`}
-                      aria-invalid={invalid(current)}
                       onChange={(e) =>
                         onChange({ ...(values ?? {}), [row.driver_id]: e.target.value })
                       }
-                    />
+                    >
+                      <option value="">Use model grid</option>
+                      {positions.map((p) => (
+                        <option key={p} value={String(p)}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                 </tr>
               )

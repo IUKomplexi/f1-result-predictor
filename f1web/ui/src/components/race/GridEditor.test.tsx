@@ -31,22 +31,31 @@ const drivers: PredictionRow[] = [
 ]
 
 describe('GridEditor', () => {
-  it('seeds inputs from the prediction grid and reports edits', () => {
+  it('seeds dropdowns from the prediction grid and reports edits', () => {
     const onChange = vi.fn()
     render(<GridEditor drivers={drivers} values={null} onChange={onChange} onReset={() => {}} />)
-    const input = screen.getByLabelText('Grid position for Russell') as HTMLInputElement
-    expect(input.value).toBe('1')
-    fireEvent.input(input, { target: { value: '7' } })
-    expect(onChange).toHaveBeenCalledWith({ russell: '7' })
+    const select = screen.getByLabelText('Grid position for Russell') as HTMLSelectElement
+    expect(select.value).toBe('1')
+    fireEvent.change(select, { target: { value: '2' } })
+    expect(onChange).toHaveBeenCalledWith({ russell: '2' })
+  })
+
+  it('offers a "Use model grid" no-override option plus one option per position', () => {
+    render(<GridEditor drivers={drivers} values={null} onChange={() => {}} onReset={() => {}} />)
+    const select = screen.getByLabelText('Grid position for Russell') as HTMLSelectElement
+    const options = Array.from(select.options).map((o) => o.value)
+    expect(options[0]).toBe('') // "Use model grid"
+    expect(options).toContain('1')
+    expect(options).toContain('2')
   })
 
   it('shows edited values over the seed and accumulates edits per driver', () => {
     const onChange = vi.fn()
-    render(<GridEditor drivers={drivers} values={{ norris: '5' }} onChange={onChange} onReset={() => {}} />)
-    const norris = screen.getByLabelText('Grid position for Norris') as HTMLInputElement
-    expect(norris.value).toBe('5')
-    fireEvent.input(norris, { target: { value: '6' } })
-    expect(onChange).toHaveBeenCalledWith({ norris: '6' })
+    render(<GridEditor drivers={drivers} values={{ norris: '1' }} onChange={onChange} onReset={() => {}} />)
+    const norris = screen.getByLabelText('Grid position for Norris') as HTMLSelectElement
+    expect(norris.value).toBe('1')
+    fireEvent.change(norris, { target: { value: '2' } })
+    expect(onChange).toHaveBeenCalledWith({ norris: '2' })
   })
 
   it('reset is available only once the grid is dirty', () => {
@@ -60,12 +69,5 @@ describe('GridEditor', () => {
     expect(reset().disabled).toBe(false)
     fireEvent.click(reset())
     expect(onReset).toHaveBeenCalledOnce()
-  })
-
-  it('marks non-integer input invalid for the backend validation', () => {
-    render(<GridEditor drivers={drivers} values={{ russell: 'x' }} onChange={() => {}} onReset={() => {}} />)
-    const input = screen.getByLabelText('Grid position for Russell') as HTMLInputElement
-    expect(input.classList.contains('invalid')).toBe(true)
-    expect(input.getAttribute('aria-invalid')).toBe('true')
   })
 })
