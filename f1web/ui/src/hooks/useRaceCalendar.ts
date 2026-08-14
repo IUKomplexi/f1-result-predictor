@@ -23,6 +23,8 @@ export function useRaceCalendar(
   roundNames: Map<number, string>
   /** The global next race (from /api/prediction), for the quick-jump. */
   nextRace: { season: number; round: number } | null
+  /** Why the next-race lookup failed (null when it succeeded or is pending). */
+  primeError: string | null
   /** The season shown in the picker (season ?? newest configured season). */
   selected: number | null
   /** Selectable seasons, newest first (a next-race season beyond the
@@ -44,6 +46,9 @@ export function useRaceCalendar(
   const [roundsSeason, setRoundsSeason] = useState<number | null>(null)
   const [nextRace, setNextRace] = useState<{ season: number; round: number } | null>(null)
   const [primed, setPrimed] = useState(false)
+  // When the next-race lookup fails (e.g. a checkpoint/feature mismatch), the
+  // reason is surfaced in the Race view instead of silently falling back.
+  const [primeError, setPrimeError] = useState<string | null>(null)
 
   const configuredEnd = status.phase === 'ready' ? status.data.seasons.end : null
   const configuredStart = status.phase === 'ready' ? status.data.seasons.start : null
@@ -61,12 +66,16 @@ export function useRaceCalendar(
     const fallbackSeason = status.data.seasons.end
     getPrediction()
       .then((pred) => {
+        setPrimeError(null)
         setSeason(pred.season)
         setRound(pred.round)
         setNextRace({ season: pred.season, round: pred.round })
       })
-      .catch(() => {
-        // Fall back to the newest configured season (no round -> snapped below).
+      .catch((error: unknown) => {
+        // Keep the reason visible (e.g. "checkpoint feature set does not
+        // match … retrain with model/train.py") and fall back to the newest
+        // configured season (no round -> snapped below).
+        setPrimeError(error instanceof Error ? error.message : String(error))
         setSeason(fallbackSeason)
         setRound(null)
       })
@@ -139,6 +148,7 @@ export function useRaceCalendar(
     rounds,
     roundNames,
     nextRace,
+    primeError,
     selected,
     seasons,
     selectSeason,

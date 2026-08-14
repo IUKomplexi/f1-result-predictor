@@ -34,6 +34,7 @@ export function Race({ navState }: TabProps) {
     rounds,
     roundNames,
     nextRace,
+    primeError,
     selected,
     seasons,
     selectSeason,
@@ -55,6 +56,18 @@ export function Race({ navState }: TabProps) {
 
   return (
     <>
+      {primeError ? (
+        <section className="card race-prime-error" role="alert">
+          <p className="save-status error">
+            <strong>Prediction unavailable:</strong> {primeError}
+          </p>
+          <p className="muted">
+            The deployed model's feature set does not match the configured
+            features — retrain it from the Train tab (leave the model name
+            empty to replace the current model).
+          </p>
+        </section>
+      ) : null}
       <section className="card">
         <div className="race-nav">
           <label className="field">

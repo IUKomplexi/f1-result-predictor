@@ -13,7 +13,7 @@ vi.mock('../api/client', () => ({
 const status: LoadState<Status> = {
   phase: 'ready',
   data: {
-    seasons: { start: 2010, end: 2026, data_start: 2014, data_end: 2026 },
+    seasons: { start: 2014, end: 2026, data_start: 2014, data_end: 2026 },
     model: {
       checkpoint: 'data/model/hurdle.joblib',
       calibrators: 'data/model/calibrators.joblib',
@@ -99,6 +99,21 @@ describe('useRaceCalendar', () => {
     act(() => result.current.selectSeason(2026))
     await waitFor(() => expect(result.current.round).toBe(12)) // next race, not 24
     expect(result.current.rounds.includes(result.current.round as number)).toBe(true)
+  })
+
+  it('surfaces the next-race lookup error instead of hiding it', async () => {
+    vi.mocked(getPrediction).mockRejectedValue(
+      new Error(
+        "checkpoint feature set does not match the requested feature set; retrain with model/train.py",
+      ),
+    )
+    vi.mocked(getCalendar).mockResolvedValue(CALENDAR_2026)
+    const { result } = renderHook(() => useRaceCalendar(status))
+    await waitFor(() => expect(result.current.season).toBe(2026))
+    await waitFor(() => expect(result.current.primeError).toContain('retrain with model/train.py'))
+    // Falls back to the newest configured season (round snaps after calendar).
+    await waitFor(() => expect(result.current.round).toBe(23))
+    expect(result.current.nextRace).toBeNull()
   })
 
   it('never snaps against a stale calendar list still in flight', async () => {
