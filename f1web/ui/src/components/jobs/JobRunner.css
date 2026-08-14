@@ -6,11 +6,11 @@
    single cohesive row instead of floating independently. */
 .job-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, max-content));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-3) var(--space-4);
   align-items: end;
   background: var(--bg-surface-raised);
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-default);
   margin-bottom: var(--space-4);
@@ -52,46 +52,80 @@
 .job-options > .button {
   height: 2.25rem;
   align-self: end;
+  justify-self: start;
 }
 
 /* Train tab: pin the Run button to the bottom-right of the toolbar. */
 .job-options > .button.align-end {
-  grid-column: 1 / -1;
   justify-self: end;
 }
 
-/* Train tab: options span the full toolbar — features on the left, model
-   name + season range on the right (model name above the seasons). */
-.job-option.train-options {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 26rem;
-  gap: var(--space-6);
+/* Train tab: model/range controls form the top row, with feature overrides
+   below and the existing action aligned to the right. */
+.job-options-train {
+  grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 1.2fr) auto;
   align-items: start;
 }
 
-@media (max-width: 64rem) {
-  .job-option.train-options {
-    grid-template-columns: 1fr;
-  }
+.job-options-train .train-controls {
+  grid-column: 1 / 3;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 1.2fr);
+  gap: var(--space-3) var(--space-5);
+  align-items: start;
+  min-width: 0;
+  width: 100%;
 }
 
-.train-features {
+.job-options-train .train-features {
+  grid-column: 1 / -1;
   min-width: 0;
 }
 
 .train-controls {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
   min-width: 0;
+}
+
+.train-calibration-hint {
+  grid-column: 1 / -1;
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.job-options-train .season-pair {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.job-options-train > .button {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: end;
+}
+
+@media (max-width: 64rem) {
+  .job-options-train {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .job-options-train .train-controls {
+    grid-column: 1 / -1;
+  }
+
+  .job-options-train > .button {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .job-options-train .train-controls {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 /* Start + End season side by side, with the range alert below them. */
 .season-pair {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-3);
   align-items: flex-start;
 }
 

@@ -21,34 +21,28 @@
   flex-wrap: wrap;
 }
 
-/* Unified header & control deck: title + meta centered across the deck,
-   pager top-right and model picker bottom-right, season selector below. */
+/* Unified header & control deck: race identity on the left, navigation and
+   model controls on the right, with the season and overrides below. */
 .race-deck {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .race-deck-header {
-  position: relative;
-  display: flex;
-  justify-content: flex-end;
-  min-height: 7.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, auto);
+  gap: var(--space-6);
+  align-items: start;
 }
 
-/* Centered in the middle of the whole deck (from the pager's perspective). */
 .race-title-group {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  max-width: calc(100% - 2 * 26rem);
+  min-width: 0;
+  padding-top: var(--space-2);
 }
 
 .race-title-group .meta-line {
   margin-top: var(--space-1);
-  justify-content: center;
 }
 
 /* Right column: pager on top, model picker below, aligned to the right. */
@@ -56,19 +50,24 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: var(--space-4);
-  padding-left: var(--space-6);
+  gap: var(--space-3);
+  min-width: 20rem;
 }
 
 .model-slot {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  width: 100%;
+}
+
+.model-slot .field {
+  width: min(100%, 20rem);
 }
 
 /* Season selector sits below the title/meta text, left side. */
 .season-row {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 .advanced-options-inline {
@@ -111,6 +110,22 @@
   flex-wrap: wrap;
 }
 
+@media (max-width: 52rem) {
+  .race-deck-header {
+    grid-template-columns: 1fr;
+  }
+
+  .race-deck-controls {
+    align-items: flex-start;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .model-slot {
+    align-items: flex-start;
+  }
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -147,6 +162,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .pager-label {

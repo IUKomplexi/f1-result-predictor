@@ -13,6 +13,12 @@ interface JobRunnerProps {
   options?: ReactNode
   /** 'end' pins the Run button to the bottom-right of the toolbar. */
   buttonAlign?: 'start' | 'end'
+  /** Optional layout variant for pages with a structured control toolbar. */
+  layout?: 'default' | 'train'
+  /** Additional class for the runner section. */
+  className?: string
+  /** Render without the default outer card when embedded in a parent section. */
+  card?: boolean
   /** Build the job payload from the current option state. */
   buildPayload: () => Record<string, unknown>
   /** Render the JSON-safe result of a finished job. */
@@ -32,6 +38,9 @@ export function JobRunner({
   runLabel = 'Run',
   options,
   buttonAlign,
+  layout = 'default',
+  className,
+  card = true,
   buildPayload,
   renderResult,
   onDone,
@@ -75,8 +84,8 @@ export function JobRunner({
   }
 
   return (
-    <section className="card">
-      <div className="job-options">
+    <section className={`${card ? 'card ' : ''}${className ?? ''}`.trim()}>
+      <div className={`job-options job-options-${layout}`}>
         {options}
         <button
           type="button"

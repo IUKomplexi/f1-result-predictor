@@ -29,6 +29,7 @@ export function Train() {
         type="train"
         runLabel="Train model"
         buttonAlign="end"
+        layout="train"
         buildPayload={() => {
           const resolved = resolveRange(range, seasons)
           const rangeError = seasonRangeError(resolved)
@@ -41,10 +42,7 @@ export function Train() {
           }
         }}
         options={
-          <div className="job-option train-options">
-            <div className="train-features">
-              <FeatureToggles value={features} onChange={setFeatures} />
-            </div>
+          <>
             <div className="train-controls">
               <div className="job-option">
                 <label className="field-label" htmlFor="train-name">Model name</label>
@@ -60,10 +58,6 @@ export function Train() {
                   Leave empty to replace the current model.
                 </p>
               </div>
-              <p className="job-option-hint">
-                Training also calibrates the model automatically — no separate
-                calibrate step needed.
-              </p>
               <div className="season-pair">
                 <SeasonRange value={range} onChange={setRange} />
                 {rangeError !== null ? (
@@ -72,8 +66,15 @@ export function Train() {
                   </p>
                 ) : null}
               </div>
+              <p className="job-option-hint train-calibration-hint">
+                Training also calibrates the model automatically — no separate
+                calibrate step needed.
+              </p>
             </div>
-          </div>
+            <div className="train-features">
+              <FeatureToggles value={features} onChange={setFeatures} />
+            </div>
+          </>
         }
         renderResult={(job) => <TrainResult job={job} />}
       />
