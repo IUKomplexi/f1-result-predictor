@@ -4,6 +4,15 @@ import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/DataState'
 import { deployedName } from '../../lib/models'
 
+/** "max_iter=200 · learning_rate=0.05" pairs, keys sorted; null when absent. */
+function formatParams(params: Record<string, number> | undefined): string | null {
+  if (!params) return null
+  return Object.entries(params)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join(' · ')
+}
+
 /** Saved checkpoints at a glance (name, training window, rows, features). */
 export function ModelsOverview({
   models,
@@ -32,7 +41,7 @@ export function ModelsOverview({
                 <th scope="col">Seasons</th>
                 <th scope="col" className="num">Rows</th>
                 <th scope="col" className="num">Features</th>
-                <th scope="col" className="num">Params</th>
+                <th scope="col">Params</th>
                 <th scope="col">Trained</th>
               </tr>
             </thead>
@@ -60,7 +69,7 @@ function ModelRow({ name, info, deployed }: { name: string; info: ModelInfo; dep
       <td>{info.season_range ? `${info.season_range[0]}–${info.season_range[1]}` : '–'}</td>
       <td className="num">{info.rows ?? '–'}</td>
       <td className="num">{info.features?.length ?? '–'}</td>
-      <td className="num">{info.params ? Object.keys(info.params).length : '–'}</td>
+      <td>{formatParams(info.params) ?? '–'}</td>
       <td className="muted">{trainedAt}</td>
     </tr>
   )
