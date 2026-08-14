@@ -10,7 +10,7 @@ import './JobOptions.css'
 export function RefreshToggle({
   value,
   onChange,
-  label = 'Re-fetch from API (ignore cache)',
+  label = 'Re-fetch from API',
   hint = 'Off by default: saved data is reused. Turn on to download fresh data — do this after a race weekend so new results are picked up.',
 }: {
   value: boolean

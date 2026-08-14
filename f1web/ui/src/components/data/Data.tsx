@@ -46,13 +46,6 @@ export function Data() {
         }
         renderResult={(job) => <FetchResult job={job} />}
       />
-      <p className="muted config-intro">
-        Downloads race data from the Jolpica API into <code>data/raw</code>.
-        Run it once, and again when a new race happens — everything else
-        (train, backtest, predict) uses this downloaded data. Leave the
-        seasons empty for the default range. Runs in the background; only one
-        job runs at a time.
-      </p>
       {status.state.phase === 'ready' && !status.state.data.data.has_raw_cache ? (
         <EmptyState title="No data downloaded yet">
           Click <strong>Fetch data</strong> above first — nothing else can run

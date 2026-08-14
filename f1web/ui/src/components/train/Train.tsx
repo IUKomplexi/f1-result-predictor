@@ -39,11 +39,11 @@ export function Train() {
       }}
       options={
         <>
-          <SeasonRange value={range} onChange={setRange} />
           <p className="job-option-hint">
             Training also calibrates the model automatically — no separate
             calibrate step needed.
           </p>
+          <SeasonRange value={range} onChange={setRange} />
           <div className="job-option">
             <label className="field-label" htmlFor="train-name">Model name</label>
             <input
@@ -55,9 +55,7 @@ export function Train() {
               placeholder={suggestion}
             />
             <p className="job-option-hint">
-              Leave empty to replace the current model, or type a name (letters,
-              numbers, <code>.</code>, <code>_</code>, <code>-</code>) to save a
-              new model for the Race tab.
+              Leave empty to replace the current model.
             </p>
           </div>
           <FeatureToggles value={features} onChange={setFeatures} />

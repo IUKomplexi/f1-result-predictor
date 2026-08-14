@@ -65,8 +65,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  align-items: flex-end;
+  align-items: flex-start;
   margin-top: var(--space-3);
+}
+
+/* Equal-width option boxes so the walk-forward / quantize checkboxes sit
+   side by side with their check marks on the same line. */
+.advanced-options .job-options-inner > .job-option {
+  flex: 1 1 15rem;
 }
 
 .refresh-check {

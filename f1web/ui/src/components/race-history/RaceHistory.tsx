@@ -134,8 +134,8 @@ export function RaceHistory({ onNavigate }: TabProps) {
               <RefreshToggle
                 value={refresh}
                 onChange={setRefresh}
-                label="Recompute all races (ignore prediction cache)"
-                hint="Off by default: old results are reused. Turn on after a re-fetch or retrain to calculate everything again."
+                label="Recompute all races"
+                hint="Re-run after new race data or a retrain to calculate everything again."
               />
             </>
           }

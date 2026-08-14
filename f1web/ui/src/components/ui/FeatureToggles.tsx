@@ -73,12 +73,6 @@ export function FeatureToggles({
       onToggle={toggle}
       resetLabel="Reset to config defaults"
       onReset={() => onChange(NO_FEATURE_OVERRIDES)}
-      hint={
-        <p className="job-option-hint">
-          Overrides apply to this run only; the config defaults (and the
-          deployed model) are unchanged.
-        </p>
-      }
     />
   )
 }

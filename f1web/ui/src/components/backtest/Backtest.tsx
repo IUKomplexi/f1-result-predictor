@@ -131,6 +131,10 @@ export function Backtest() {
                     />
                     Quantize points
                   </label>
+                  <p className="job-option-hint">
+                    Rounds predicted points to real F1 values (25, 18, 15,
+                    12, 10, …) — matching what the deployed predictor outputs.
+                  </p>
                 </div>
                 {walkForward ? (
                   <FeatureToggles value={features} onChange={setFeatures} />
