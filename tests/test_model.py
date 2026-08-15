@@ -316,6 +316,63 @@ def test_update_model_index_roundtrip(tmp_path):
     assert len(index) == 2
 
 
+def test_run_records_override_params(tmp_path, monkeypatch):
+    """run() trains with the passed params override and records it in the index."""
+    import json
+
+    import model.train as train_module
+    from f1core.config import load_config
+
+    seen: dict = {}
+
+    def fake_build_dataset(client, seasons, cache_path=None):
+        return pd.DataFrame({"season": [2020, 2021]})
+
+    def fake_train_final_model(df, feats=None, params=None):
+        seen["params"] = dict(params)
+        return object()
+
+    monkeypatch.setattr(train_module, "build_dataset", fake_build_dataset)
+    monkeypatch.setattr(train_module, "train_final_model", fake_train_final_model)
+
+    cfg = load_config()
+    out = tmp_path / "model" / "custom.joblib"
+    result = train_module.run(
+        start=2020, end=2021, out=str(out), params={"max_iter": 5}, cfg=cfg,
+        cache_dir=str(tmp_path / "raw"), dataset=str(tmp_path / "features.parquet"),
+    )
+    assert seen["params"] == {"max_iter": 5}  # the override won, not the config
+    assert result["params"] == {"max_iter": 5}
+    index = json.loads((tmp_path / "model" / "index.json").read_text(encoding="utf-8"))
+    assert index["custom"]["params"] == {"max_iter": 5}
+
+
+def test_run_defaults_params_to_config(tmp_path, monkeypatch):
+    """Without an override, run() trains and records the config [model.params]."""
+    import model.train as train_module
+    from f1core.config import load_config
+
+    seen: dict = {}
+
+    def fake_build_dataset(client, seasons, cache_path=None):
+        return pd.DataFrame({"season": [2020, 2021]})
+
+    def fake_train_final_model(df, feats=None, params=None):
+        seen["params"] = dict(params)
+        return object()
+
+    monkeypatch.setattr(train_module, "build_dataset", fake_build_dataset)
+    monkeypatch.setattr(train_module, "train_final_model", fake_train_final_model)
+
+    cfg = load_config()
+    out = tmp_path / "model" / "default.joblib"
+    train_module.run(
+        start=2020, end=2021, out=str(out), cfg=cfg,
+        cache_dir=str(tmp_path / "raw"), dataset=str(tmp_path / "features.parquet"),
+    )
+    assert seen["params"] == model_params(cfg)
+
+
 def test_quantize_points_nan_maps_to_zero():
     from model.train import quantize_points
 

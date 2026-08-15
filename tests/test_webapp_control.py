@@ -328,6 +328,7 @@ def test_job_payload_forwards_all_cli_options(tmp_path, monkeypatch):
         "history": {"start": 2024, "end": 2026, "refresh": True},
         "train": {
             "start": 2012, "end": 2024, "refresh": True, "name": "my-model",
+            "params": {"max_iter": 500, "learning_rate": 0.1},
             "enable_features": ["grid"], "disable_features": ["season"],
         },
         "calibrate": {
@@ -362,7 +363,67 @@ def test_job_rejects_unknown_feature_id(tmp_path, monkeypatch):
     assert "unknown feature" in resp.json()["error"]
 
 
+def test_job_rejects_bad_params_payload(tmp_path, monkeypatch):
+    """Hyperparameter overrides are validated up front: dict of numbers, known keys."""
+    client = _jobs_client(tmp_path, monkeypatch)
+    # Non-numeric value -> 400.
+    resp = client.post(
+        "/api/jobs",
+        json={"type": "train", "payload": {"params": {"max_iter": "lots"}}},
+    )
+    assert resp.status_code == 400
+    assert "dict of numbers" in resp.json()["error"]
+    # A bool is not a number -> 400.
+    resp = client.post(
+        "/api/jobs",
+        json={"type": "train", "payload": {"params": {"max_iter": True}}},
+    )
+    assert resp.status_code == 400
+    # Unknown key -> 422 (mirrors the config validation for [model.params]).
+    resp = client.post(
+        "/api/jobs",
+        json={"type": "train", "payload": {"params": {"n_estimators": 100}}},
+    )
+    assert resp.status_code == 422
+    assert "unknown parameter" in resp.json()["error"]
+    # Not an object at all -> 400.
+    resp = client.post(
+        "/api/jobs",
+        json={"type": "train", "payload": {"params": [1, 2, 3]}},
+    )
+    assert resp.status_code == 400
+
+
 # ------------------------------------------- jobs: train runs calibration
+
+
+def test_train_handler_forwards_params_override(tmp_path, monkeypatch):
+    """Per-run hyperparameter overrides reach run_train unchanged."""
+    import f1web.jobs as jobs_module
+    import model.calibrate as calibrate_module
+    import model.train as train_module
+    from f1core.config import config_to_toml, load_config
+
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(config_to_toml(load_config()), encoding="utf-8")
+    monkeypatch.setattr(jobs_module, "REPO_ROOT", tmp_path)
+    calls = {}
+
+    def fake_train(**kw):
+        calls["train"] = kw
+        return {"checkpoint": kw["out"], "rows": 42}
+
+    monkeypatch.setattr(train_module, "run", fake_train)
+    monkeypatch.setattr(
+        calibrate_module, "run", lambda **kw: {"calibrators": kw["out"]}
+    )
+
+    result = jobs_module._train_handler(
+        {"name": "exp", "params": {"max_iter": 300, "learning_rate": 0.1}},
+        lambda line: None,
+    )
+    assert calls["train"]["params"] == {"max_iter": 300, "learning_rate": 0.1}
+    assert result["calibrated"] is True
 
 
 def test_train_handler_calibrates_named_checkpoint(tmp_path, monkeypatch):
@@ -392,6 +453,8 @@ def test_train_handler_calibrates_named_checkpoint(tmp_path, monkeypatch):
     result = jobs_module._train_handler({"name": "my-model"}, lambda line: None)
 
     assert calls["train"]["out"] == "data/model/my-model.joblib"
+    # No params override in the payload -> None reaches run_train (config fallback).
+    assert calls["train"]["params"] is None
     # The named checkpoint is calibrated on its own path.
     assert calls["calibrate"]["model_path"] == "data/model/my-model.joblib"
     assert calls["calibrate"]["start"] == calls["train"]["start"]

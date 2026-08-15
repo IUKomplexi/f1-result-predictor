@@ -160,3 +160,39 @@
 .feature-toggle-check {
   accent-color: var(--accent);
 }
+
+/* --- ModelParams --- */
+.field-help {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.field-help code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.param-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.param-grid .field {
+  flex: 1 1 9rem;
+  min-width: 9rem;
+}
+
+/* Locked display (Settings tab): the whole grid greys out, inputs inert. */
+.param-grid.locked {
+  opacity: 0.65;
+}
+
+.param-grid.locked input[type='number'] {
+  cursor: not-allowed;
+}
+
+.param-grid .field-help {
+  flex: 1 1 100%;
+}

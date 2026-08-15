@@ -17,6 +17,7 @@ import { Badge } from '../../components/ui/Badge'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ErrorState, Skeleton } from '../../components/ui/DataState'
 import { FeatureGroups } from '../../components/controls/FeatureGroups'
+import { ModelParams } from '../../components/controls/ModelParams'
 import { normPath } from '../../lib/models'
 import './Settings.css'
 
@@ -72,7 +73,6 @@ export function Settings(props: TabProps) {
 type EditorAction =
   | { type: 'sync'; data: ConfigResponse }
   | { type: 'set-value'; section: string; key: string; value: unknown }
-  | { type: 'set-param'; key: string; value: number }
   | { type: 'toggle-feature'; id: string; checked: boolean }
 
 function editorReducer(editor: Editor, action: EditorAction): Editor {
@@ -87,17 +87,6 @@ function editorReducer(editor: Editor, action: EditorAction): Editor {
           [action.section]: { ...editor.cfg[action.section], [action.key]: action.value },
         },
       }
-    case 'set-param': {
-      const params = { ...(editor.cfg.model?.params as Record<string, unknown> | undefined) }
-      params[action.key] = action.value
-      return {
-        ...editor,
-        cfg: {
-          ...editor.cfg,
-          model: { ...editor.cfg.model, params },
-        },
-      }
-    }
     case 'toggle-feature': {
       const current = (editor.cfg.features?.enabled as string[] | null) ?? editor.defaults
       const next = action.checked
@@ -159,10 +148,6 @@ function SettingsForm({
     dispatch({ type: 'set-value', section, key, value })
   }
 
-  const setParam = (key: string, value: number) => {
-    dispatch({ type: 'set-param', key, value })
-  }
-
   const toggleFeature = (id: string, checked: boolean) => {
     dispatch({ type: 'toggle-feature', id, checked })
   }
@@ -196,7 +181,7 @@ function SettingsForm({
       await new Promise((resolve) => setTimeout(resolve, 0))
       await putConfig(editorRef.current.cfg)
       setSavedCfg(structuredClone(editorRef.current.cfg) as ConfigMap)
-      setStatus({ kind: 'ok', text: 'Saved. Retrain if you changed features or model params.' })
+      setStatus({ kind: 'ok', text: 'Saved. Retrain if you changed features.' })
     } catch (error) {
       const message = error instanceof ApiError ? error.message : String(error)
       setStatus({ kind: 'error', text: message })
@@ -220,8 +205,8 @@ function SettingsForm({
         <h2 className="card-title">Configuration</h2>
         <p className="muted config-intro">
           These settings are saved to <code>config.toml</code> and used
-          everywhere (web and CLI). Changing features or model params means
-          you must retrain the model.
+          everywhere (web and CLI). Changing features means you must retrain
+          the model. Hyperparameters are set per training on the Train tab.
         </p>
         {sections.map((section) => (
           <SectionGroup key={section} title={section}>
@@ -239,7 +224,6 @@ function SettingsForm({
                   }
                   editor={editor}
                   toggleFeature={toggleFeature}
-                  setParam={setParam}
                 />
               ))}
           </SectionGroup>
@@ -476,14 +460,12 @@ function Field({
   onChange,
   editor,
   toggleFeature,
-  setParam,
 }: {
   field: ConfigField
   value: unknown
   onChange: (value: unknown) => void
   editor: Editor
   toggleFeature: (id: string, checked: boolean) => void
-  setParam: (key: string, value: number) => void
 }) {
   const help = field.help ? <p className="field-help">{field.help}</p> : null
 
@@ -506,20 +488,16 @@ function Field({
   }
 
   if (field.key === 'params' && field.type === 'params') {
-    const params = (value as Record<string, unknown> | undefined) ?? {}
+    const params = (value as Record<string, number> | undefined) ?? null
     return (
       <div className="field span-all">
         <span className="field-label">Model hyperparameters</span>
-        <div className="param-grid">
-          {editor.paramsKeys.map((key) => (
-            <NumberField
-              key={key}
-              name={key}
-              value={Number(params[key])}
-              onChange={(v) => setParam(key, v)}
-            />
-          ))}
-        </div>
+        <ModelParams
+          keys={editor.paramsKeys}
+          value={params}
+          disabled
+          hint="Locked: hyperparameters are set per training on the Train tab — the deployed model keeps the params it was trained with."
+        />
         {help}
       </div>
     )
@@ -564,31 +542,6 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
       />
       {help}
-    </div>
-  )
-}
-
-function NumberField({
-  name,
-  value,
-  onChange,
-}: {
-  name: string
-  value: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <div className="field">
-      <label className="field-label" htmlFor={`param-${name}`}>
-        {name}
-      </label>
-      <input
-        id={`param-${name}`}
-        type="number"
-        step="any"
-        value={Number.isFinite(value) ? String(value) : ''}
-        onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
-      />
     </div>
   )
 }

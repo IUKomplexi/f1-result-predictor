@@ -116,9 +116,10 @@ dataset, trains the hurdle model, and calibrates its probabilities in one job;
 navigation; **Race History** loads a whole season in one request (with a
 **Precompute race history** job that warms whole-season caches under
 `data/predictions`, keyed by season + feature fingerprint + params, so repeat
-opens are instant); the **Settings** tab edits every `config.toml` value
-(including the HGB hyperparameters under `[model.params]` and the feature
-selection) and writes them back in place.
+opens are instant); the **Settings** tab edits every `config.toml` value and
+writes them back in place (the HGB hyperparameters are locked there — they
+are set per training on the **Train** tab, which prefills the deployed
+model's trained-on values).
 
 **Race** is the full per-race control surface (it posts to `POST /api/predict`,
 so every CLI predict override is available): a **model picker** (`--model`,
@@ -220,7 +221,10 @@ season range, model checkpoint, report paths, the feature selection
 (`[features] enabled`), and `[model.params]`. CLI flags override config
 values. The dashboard's Settings tab writes the full effective config back in
 place (`PUT /api/config` + `save_config`) so the CLI and web always read the
-same settings; per-race prediction overrides are ephemeral (in-memory only).
+same settings; per-race prediction overrides are ephemeral (in-memory only),
+and so are the per-training hyperparameter overrides on the Train tab (the
+Train editor defaults to the deployed model's trained-on params and sends
+them with the job; the Settings tab keeps `[model.params]` locked).
 
 ## Repository map
 
@@ -347,8 +351,10 @@ flowchart LR
 **Train** (train + calibrate in one job), **Backtest** — as async background
 jobs (one at a time via a worker thread, the rest queued) with live logs and
 inline results; the **Status** tab is the readiness checklist with one-click
-runs. **Settings** edits `config.toml` (including the HGB hyperparameters under
-`[model.params]` and the feature selection) and writes it back in place.
+runs. **Settings** edits `config.toml` and writes it back in place; the HGB
+hyperparameters under `[model.params]` are locked there — the **Train** tab
+carries the hyperparameter editor (prefilled from the deployed model's
+trained-on params, sent per job like the ephemeral predict overrides).
 Backtest selects any number of saved models (each scored with its own
 features) and charts their differences — per-metric model-vs-model lines plus
 a delta table against the deployed model. The **Race** tab navigates a single

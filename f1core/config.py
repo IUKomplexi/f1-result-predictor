@@ -170,7 +170,9 @@ _SCHEMA_HINTS: dict[tuple[str, str], dict[str, Any]] = {
     },
     ("model", "params"): {
         "help": "Model settings (max_iter, learning_rate, max_depth, "
-                "l2_regularization, min_samples_leaf). Retrain after changing.",
+                "l2_regularization, min_samples_leaf). Set per training on "
+                "the Train tab; the deployed model keeps the params it was "
+                "trained with.",
     },
     ("report", "backtest"): {"help": "Backtest report file path"},
     ("report", "prediction"): {"help": "Prediction report file path"},

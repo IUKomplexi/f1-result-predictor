@@ -422,6 +422,18 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
                 return _error(f"{name}: unknown feature(s): {unknown}", 422)
         if "name" in payload and not isinstance(payload["name"], str):
             return _error("'name' must be a string", 400)
+        # Validate hyperparameter overrides up front (mirrors the feature-toggle
+        # check): known keys only, numeric values, so a typo fails fast instead
+        # of surfacing mid-training.
+        if "params" in payload:
+            p = payload["params"]
+            if not isinstance(p, dict) or not all(
+                isinstance(v, (int, float)) and not isinstance(v, bool) for v in p.values()
+            ):
+                return _error("'params' must be a dict of numbers", 400)
+            unknown = sorted(set(p) - MODEL_PARAM_KEYS)
+            if unknown:
+                return _error(f"params: unknown parameter(s): {unknown}", 422)
         if "model_path" in payload and payload["model_path"] is not None \
                 and not isinstance(payload["model_path"], str):
             return _error("'model_path' must be a string", 400)

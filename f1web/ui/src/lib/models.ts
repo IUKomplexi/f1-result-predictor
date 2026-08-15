@@ -21,6 +21,15 @@ export function normPath(path: string | null | undefined): string | null {
   return path.replace(/\\/g, '/').toLowerCase()
 }
 
+/** "max_iter=200 · learning_rate=0.05" pairs, keys sorted; null when absent. */
+export function formatParams(params: Record<string, number> | undefined | null): string | null {
+  if (!params) return null
+  return Object.entries(params)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join(' · ')
+}
+
 /** The saved model whose checkpoint equals the config default, if any. */
 export function deployedName(models: ModelsResponse | null): string | null {
   if (!models) return null

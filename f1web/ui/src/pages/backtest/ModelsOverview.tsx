@@ -2,16 +2,7 @@ import { fmtDate } from '../../lib/format'
 import type { ModelInfo, ModelsResponse } from '../../api/client'
 import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/DataState'
-import { deployedName } from '../../lib/models'
-
-/** "max_iter=200 · learning_rate=0.05" pairs, keys sorted; null when absent. */
-function formatParams(params: Record<string, number> | undefined): string | null {
-  if (!params) return null
-  return Object.entries(params)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join(' · ')
-}
+import { deployedName, formatParams } from '../../lib/models'
 
 /** Saved checkpoints at a glance (name, training window, rows, features). */
 export function ModelsOverview({

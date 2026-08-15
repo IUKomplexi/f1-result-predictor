@@ -50,7 +50,7 @@ _FINISHED_STATUSES = ("done", "failed", "interrupted", "cancelled")
 JOB_PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     "fetch": ("start", "end", "refresh"),
     "history": ("start", "end", "refresh"),
-    "train": ("start", "end", "refresh", "name", "enable_features", "disable_features"),
+    "train": ("start", "end", "refresh", "name", "params", "enable_features", "disable_features"),
     "calibrate": (
         "start", "end", "refresh",
         "fit_through_season", "eval_from_season",
@@ -299,6 +299,7 @@ def _train_handler(payload: dict, log) -> dict:
     result = run_train(
         start=start, end=end, refresh=bool(payload.get("refresh", False)),
         out=checkpoint,
+        params=payload.get("params"),
         enable_features=enable, disable_features=disable,
         cfg=cfg, log=log,
     )

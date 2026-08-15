@@ -63,7 +63,8 @@ def quantize_points(values) -> np.ndarray:
 # Default gradient-boosting hyperparameters live in ``[model.params]``
 # (f1core/config.py DEFAULTS) — the single source of truth. They were chosen
 # by walk-forward validation with the full feature set incl. teammate-relative
-# features. The dashboard tunes them by writing ``[model.params]``; see
+# features. The web Train tab can override them per run (see :func:`run`);
+# ``f1 tune`` sweeps around them (candidate 0 = the config params); see
 # :func:`model_params`.
 
 
@@ -446,6 +447,7 @@ def run(
     cache_dir: str | None = None,
     dataset: str | None = None,
     out: str | None = None,
+    params: dict[str, Any] | None = None,
     enable_features: Sequence[str] = (),
     disable_features: Sequence[str] = (),
     cfg: dict | None = None,
@@ -456,6 +458,11 @@ def run(
     ``log`` is an optional callable receiving progress lines (used by the web
     job runner to stream output); it defaults to module logging. All arguments
     are keyword-only so the web job runner and the CLI share one code path.
+
+    ``params`` are HGB hyperparameters overriding ``[model.params]`` for this
+    run only (used by the web Train tab); when omitted/empty the config values
+    apply. The override is recorded in the model index, so the dashboard shows
+    exactly what the checkpoint was trained with.
 
     Every path/season argument defaults to ``None`` and resolves from the
     config (``[data] start_season/end_season/cache_dir/dataset``,
@@ -478,6 +485,9 @@ def run(
         dataset = cast(str, cfg["data"]["dataset"])
     if out is None:
         out = cast(str, cfg["model"]["checkpoint"])
+    # Resolve once so the checkpoint, index entry, and summary all record the
+    # params actually used (an empty/None override falls back to config).
+    params = params or model_params(cfg)
     client = F1Client(cache_dir=cache_dir, refresh=refresh)
     log(f"Building dataset {start}-{end} ...")
     df = build_dataset(client, range(start, end + 1), cache_path=dataset)
@@ -488,14 +498,14 @@ def run(
         f"Training final model on {len(df)} rows ({df['season'].nunique()} "
         f"seasons), {len(feats)} features (fp {feature_fingerprint(feats)})"
     )
-    models = train_final_model(df, feats, params=model_params(cfg))
+    models = train_final_model(df, feats, params=params)
     # Record the ACTUAL data window the model saw (the requested start..end may
     # include seasons with no fetched data).
     actual_range = (int(df["season"].min()), int(df["season"].max()))  # type: ignore[reportAttributeAccessIssue]
     save_checkpoint(models, out, features=feats, season_range=actual_range)
     index_path = update_model_index(out, {
         "checkpoint": out,
-        "params": model_params(cfg),
+        "params": params,
         "features": feats,
         "fingerprint": feature_fingerprint(feats),
         "season_range": list(actual_range),
@@ -512,7 +522,7 @@ def run(
         "features": feats,
         "fingerprint": feature_fingerprint(feats),
         "checkpoint": out,
-        "params": model_params(cfg),
+        "params": params,
     }
 
 
